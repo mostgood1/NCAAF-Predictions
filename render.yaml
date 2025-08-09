@@ -3,7 +3,7 @@ services:
     name: ncaaf-predictions
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --bind 0.0.0.0:$PORT src.web.app:app
+    startCommand: gunicorn --bind 0.0.0.0:$PORT wsgi:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.16
