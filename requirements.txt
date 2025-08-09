@@ -4,3 +4,5 @@ scikit-learn
 flask
 requests
 beautifulsoup4
+pytz
+gunicorn
