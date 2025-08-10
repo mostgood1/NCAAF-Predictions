@@ -172,6 +172,7 @@ def index():
     return render_template_string('''
     <div style="text-align:right; margin: 12px 0 0 0;">
         <a href="/conference-records" style="font-size:1.05em; color:#2980b9; text-decoration:underline; margin-right:18px;">View Projected Conference Records</a>
+        <a href="/team-schedules" style="font-size:1.05em; color:#2980b9; text-decoration:underline; margin-right:18px;">View Team Schedules</a>
     </div>
     <style>
         body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6fa; margin: 0; padding: 0; }
@@ -419,6 +420,222 @@ def conference_records():
         {% endfor %}
     </div>
     ''', conf_groups=conf_groups, conf_logos=conf_logos, team_color_map=team_color_map, team_alt_color_map=team_alt_color_map)
+
+# New route: Team Schedules
+@app.route('/team-schedules', methods=['GET', 'POST'])
+def team_schedules():
+    # Get all conferences and teams
+    all_teams_df = pred_df[pred_df['season'] == 2025].copy()
+    all_conferences = sorted(set(list(all_teams_df['home_conference'].dropna()) + list(all_teams_df['away_conference'].dropna())))
+    all_conferences = [conf for conf in all_conferences if conf != 'Unknown']
+    
+    selected_conference = request.form.get('conference', '')
+    selected_team = request.form.get('team', '')
+    
+    # Get teams for selected conference
+    if selected_conference:
+        conf_teams = set()
+        conf_games = all_teams_df[
+            (all_teams_df['home_conference'] == selected_conference) | 
+            (all_teams_df['away_conference'] == selected_conference)
+        ]
+        for _, row in conf_games.iterrows():
+            if row['home_conference'] == selected_conference:
+                conf_teams.add(row['home_team'])
+            if row['away_conference'] == selected_conference:
+                conf_teams.add(row['away_team'])
+        available_teams = sorted(list(conf_teams))
+    else:
+        available_teams = []
+    
+    # Get team schedule if team is selected
+    team_schedule = None
+    team_info = None
+    if selected_team:
+        # Get all games for the selected team
+        team_games = all_teams_df[
+            (all_teams_df['home_team'] == selected_team) | 
+            (all_teams_df['away_team'] == selected_team)
+        ].copy()
+        
+        # Sort by week
+        team_games = team_games.sort_values('week')
+        
+        # Process each game
+        schedule_data = []
+        team_record = {'W': 0, 'L': 0, 'T': 0}
+        
+        for _, game in team_games.iterrows():
+            is_home = game['home_team'] == selected_team
+            opponent = game['away_team'] if is_home else game['home_team']
+            
+            # Get team assets for opponent
+            opp_asset = get_team_asset(opponent)
+            
+            # Determine result
+            try:
+                home_pts = float(game.get('predicted_home_points', 0))
+                away_pts = float(game.get('predicted_away_points', 0))
+                team_pts = home_pts if is_home else away_pts
+                opp_pts = away_pts if is_home else home_pts
+                
+                if team_pts > opp_pts:
+                    result = 'W'
+                    team_record['W'] += 1
+                elif opp_pts > team_pts:
+                    result = 'L'
+                    team_record['L'] += 1
+                else:
+                    result = 'T'
+                    team_record['T'] += 1
+            except:
+                result = '-'
+                team_pts = opp_pts = 0
+            
+            # Parse date
+            game_date = game.get('start_date', '')[:10] if game.get('start_date') else ''
+            
+            schedule_data.append({
+                'week': int(game['week']),
+                'date': game_date,
+                'opponent': opponent,
+                'is_home': is_home,
+                'venue': game.get('venue', ''),
+                'team_pts': f"{team_pts:.1f}" if team_pts else '',
+                'opp_pts': f"{opp_pts:.1f}" if opp_pts else '',
+                'result': result,
+                'opp_logo': opp_asset['logo'],
+                'opp_color': opp_asset['color'],
+                'opp_alt_color': opp_asset['alt_color']
+            })
+        
+        team_schedule = schedule_data
+        
+        # Get team asset info
+        team_asset = get_team_asset(selected_team)
+        team_info = {
+            'name': selected_team,
+            'logo': team_asset['logo'],
+            'color': team_asset['color'],
+            'alt_color': team_asset['alt_color'],
+            'record': team_record
+        }
+    
+    return render_template_string('''
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6fa; margin: 0; padding: 0; }
+        .container { max-width: 900px; margin: 40px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); padding: 32px; }
+        h2 { text-align: center; color: #2c3e50; margin-bottom: 24px; }
+        form { display: flex; flex-direction: column; gap: 16px; margin-bottom: 32px; }
+        label { font-weight: 500; color: #34495e; }
+        select, button { padding: 8px 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 1em; }
+        button { background: #2980b9; color: #fff; border: none; cursor: pointer; transition: background 0.2s; }
+        button:hover { background: #3498db; }
+        .team-header { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 24px; padding: 20px; background: #f8f8f8; border-radius: 10px; }
+        .team-logo { height: 80px; }
+        .team-name { font-size: 1.8em; font-weight: bold; padding: 8px 16px; border-radius: 8px; display: inline-block; }
+        .record { font-size: 1.2em; color: #2c3e50; margin-top: 8px; }
+        .schedule-table { width: 100%; border-collapse: collapse; margin-top: 16px; background: #fff; }
+        .schedule-table th, .schedule-table td { padding: 12px 8px; border: 1px solid #e0e0e0; text-align: center; }
+        .schedule-table th { background: #eaf1fb; color: #2c3e50; }
+        .schedule-table tr:nth-child(even) { background: #f4f6fa; }
+        .opponent { display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .opp-logo { height: 30px; }
+        .opp-name { padding: 2px 8px; border-radius: 4px; font-weight: 500; }
+        .result-w { color: #27ae60; font-weight: bold; }
+        .result-l { color: #e74c3c; font-weight: bold; }
+        .result-t { color: #f39c12; font-weight: bold; }
+        .home-indicator { color: #2980b9; font-weight: bold; }
+        .away-indicator { color: #7f8c8d; }
+    </style>
+    <div class="container">
+        <div style="text-align:right; margin: 12px 0 0 0;">
+            <a href="/" style="font-size:1.05em; color:#2980b9; text-decoration:underline; margin-right:18px;">&#8592; Back to Main Predictions</a>
+            <a href="/conference-records" style="font-size:1.05em; color:#2980b9; text-decoration:underline; margin-right:18px;">View Conference Records</a>
+        </div>
+        <h2>2025 Team Schedules</h2>
+        <form method="post" id="scheduleForm">
+            <label for="conference">Select Conference:</label>
+            <select name="conference" id="conference" onchange="document.getElementById('scheduleForm').submit();">
+                <option value="">Choose a Conference</option>
+                {% for conf in all_conferences %}
+                <option value="{{conf}}" {% if conf == selected_conference %}selected{% endif %}>{{conf}}</option>
+                {% endfor %}
+            </select>
+            {% if available_teams %}
+            <label for="team">Select Team:</label>
+            <select name="team" id="team" onchange="document.getElementById('scheduleForm').submit();">
+                <option value="">Choose a Team</option>
+                {% for team in available_teams %}
+                <option value="{{team}}" {% if team == selected_team %}selected{% endif %}>{{team}}</option>
+                {% endfor %}
+            </select>
+            {% endif %}
+        </form>
+        
+        {% if team_info and team_schedule %}
+        <div class="team-header">
+            <img src="{{team_info['logo']}}" alt="{{team_info['name']}} logo" class="team-logo">
+            <div>
+                <div class="team-name" style="color:{{team_info['color']}};background:{{team_info['alt_color']}};">{{team_info['name']}}</div>
+                <div class="record">Projected Record: {{team_info['record']['W']}}-{{team_info['record']['L']}}{% if team_info['record']['T'] > 0 %}-{{team_info['record']['T']}}{% endif %}</div>
+            </div>
+        </div>
+        
+        <table class="schedule-table">
+            <tr>
+                <th>Week</th>
+                <th>Date</th>
+                <th>Opponent</th>
+                <th>Location</th>
+                <th>Venue</th>
+                <th>Projected Score</th>
+                <th>Result</th>
+            </tr>
+            {% for game in team_schedule %}
+            <tr>
+                <td>{{game['week']}}</td>
+                <td>{{game['date']}}</td>
+                <td>
+                    <div class="opponent">
+                        <img src="{{game['opp_logo']}}" alt="{{game['opponent']}} logo" class="opp-logo">
+                        <span class="opp-name" style="color:{{game['opp_color']}};background:{{game['opp_alt_color']}};">{{game['opponent']}}</span>
+                    </div>
+                </td>
+                <td>
+                    {% if game['is_home'] %}
+                        <span class="home-indicator">HOME</span>
+                    {% else %}
+                        <span class="away-indicator">@ AWAY</span>
+                    {% endif %}
+                </td>
+                <td>{{game['venue']}}</td>
+                <td>
+                    {% if game['team_pts'] and game['opp_pts'] %}
+                        {{game['team_pts']}} - {{game['opp_pts']}}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td>
+                    {% if game['result'] == 'W' %}
+                        <span class="result-w">W</span>
+                    {% elif game['result'] == 'L' %}
+                        <span class="result-l">L</span>
+                    {% elif game['result'] == 'T' %}
+                        <span class="result-t">T</span>
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% endif %}
+    </div>
+    ''', all_conferences=all_conferences, selected_conference=selected_conference, 
+         available_teams=available_teams, selected_team=selected_team, 
+         team_info=team_info, team_schedule=team_schedule)
 
 if __name__ == '__main__':
     import os
