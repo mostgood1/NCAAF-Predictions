@@ -65,12 +65,25 @@ def index():
     week_games['date_only'] = week_games['start_date'].str[:10]
     all_dates = sorted(week_games['date_only'].dropna().unique())
     selected_date = request.form.get('date', '')
+    selected_conference = request.form.get('conference', '')
     show_all = request.form.get('show_all', '') == 'on'
+    
+    # Get all conferences for the dropdown
+    all_conferences = sorted(set(list(week_games['home_conference'].dropna()) + list(week_games['away_conference'].dropna())))
+    all_conferences = [conf for conf in all_conferences if conf != 'Unknown']
+    
     # Filter games by date if not showing all
     if selected_date and not show_all:
         filtered_games = week_games[week_games['date_only'] == selected_date]
     else:
         filtered_games = week_games
+    
+    # Filter games by conference if selected
+    if selected_conference:
+        filtered_games = filtered_games[
+            (filtered_games['home_conference'] == selected_conference) | 
+            (filtered_games['away_conference'] == selected_conference)
+        ]
     games = filtered_games.apply(lambda row: f"{row['away_team']} at {row['home_team']}", axis=1).tolist()
     selected_game = request.form.get('game')
     game_info = None
@@ -184,6 +197,13 @@ def index():
                 <option value="{{d}}" {% if d == selected_date %}selected{% endif %}>{{d}}</option>
                 {% endfor %}
             </select>
+            <label for="conference">Filter by Conference:</label>
+            <select name="conference" id="conference" onchange="document.getElementById('mainForm').submit();">
+                <option value="">All Conferences</option>
+                {% for conf in all_conferences %}
+                <option value="{{conf}}" {% if conf == selected_conference %}selected{% endif %}>{{conf}}</option>
+                {% endfor %}
+            </select>
             <label><input type="checkbox" name="show_all" {% if show_all %}checked{% endif %} onchange="document.getElementById('mainForm').submit();"> Show all games for week</label>
             <label for="game">Select Game:</label>
             <select name="game" id="game">
@@ -243,7 +263,7 @@ def index():
         </div>
         {% endif %}
     </div>
-    ''', weeks=weeks, selected_week=selected_week, games=games, selected_game=selected_game, game_info=game_info, all_dates=all_dates, selected_date=selected_date, show_all=show_all)
+    ''', weeks=weeks, selected_week=selected_week, games=games, selected_game=selected_game, game_info=game_info, all_dates=all_dates, selected_date=selected_date, show_all=show_all, all_conferences=all_conferences, selected_conference=selected_conference)
 
 
 # New route: Projected Conference Records for 2025
