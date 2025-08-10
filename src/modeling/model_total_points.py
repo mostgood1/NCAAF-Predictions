@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, r2_score
@@ -28,9 +29,21 @@ y_train = y[train_mask]
 X_test = X[test_mask]
 y_test = y[test_mask]
 
-# Model
-model = RandomForestRegressor(n_estimators=100, random_state=42)
-model.fit(X_train, y_train)
+# Add recency weighting - recent games matter more for prediction accuracy
+recency_weights = np.exp((df['season'] - 2010) / 4)  # Exponential weighting
+train_weights = recency_weights[train_mask]
+
+# Model - ENHANCED VERSION with better hyperparameters
+model = RandomForestRegressor(
+    n_estimators=400,        # Increased from 100 
+    max_depth=22,            # Added depth control
+    min_samples_split=5,     # Better overfitting control
+    min_samples_leaf=3,      # Better leaf control
+    max_features='sqrt',     # Feature randomness for better generalization
+    random_state=42,
+    n_jobs=-1               # Use all CPU cores for faster training
+)
+model.fit(X_train, y_train, sample_weight=train_weights)  # Use weighted training
 
 # Predict
 y_pred = model.predict(X_test)
