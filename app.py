@@ -27,7 +27,7 @@ def _try_load_predictions():
             continue
     return None
 
-# Load team conferences (prefer root data/)
+# Load team conferences (prefer root data/), coerce to strings for safe .str usage
 team_conf_df = None
 for path in [
     "data/team_conferences.csv",
@@ -38,14 +38,37 @@ for path in [
         break
     except Exception:
         pass
-if team_conf_df is None:
+if team_conf_df is None or not isinstance(team_conf_df, pd.DataFrame):
     # Create a minimal frame so the app still runs
     team_conf_df = pd.DataFrame({"school": [], "conference": []})
-team_conf_df['school_norm'] = team_conf_df['school'].str.strip().str.lower().str.replace('&', 'and').str.replace('  ', ' ')
+# Ensure required columns exist
+for _col in ("school", "conference"):
+    if _col not in team_conf_df.columns:
+        team_conf_df[_col] = ""
+# Coerce to string before using .str; normalize '&' and whitespace
+def _normalize_series(s: pd.Series) -> pd.Series:
+    try:
+        return (
+            s.astype(str)
+             .fillna("")
+             .str.strip()
+             .str.lower()
+             .str.replace('&', 'and', regex=False)
+             .str.replace(r"\s+", " ", regex=True)
+        )
+    except Exception:
+        return pd.Series([], dtype=str)
+team_conf_df['school_norm'] = _normalize_series(team_conf_df['school'])
 
 def norm(name):
     return str(name).strip().lower().replace('&', 'and').replace('  ', ' ')
-conf_map = dict(zip(team_conf_df['school_norm'], team_conf_df['conference']))
+conf_map = {}
+try:
+    if {'school_norm','conference'}.issubset(set(team_conf_df.columns)):
+        # Coerce conference to string to avoid .str errors later
+        conf_map = dict(zip(team_conf_df['school_norm'], team_conf_df['conference'].astype(str)))
+except Exception:
+    conf_map = {}
 
 def _ensure_conf_columns(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df is pd.NA:
