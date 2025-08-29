@@ -3,7 +3,7 @@ services:
     name: ncaaf-frontend
     env: DATA_DIR=/opt/render/project/src/data
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --bind 0.0.0.0:$PORT NCAFCompare.app:app
+    startCommand: gunicorn --bind 0.0.0.0:$PORT wsgi:application
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.16
