@@ -1,5 +1,5 @@
 import os
-from app import app as application  # Expose as 'application' for WSGI servers
+from NCAFCompare.app import app as application; fallback to from app import app as application  # Expose as 'application' for WSGI servers
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5051))
