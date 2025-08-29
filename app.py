@@ -3,6 +3,10 @@ import pandas as pd
 import ast
 import pytz
 from datetime import datetime
+import math
+import re
+import json
+from bisect import bisect_left
 
 app = Flask(__name__)
 
@@ -117,7 +121,7 @@ def get_team_asset(team_name):
             }
     return {'logo': '', 'color': '', 'alt_color': ''}
 
-# Load betting lines (optional)
+"""Optional betting lines with robust matching and week 0/1 fallback."""
 lines_df = None
 for path in [
     "data/college_football_betting_lines_last_15_years.csv",
@@ -128,22 +132,164 @@ for path in [
         break
     except Exception:
         pass
-def get_betting_lines(year, week, home_team, away_team):
-    if lines_df is None:
-        return []
-    # Filter for matching year, week, home, and away teams (use correct column names)
-    lines = lines_df[(lines_df['year'] == year) & (lines_df['week'] == week) &
-                    (lines_df['homeTeam'] == home_team) & (lines_df['awayTeam'] == away_team)]
-    if not lines.empty:
-        odds_str = lines.iloc[0].get('lines', '')
+
+lines_index = {}
+lines_index_norm = {}
+
+def _norm_team_for_odds(name: str) -> str:
+    try:
+        s = str(name or '').strip().lower()
+        s = s.replace('&', 'and')
+        s = s.replace("ʻ", "'").replace("’", "'")
+        s = s.replace("hawai'i", "hawaii")
+        s = re.sub(r"[^a-z0-9 '\-]", " ", s)
+        s = re.sub(r"\s+", " ", s).strip()
+        return s
+    except Exception:
+        return str(name)
+
+def _build_lines_index(df: pd.DataFrame):
+    idx = {}
+    idx_norm = {}
+    if df is None or df.empty:
+        return idx, idx_norm
+    for _, row in df.iterrows():
         try:
-            odds = ast.literal_eval(odds_str)
-            if isinstance(odds, list):
-                # Return list of dicts for template rendering
-                return odds
+            y = int(row['year']); w = int(row['week'])
+            ht = row['homeTeam']; at = row['awayTeam']
+            key = (y, w, ht, at)
+            odds_str = row.get('lines', '')
+            odds = []
+            if isinstance(odds_str, str):
+                try:
+                    odds = ast.literal_eval(odds_str)
+                    if not isinstance(odds, list):
+                        odds = []
+                except Exception:
+                    odds = []
+            idx[key] = odds
+            nkey = (y, w, _norm_team_for_odds(ht), _norm_team_for_odds(at))
+            idx_norm[nkey] = odds
         except Exception:
-            pass
+            continue
+    return idx, idx_norm
+
+if lines_df is not None:
+    lines_index, lines_index_norm = _build_lines_index(lines_df)
+
+def get_betting_lines(year, week, home_team, away_team):
+    if not lines_index and not lines_index_norm:
+        return []
+    def _get(y, w, ht, at):
+        k = (int(y), int(w), ht, at)
+        if k in lines_index:
+            return lines_index[k]
+        nk = (int(y), int(w), _norm_team_for_odds(ht), _norm_team_for_odds(at))
+        return lines_index_norm.get(nk, [])
+    y = int(year); w = int(week)
+    odds = _get(y, w, home_team, away_team)
+    if odds:
+        return odds
+    # Week 0/1 label mismatch fallback for 2025
+    if y == 2025 and w in (0, 1):
+        alt_w = 1 if w == 0 else 0
+        return _get(y, alt_w, home_team, away_team)
     return []
+
+"""Optional calibration for win probability and per-conference sigma overrides."""
+_WINPROB_LUT = None  # (xs, ys) sorted lists for interpolation
+for path in [
+    "data/winprob_isotonic_lut.json",
+    "src/data/winprob_isotonic_lut.json",
+]:
+    try:
+        with open(path, 'r') as f:
+            data = json.load(f)
+            xs = data.get('x', []); ys = data.get('y', [])
+            if isinstance(xs, list) and isinstance(ys, list) and len(xs) == len(ys) and len(xs) >= 2:
+                # Ensure sorted by x
+                pts = sorted(zip(xs, ys), key=lambda t: t[0])
+                _WINPROB_LUT = ([float(a) for a, _ in pts], [float(b) for _, b in pts])
+                break
+    except Exception:
+        pass
+
+def _interp_piecewise(x, xs, ys):
+    # Simple linear interpolation in pure Python
+    if x <= xs[0]:
+        return ys[0]
+    if x >= xs[-1]:
+        return ys[-1]
+    i = bisect_left(xs, x)
+    x0, x1 = xs[i-1], xs[i]
+    y0, y1 = ys[i-1], ys[i]
+    if x1 == x0:
+        return y0
+    t = (x - x0) / (x1 - x0)
+    return y0 + t * (y1 - y0)
+
+def _calibrate_win_prob(p):
+    try:
+        if p is None:
+            return None
+        if _WINPROB_LUT is None:
+            return p
+        xs, ys = _WINPROB_LUT
+        return float(max(0.0, min(1.0, _interp_piecewise(p, xs, ys))))
+    except Exception:
+        return p
+
+_CONF_SIGMA = None  # {conference: sigma_margin}
+for path in [
+    "data/conference_sigma_overrides.csv",
+    "src/data/conference_sigma_overrides.csv",
+]:
+    try:
+        dfc = pd.read_csv(path)
+        if {'conference','sigma_margin'}.issubset(set(dfc.columns)):
+            _CONF_SIGMA = { str(r['conference']).strip(): float(r['sigma_margin']) for _, r in dfc.iterrows() if pd.notnull(r['sigma_margin']) }
+            break
+    except Exception:
+        pass
+
+def _phi(z):
+    return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
+
+def _get_conf_std_for_game(row):
+    # Prefer per-game conf_std from win_margin_conf_df; else average conference override; else default
+    try:
+        if win_margin_conf_df is not None:
+            wk = int(row.get('week', 0)); szn = int(row.get('season', 0))
+            home = norm(row.get('home_team', '')); away = norm(row.get('away_team', ''))
+            sel = win_margin_conf_df[
+                (win_margin_conf_df['week'] == wk) & (win_margin_conf_df['season'] == szn) &
+                (win_margin_conf_df['home_team'].apply(norm) == home) &
+                (win_margin_conf_df['away_team'].apply(norm) == away)
+            ]
+            if not sel.empty:
+                val = sel.iloc[0].get('conf_std', None)
+                try:
+                    valf = float(val)
+                    if valf > 2.0:
+                        return valf
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    try:
+        if _CONF_SIGMA is not None:
+            hc = str(row.get('home_conference','')).strip()
+            ac = str(row.get('away_conference','')).strip()
+            vals = []
+            if hc in _CONF_SIGMA: vals.append(_CONF_SIGMA[hc])
+            if ac in _CONF_SIGMA: vals.append(_CONF_SIGMA[ac])
+            if vals:
+                v = float(sum(vals)/len(vals))
+                if v > 2.0:
+                    return v
+    except Exception:
+        pass
+    return 14.0
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -198,6 +344,7 @@ def index():
                 return f"{float(val):.2f}"
             except Exception:
                 return val
+
         # Parse start_date and convert to Central Time
         start_date_str = game_row.get('start_date', '')
         central_time_str = ''
@@ -211,6 +358,7 @@ def index():
 
         # Get win margin confidence interval for this game
         conf_lower = conf_upper = conf_std = None
+        conf_row = pd.DataFrame()
         def normalize_team_name(name):
             return str(name).strip().lower().replace('&', 'and').replace('  ', ' ')
         if win_margin_conf_df is not None:
@@ -219,13 +367,25 @@ def index():
             home_team = normalize_team_name(game_row.get('home_team', ''))
             away_team = normalize_team_name(game_row.get('away_team', ''))
             conf_row = win_margin_conf_df[(win_margin_conf_df['week'] == week_val) &
-                                         (win_margin_conf_df['season'] == season_val) &
-                                         (win_margin_conf_df['home_team'].apply(normalize_team_name) == home_team) &
-                                         (win_margin_conf_df['away_team'].apply(normalize_team_name) == away_team)]
+                                          (win_margin_conf_df['season'] == season_val) &
+                                          (win_margin_conf_df['home_team'].apply(normalize_team_name) == home_team) &
+                                          (win_margin_conf_df['away_team'].apply(normalize_team_name) == away_team)]
             if not conf_row.empty:
                 conf_lower = r2(conf_row.iloc[0].get('conf_interval_lower', None))
                 conf_upper = r2(conf_row.iloc[0].get('conf_interval_upper', None))
-                conf_std = r2(conf_row.iloc[0].get('conf_std', None))
+                conf_std_raw = conf_row.iloc[0].get('conf_std', None)
+                conf_std = r2(conf_std_raw)
+
+        # Compute a (calibrated) home win probability from margin and std
+        win_prob = None
+        try:
+            margin = float(game_row.get('predicted_win_margin', 0))
+            std = float(conf_row.iloc[0]['conf_std']) if (win_margin_conf_df is not None and not conf_row.empty and pd.notnull(conf_row.iloc[0].get('conf_std'))) else _get_conf_std_for_game(game_row)
+            if std and std > 0:
+                p = _phi(margin / std)
+                win_prob = _calibrate_win_prob(p)
+        except Exception:
+            win_prob = None
 
         game_info = {
             'home_team': game_row['home_team'],
@@ -246,6 +406,7 @@ def index():
             'away_color': away_asset['color'],
             'away_alt_color': away_asset['alt_color'],
             'betting_lines': betting_lines,
+            'home_win_prob': (f"{win_prob*100:.1f}%" if isinstance(win_prob, float) else None),
         }
     return render_template_string('''
     <div style="text-align:right; margin: 12px 0 0 0;">
@@ -349,6 +510,9 @@ def index():
                 </table>
             {% else %}
                 <div class="no-odds">No betting odds available for this game.</div>
+            {% endif %}
+            {% if game_info['home_win_prob'] %}
+                <div style="text-align:center;margin-top:10px;color:#2c3e50;">Home Win Probability: <strong>{{ game_info['home_win_prob'] }}</strong></div>
             {% endif %}
         </div>
         {% endif %}
