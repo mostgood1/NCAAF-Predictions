@@ -1,0 +1,10 @@
+# Ignore nested repos we don't want tracked here
+NCAFCompare/
+minimal_deploy/
+
+# Common local/dev files
+.vscode/
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
