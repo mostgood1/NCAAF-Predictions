@@ -6,11 +6,36 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# Load predictions
-pred_df = pd.read_csv("src/data/college_football_schedule_2025_predicted_totals.csv")
+# Load predictions (prefer root data/; fallback to src/data/)
+pred_df = None
+for path in [
+    "data/college_football_schedule_2025_predicted_totals_enhanced.csv",
+    "data/college_football_schedule_2025_predicted_totals.csv",
+    "src/data/college_football_schedule_2025_predicted_totals_enhanced.csv",
+    "src/data/college_football_schedule_2025_predicted_totals.csv",
+]:
+    try:
+        pred_df = pd.read_csv(path)
+        break
+    except Exception:
+        pass
+if pred_df is None:
+    raise FileNotFoundError("Could not find predictions CSV in data/ or src/data/")
 
-# Load team conferences
-team_conf_df = pd.read_csv("src/data/team_conferences.csv")
+# Load team conferences (prefer root data/)
+team_conf_df = None
+for path in [
+    "data/team_conferences.csv",
+    "src/data/team_conferences.csv",
+]:
+    try:
+        team_conf_df = pd.read_csv(path)
+        break
+    except Exception:
+        pass
+if team_conf_df is None:
+    # Create a minimal frame so the app still runs
+    team_conf_df = pd.DataFrame({"school": [], "conference": []})
 team_conf_df['school_norm'] = team_conf_df['school'].str.strip().str.lower().str.replace('&', 'and').str.replace('  ', ' ')
 
 # Add conference info to predictions
@@ -20,28 +45,55 @@ conf_map = dict(zip(team_conf_df['school_norm'], team_conf_df['conference']))
 pred_df['home_conference'] = pred_df['home_team'].apply(lambda x: conf_map.get(norm(x), 'Unknown'))
 pred_df['away_conference'] = pred_df['away_team'].apply(lambda x: conf_map.get(norm(x), 'Unknown'))
 
-# Load win margin confidence intervals
-try:
-    win_margin_conf_df = pd.read_csv("src/data/win_margin_predictions_with_confidence.csv")
-    win_margin_conf_df.columns = win_margin_conf_df.columns.str.strip()
-except Exception:
-    win_margin_conf_df = None
+# Load win margin confidence intervals (optional)
+win_margin_conf_df = None
+for path in [
+    "data/win_margin_predictions_with_confidence.csv",
+    "src/data/win_margin_predictions_with_confidence.csv",
+]:
+    try:
+        win_margin_conf_df = pd.read_csv(path)
+        win_margin_conf_df.columns = win_margin_conf_df.columns.str.strip()
+        break
+    except Exception:
+        pass
 
-# Load team assets
-assets_df = pd.read_csv("src/data/team_assets.csv")
+# Load team assets (optional)
+assets_df = None
+for path in [
+    "data/team_assets.csv",
+    "src/data/team_assets.csv",
+]:
+    try:
+        assets_df = pd.read_csv(path)
+        break
+    except Exception:
+        pass
 def get_team_asset(team_name):
-    row = assets_df[assets_df['school'] == team_name]
-    if not row.empty:
-        return {
-            'logo': row.iloc[0].get('logo', ''),
-            'color': row.iloc[0].get('color', ''),
-            'alt_color': row.iloc[0].get('alt_color', '')
-        }
+    if assets_df is not None:
+        row = assets_df[assets_df['school'] == team_name]
+        if not row.empty:
+            return {
+                'logo': row.iloc[0].get('logo', ''),
+                'color': row.iloc[0].get('color', ''),
+                'alt_color': row.iloc[0].get('alt_color', '')
+            }
     return {'logo': '', 'color': '', 'alt_color': ''}
 
-# Load betting lines
-lines_df = pd.read_csv("src/data/college_football_betting_lines_last_15_years.csv")
+# Load betting lines (optional)
+lines_df = None
+for path in [
+    "data/college_football_betting_lines_last_15_years.csv",
+    "src/data/college_football_betting_lines_last_15_years.csv",
+]:
+    try:
+        lines_df = pd.read_csv(path)
+        break
+    except Exception:
+        pass
 def get_betting_lines(year, week, home_team, away_team):
+    if lines_df is None:
+        return []
     # Filter for matching year, week, home, and away teams (use correct column names)
     lines = lines_df[(lines_df['year'] == year) & (lines_df['week'] == week) &
                     (lines_df['homeTeam'] == home_team) & (lines_df['awayTeam'] == away_team)]
