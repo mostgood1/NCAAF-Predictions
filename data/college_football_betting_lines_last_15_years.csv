@@ -1,0 +1,4 @@
+year,week,homeTeam,awayTeam,lines
+2025,1,Kansas State,Iowa State,"[{ 'provider': 'BookA', 'spread': -1.5, 'formattedSpread': '-1.5', 'overUnder': 49.5, 'homeMoneyline': -120, 'awayMoneyline': 100 }]"
+2025,1,UNLV,Idaho State,"[{ 'provider': 'BookB', 'spread': -10.5, 'formattedSpread': '-10.5', 'overUnder': 54.5, 'homeMoneyline': -400, 'awayMoneyline': 320 }]"
+2025,1,Kansas,Fresno State,"[{ 'provider': 'BookC', 'spread': -3.0, 'formattedSpread': '-3.0', 'overUnder': 51.0, 'homeMoneyline': -150, 'awayMoneyline': 130 }]"
