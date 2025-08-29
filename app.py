@@ -1,17 +1,2621 @@
-# Minimal Flask app for Render deployment
+from flask import Flask, render_template_string, request, redirect, url_for
+import ast
+import pytz
+from datetime import datetime
 import pandas as pd
-from flask import Flask, render_template_string, request
+import os
+import math
+import json
+import subprocess
+from datetime import timezone
+import sys
+import re
+import threading
+import time
 
 app = Flask(__name__)
 
-# Load predictions
-pred_df = pd.read_csv("data/college_football_schedule_2025_predicted_totals_enhanced.csv")
-team_conf_df = pd.read_csv("data/team_conferences.csv")
+# Lightweight in-memory refresh progress state
+REFRESH_STATE = {
+    'status': 'idle',   # idle | running | ok | error
+    'mode': None,
+    'started_at': None,
+    'finished_at': None,
+    'seconds_total': None,
+    'details': [],
+    'pred_source': None,
+    'rows': None,
+    'lines_rows': None,
+    'unique_home_preds': None,
+    'unique_away_preds': None,
+    'unique_total_preds': None,
+    'error': None,
+}
+_REFRESH_LOCK = threading.Lock()
 
-@app.route('/')
+# Load enhanced predictions with a validation step: if with_scores exists but is constant, fall back to enhanced
+pred_path_scores = "NCAFCompare/src/data/college_football_schedule_2025_predicted_totals_enhanced_with_scores.csv"
+pred_path_enh = "NCAFCompare/src/data/college_football_schedule_2025_predicted_totals_enhanced.csv"
+PRED_SOURCE = "unknown"
+
+# Optional: Win-probability isotonic calibration LUT
+_WINPROB_LUT = None
+try:
+    with open("NCAFCompare/src/data/winprob_isotonic_lut.json", "r") as f:
+        data = json.load(f)
+        xs = data.get("x", [])
+        ys = data.get("y", [])
+        if isinstance(xs, list) and isinstance(ys, list) and len(xs) == len(ys) and len(xs) >= 2:
+            import numpy as _np
+            _WINPROB_LUT = ( _np.array(xs, dtype=float), _np.array(ys, dtype=float) )
+except Exception:
+    _WINPROB_LUT = None
+
+def _calibrate_win_prob(p):
+    try:
+        if p is None:
+            return None
+        if _WINPROB_LUT is None:
+            return p
+        xs, ys = _WINPROB_LUT
+        import numpy as _np
+        return float(_np.clip(_np.interp(p, xs, ys), 0.0, 1.0))
+    except Exception:
+        return p
+
+# Optional: Conference-level sigma overrides for margin
+_CONF_SIGMA = None
+try:
+    _dfc = pd.read_csv("NCAFCompare/src/data/conference_sigma_overrides.csv")
+    if {'conference','sigma_margin'}.issubset(set(_dfc.columns)):
+        _CONF_SIGMA = { str(r['conference']).strip(): float(r['sigma_margin']) for _, r in _dfc.iterrows() if pd.notnull(r['sigma_margin']) }
+except Exception:
+    _CONF_SIGMA = None
+
+def _is_constant_predictions(df: pd.DataFrame) -> bool:
+    try:
+        sub = df[df['season'] == 2025]
+        if sub.empty:
+            sub = df
+        # Check uniqueness and variance across predictions
+        uh = sub['predicted_home_points'].nunique(dropna=True) if 'predicted_home_points' in sub.columns else None
+        ua = sub['predicted_away_points'].nunique(dropna=True) if 'predicted_away_points' in sub.columns else None
+        if uh is not None and ua is not None:
+            if uh <= 2 and ua <= 2:
+                return True
+        # Additional guard: very low std on totals
+        if 'predicted_total_points' in sub.columns:
+            try:
+                if float(pd.to_numeric(sub['predicted_total_points'], errors='coerce').std(skipna=True)) < 0.5:
+                    return True
+            except Exception:
+                pass
+    except Exception:
+        return False
+    return False
+
+def _apply_week0_label(df: pd.DataFrame) -> pd.DataFrame:
+    """For 2025, relabel early kickoff games before the main Thursday slate as Week 0.
+    This helps align with CFBD (and user expectations) so completed Week 0 games are easy to filter.
+    """
+    try:
+        if 'season' not in df.columns or 'week' not in df.columns or 'start_date' not in df.columns:
+            return df
+        mask_2025 = df['season'] == 2025
+        if not mask_2025.any():
+            return df
+        # Threshold: 2025-08-28 00:00:00+00:00 (first big Thursday)
+        threshold = pd.Timestamp('2025-08-28T00:00:00+00:00')
+        def _pdt(x):
+            try:
+                s = str(x)
+                if not s:
+                    return pd.NaT
+                return pd.to_datetime(s)
+            except Exception:
+                return pd.NaT
+        sdt = df.loc[mask_2025, 'start_date'].apply(_pdt)
+        to_week0 = sdt.notna() & (sdt < threshold)
+        if to_week0.any():
+            idx = sdt[to_week0].index
+            df.loc[idx, 'week'] = 0
+        # Try to keep week as int where possible
+        try:
+            df['week'] = pd.to_numeric(df['week'], errors='coerce')
+            if df['week'].notna().all():
+                df['week'] = df['week'].astype(int)
+        except Exception:
+            pass
+        return df
+    except Exception:
+        return df
+
+def _load_predictions_df() -> pd.DataFrame:
+    """Load predictions preferring enhanced (to preserve weather), then merge in actuals from with_scores if present."""
+    global PRED_SOURCE
+    df_enh = None
+    df_scores = None
+    actuals_df = None
+    # Try reading both files if available
+    try:
+        if os.path.exists(pred_path_enh):
+            df_enh = pd.read_csv(pred_path_enh)
+    except Exception as e:
+        print(f"[app] Failed to read enhanced: {e}")
+    try:
+        if os.path.exists(pred_path_scores):
+            df_scores = pd.read_csv(pred_path_scores)
+            if all(col in df_scores.columns for col in ['season','week','home_team','away_team','actual_home_points','actual_away_points']):
+                actuals_df = df_scores[['season','week','home_team','away_team','actual_home_points','actual_away_points','start_date_api']].copy()
+    except Exception as e:
+        print(f"[app] Failed to read with_scores: {e}")
+
+    # Preferred path: have enhanced; merge in actuals if available
+    if df_enh is not None and isinstance(df_enh, pd.DataFrame) and not df_enh.empty:
+        df = df_enh.copy()
+        # Ensure required columns exist when enhanced does not have actuals
+        for col in ['actual_home_points', 'actual_away_points', 'start_date_api']:
+            if col not in df.columns:
+                df[col] = pd.NA
+        if actuals_df is not None and not actuals_df.empty:
+            try:
+                df = df.merge(actuals_df, on=['season','week','home_team','away_team'], how='left', suffixes=('', '_from_scores'))
+                for col in ['actual_home_points','actual_away_points','start_date_api']:
+                    alt = f"{col}_from_scores"
+                    if alt in df.columns:
+                        df[col] = df[col].where(df[col].notna(), df[alt])
+                df = df.drop(columns=[c for c in df.columns if c.endswith('_from_scores')])
+                # Ensure numeric types for actuals
+                for col in ['actual_home_points','actual_away_points']:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+                # Apply Week 0 relabeling after merge
+                df = _apply_week0_label(df)
+                PRED_SOURCE = 'enhanced+scores'
+            except Exception as _merge_e:
+                print(f"[app] Merge actuals into enhanced failed: {_merge_e}")
+                PRED_SOURCE = 'enhanced'
+        else:
+            # Still apply Week 0 relabeling for clarity
+            df = _apply_week0_label(df)
+            PRED_SOURCE = 'enhanced'
+        return df
+
+    # Fallback: no enhanced, try with_scores alone
+    if df_scores is not None and isinstance(df_scores, pd.DataFrame):
+        # Ensure columns present
+        for col in ['actual_home_points', 'actual_away_points']:
+            if col not in df_scores.columns:
+                df_scores[col] = pd.NA
+        # Coerce and apply Week 0 relabeling as well
+        for col in ['actual_home_points','actual_away_points']:
+            try:
+                df_scores[col] = pd.to_numeric(df_scores[col], errors='coerce')
+            except Exception:
+                pass
+        df_scores = _apply_week0_label(df_scores)
+        PRED_SOURCE = 'with_scores_only'
+        return df_scores
+
+    # If here, nothing could be loaded
+    PRED_SOURCE = 'read_error'
+    raise RuntimeError('No predictions CSVs could be loaded')
+
+pred_df = _load_predictions_df()
+
+team_conf_df = pd.read_csv("NCAFCompare/src/data/team_conferences.csv")
+team_conf_df['school_norm'] = team_conf_df['school'].str.strip().str.lower().str.replace('&', 'and').str.replace('  ', ' ')
+
+# Add conference info to predictions
+def norm(name):
+    return str(name).strip().lower().replace('&', 'and').replace('  ', ' ')
+conf_map = dict(zip(team_conf_df['school_norm'], team_conf_df['conference']))
+pred_df['home_conference'] = pred_df['home_team'].apply(lambda x: conf_map.get(norm(x), 'Unknown'))
+pred_df['away_conference'] = pred_df['away_team'].apply(lambda x: conf_map.get(norm(x), 'Unknown'))
+
+# Load win margin confidence intervals
+try:
+    win_margin_conf_df = pd.read_csv("NCAFCompare/src/data/win_margin_predictions_with_confidence.csv")
+    win_margin_conf_df.columns = win_margin_conf_df.columns.str.strip()
+except Exception:
+    win_margin_conf_df = None
+
+# Load team assets
+assets_df = pd.read_csv("NCAFCompare/src/data/team_assets.csv")
+def get_team_asset(team_name):
+    row = assets_df[assets_df['school'] == team_name]
+    if not row.empty:
+        def clean(v):
+            try:
+                import pandas as _pd
+                return '' if _pd.isna(v) else v
+            except Exception:
+                return v if v is not None else ''
+        return {
+            'logo': clean(row.iloc[0].get('logo', '')),
+            'color': clean(row.iloc[0].get('color', '')),
+            'alt_color': clean(row.iloc[0].get('alt_color', ''))
+        }
+    return {'logo': '', 'color': '', 'alt_color': ''}
+
+# Load betting lines
+lines_df = pd.read_csv("NCAFCompare/src/data/college_football_betting_lines_last_15_years.csv")
+lines_index = {}
+lines_index_norm = {}
+def _norm_team_for_odds(name: str) -> str:
+    try:
+        s = str(name or '')
+        s = s.strip().lower()
+        s = s.replace('&', 'and')
+        # unify apostrophes and remove punctuation except spaces
+        s = s.replace("ʻ", "'").replace("’", "'")
+        s = re.sub(r"[^a-z0-9 '\-]", " ", s)
+        s = s.replace("hawai'i", "hawaii")
+        s = re.sub(r"\s+", " ", s).strip()
+        return s
+    except Exception:
+        return str(name)
+
+def _build_lines_index(df):
+    idx = {}
+    idx_norm = {}
+    try:
+        for _, row in df.iterrows():
+            try:
+                y = int(row['year'])
+                w = int(row['week'])
+                ht = row['homeTeam']
+                at = row['awayTeam']
+                key = (y, w, ht, at)
+                odds_str = row.get('lines','')
+                odds = []
+                try:
+                    odds = ast.literal_eval(odds_str) if isinstance(odds_str, str) else []
+                    if not isinstance(odds, list):
+                        odds = []
+                except Exception:
+                    odds = []
+                idx[key] = odds
+                # normalized fallback key
+                nkey = (y, w, _norm_team_for_odds(ht), _norm_team_for_odds(at))
+                idx_norm[nkey] = odds
+            except Exception:
+                continue
+    except Exception:
+        idx = {}
+        idx_norm = {}
+    return idx, idx_norm
+lines_index, lines_index_norm = _build_lines_index(lines_df)
+def get_betting_lines(year, week, home_team, away_team):
+    def _try(y, w, ht, at):
+        k = (int(y), int(w), ht, at)
+        o = lines_index.get(k)
+        if o is not None:
+            return o
+        nk = (int(y), int(w), _norm_team_for_odds(ht), _norm_team_for_odds(at))
+        return lines_index_norm.get(nk, [])
+
+    y = int(year)
+    w = int(week)
+    odds = _try(y, w, home_team, away_team)
+    if odds:
+        return odds
+    # Week 0/1 labeling mismatch fallback for 2025
+    if y == 2025 and w in (0, 1):
+        alt_w = 1 if w == 0 else 0
+        odds_alt = _try(y, alt_w, home_team, away_team)
+        if odds_alt:
+            return odds_alt
+    return []
+
+# --- Helper functions for analysis and betting ---
+def _safe_float(x, default=None):
+    try:
+        return float(x)
+    except Exception:
+        return default
+
+def _phi(z):
+    # Standard normal CDF using error function
+    return 0.5 * (1.0 + math.erf(z / math.sqrt(2)))
+
+def american_to_decimal(odds):
+    # Return decimal odds and net b (decimal-1)
+    if odds is None:
+        return None, None
+    try:
+        o = float(odds)
+    except Exception:
+        return None, None
+    if o > 0:
+        dec = 1 + (o / 100.0)
+    else:
+        dec = 1 + (100.0 / abs(o))
+    return dec, dec - 1.0
+
+def kelly_fraction(p, dec_odds):
+    # p is win probability, dec_odds is decimal odds
+    if dec_odds is None:
+        return 0.0
+    b = dec_odds - 1.0
+    q = 1 - p
+    numer = b * p - q
+    if b <= 0:
+        return 0.0
+    return max(0.0, numer / b)
+
+def _get_conf_std_for_game(row):
+    # Try to fetch per-game std from win_margin_conf_df; fallback to default
+    try:
+        if win_margin_conf_df is not None:
+            wk = int(row.get('week', 0))
+            szn = int(row.get('season', 0))
+            home = str(row.get('home_team', '')).strip().lower().replace('&','and').replace('  ',' ')
+            away = str(row.get('away_team', '')).strip().lower().replace('&','and').replace('  ',' ')
+            sel = win_margin_conf_df[
+                (win_margin_conf_df['week'] == wk) &
+                (win_margin_conf_df['season'] == szn) &
+                (win_margin_conf_df['home_team'].str.strip().str.lower().str.replace('&','and').str.replace('  ',' ') == home) &
+                (win_margin_conf_df['away_team'].str.strip().str.lower().str.replace('&','and').str.replace('  ',' ') == away)
+            ]
+            if not sel.empty:
+                val = _safe_float(sel.iloc[0].get('conf_std', None))
+                if val and val > 0:
+                    return val
+    except Exception:
+        pass
+    # Conference-level override (average home/away conf sigma if available)
+    try:
+        if _CONF_SIGMA is not None:
+            hc = str(row.get('home_conference','')).strip()
+            ac = str(row.get('away_conference','')).strip()
+            vals = []
+            if hc in _CONF_SIGMA:
+                vals.append(_CONF_SIGMA[hc])
+            if ac in _CONF_SIGMA:
+                vals.append(_CONF_SIGMA[ac])
+            if vals:
+                v = float(sum(vals) / len(vals))
+                if v > 4.0:  # sanity lower bound
+                    return v
+    except Exception:
+        pass
+    return 14.0  # reasonable default std for margin
+
+RECS_PATH = "NCAFCompare/src/data/recommendations_2025.csv"
+
+
+def _ensure_recs_file():
+    if not os.path.exists(RECS_PATH):
+        cols = [
+            'timestamp','season','week','home_team','away_team','market','side','price_american','line','provider',
+            'model_prob','implied_prob','edge','kelly_f','bankroll','stake','status','result','pnl'
+        ]
+        pd.DataFrame(columns=cols).to_csv(RECS_PATH, index=False)
+
+
+def _reload_predictions():
+    global pred_df
+    # Re-read predictions with validation
+    new_df = _load_predictions_df()
+    new_df['home_conference'] = new_df['home_team'].apply(lambda x: conf_map.get(norm(x), 'Unknown'))
+    new_df['away_conference'] = new_df['away_team'].apply(lambda x: conf_map.get(norm(x), 'Unknown'))
+    pred_df = new_df
+
+def _geocode_needed(base_dir: str, selected_week: int | None) -> bool:
+    try:
+        sched_path = os.path.join(base_dir, 'src', 'data', 'college_football_schedule_2025.csv')
+        cache_path = os.path.join(base_dir, 'src', 'data', 'venue_coordinates_cache.csv')
+        if not os.path.exists(sched_path):
+            return False
+        df = pd.read_csv(sched_path)
+        if selected_week is not None and 'week' in df.columns:
+            try:
+                df = df[df['week'] == int(selected_week)].copy()
+            except Exception:
+                pass
+        if df.empty:
+            return False
+        if 'venue' not in df.columns or 'home_team' not in df.columns:
+            return False
+        df['venue_norm'] = df['venue'].astype(str).str.strip().str.lower()
+        req = set((vn, ht) for vn, ht in zip(df['venue_norm'], df['home_team']))
+        if not os.path.exists(cache_path):
+            return True
+        cache = pd.read_csv(cache_path)
+        if cache.empty:
+            return True
+        if 'venue_norm' not in cache.columns or 'home_team' not in cache.columns:
+            return True
+        cache['venue_norm'] = cache['venue_norm'].astype(str).str.strip().str.lower()
+        have = set((vn, ht) for vn, ht in zip(cache['venue_norm'], cache['home_team']))
+        missing = req - have
+        # If more than 0 missing, we need geocoding
+        return len(missing) > 0
+    except Exception:
+        # On any error, be conservative and run geocode once
+        return True
+
+@app.route('/api/debug-actuals')
+def debug_actuals():
+    try:
+        sub = pred_df[(pred_df['season'] == 2025)].copy()
+        have = sub[sub['actual_home_points'].notna() & sub['actual_away_points'].notna()]
+        sample = []
+        for _, r in have.head(10).iterrows():
+            sample.append({
+                'week': int(r.get('week', 0)) if pd.notna(r.get('week')) else None,
+                'home_team': r.get('home_team'),
+                'away_team': r.get('away_team'),
+                'actual_home_points': r.get('actual_home_points'),
+                'actual_away_points': r.get('actual_away_points'),
+            })
+        return {
+            'rows_2025': int(len(sub)),
+            'completed_count': int(len(have)),
+            'sample': sample,
+            'pred_source': PRED_SOURCE,
+        }, 200
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+@app.route('/api/debug-pred-source')
+def debug_pred_source():
+    try:
+        sub = pred_df[pred_df['season'] == 2025]
+        uh = sub['predicted_home_points'].nunique(dropna=True) if 'predicted_home_points' in sub.columns else None
+        ua = sub['predicted_away_points'].nunique(dropna=True) if 'predicted_away_points' in sub.columns else None
+        ut = sub['predicted_total_points'].nunique(dropna=True) if 'predicted_total_points' in sub.columns else None
+        return {
+            'pred_source': PRED_SOURCE,
+            'rows': int(len(pred_df)),
+            'rows_2025': int(len(sub)),
+            'unique_home_preds': int(uh) if uh is not None else None,
+            'unique_away_preds': int(ua) if ua is not None else None,
+            'unique_total_preds': int(ut) if ut is not None else None,
+        }, 200
+    except Exception as e:
+        return {'error': str(e), 'pred_source': PRED_SOURCE}, 500
+
+
+def compute_recommendations(week=None, bankroll=1000.0, kelly_factor=0.5, ev_threshold=0.02):
+    """Core engine to compute EV+ recommendations, reused by API and UI."""
+    df = pred_df[(pred_df['season'] == 2025)].copy()
+    # Upcoming only
+    df = df[df['actual_home_points'].isna() & df['actual_away_points'].isna()]
+    if week is not None:
+        try:
+            df = df[df['week'] == int(week)]
+        except Exception:
+            pass
+    recs = []
+    kelly_cap = 0.10  # never stake >10% per bet
+    longshot_cap_odds = 4.0  # decimal (>4.0 ~= +300)
+    min_prob_for_longshot = 0.30
+    for _, row in df.iterrows():
+        odds_list = get_betting_lines(int(row['season']), int(row['week']), row['home_team'], row['away_team'])
+        if not odds_list:
+            continue
+        pred_home = _safe_float(row.get('predicted_home_points'))
+        pred_away = _safe_float(row.get('predicted_away_points'))
+        if pred_home is None or pred_away is None:
+            continue
+        pred_total = pred_home + pred_away
+        pred_margin = _safe_float(row.get('predicted_win_margin'), pred_home - pred_away)
+        sigma_m = _get_conf_std_for_game(row)
+        sigma_t = 12.0
+        for odds in odds_list:
+            provider = odds.get('provider')
+            # ML
+            home_ml = _safe_float(odds.get('homeMoneyline'))
+            away_ml = _safe_float(odds.get('awayMoneyline'))
+            if home_ml is not None:
+                p_home = _phi(pred_margin / sigma_m)
+                dec, _ = american_to_decimal(home_ml)
+                if dec:
+                    kf = None
+                    # Skip extreme longshots unless model prob decent
+                    if not (dec > longshot_cap_odds and p_home < min_prob_for_longshot):
+                        kf = kelly_fraction(p_home, dec)
+                        kf = min(kf, kelly_cap)
+                        # Scale down for longshots
+                        if dec > longshot_cap_odds:
+                            kf *= 0.25
+                    ev = p_home * (dec - 1) - (1 - p_home)
+                    if ev > ev_threshold and kf is not None and kf > 0:
+                        stake = round(bankroll * kf * kelly_factor, 2)
+                        recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'ML', 'side': 'Home', 'provider': provider, 'price_american': int(home_ml), 'model_prob': round(p_home,4), 'implied_prob': round(1/(dec),4), 'edge': round(ev,4), 'kelly_f': round(kf,4), 'stake': stake})
+            if away_ml is not None:
+                p_away = 1 - _phi(pred_margin / sigma_m)
+                dec, _ = american_to_decimal(away_ml)
+                if dec:
+                    kf = None
+                    if not (dec > longshot_cap_odds and p_away < min_prob_for_longshot):
+                        kf = kelly_fraction(p_away, dec)
+                        kf = min(kf, kelly_cap)
+                        if dec > longshot_cap_odds:
+                            kf *= 0.25
+                    ev = p_away * (dec - 1) - (1 - p_away)
+                    if ev > ev_threshold and kf is not None and kf > 0:
+                        stake = round(bankroll * kf * kelly_factor, 2)
+                        recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'ML', 'side': 'Away', 'provider': provider, 'price_american': int(away_ml), 'model_prob': round(p_away,4), 'implied_prob': round(1/(dec),4), 'edge': round(ev,4), 'kelly_f': round(kf,4), 'stake': stake})
+            # Spread / Totals
+            spread = odds.get('spread')
+            try:
+                spread_val = float(str(spread).replace('Home','').replace('Away','').strip()) if spread is not None else None
+            except Exception:
+                spread_val = None
+            ou_val = _safe_float(odds.get('overUnder'))
+            dec_110 = 1 + (100/110)
+            if spread_val is not None:
+                p_home_cover = _phi((pred_margin - spread_val) / sigma_m)
+                ev_home = p_home_cover * (dec_110 - 1) - (1 - p_home_cover)
+                kf_home = min(kelly_fraction(p_home_cover, dec_110), kelly_cap)
+                if ev_home > ev_threshold and kf_home > 0:
+                    stake = round(bankroll * kf_home * kelly_factor, 2)
+                    recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'Spread', 'side': 'Home', 'provider': provider, 'price_american': -110, 'model_prob': round(p_home_cover,4), 'implied_prob': round(1/(dec_110),4), 'edge': round(ev_home,4), 'kelly_f': round(kf_home,4), 'stake': stake, 'line': spread_val})
+                p_away_cover = 1 - p_home_cover
+                ev_away = p_away_cover * (dec_110 - 1) - (1 - p_away_cover)
+                kf_away = min(kelly_fraction(p_away_cover, dec_110), kelly_cap)
+                if ev_away > ev_threshold and kf_away > 0:
+                    stake = round(bankroll * kf_away * kelly_factor, 2)
+                    recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'Spread', 'side': 'Away', 'provider': provider, 'price_american': -110, 'model_prob': round(p_away_cover,4), 'implied_prob': round(1/(dec_110),4), 'edge': round(ev_away,4), 'kelly_f': round(kf_away,4), 'stake': stake, 'line': spread_val})
+            if ou_val is not None:
+                p_over = 1 - _phi((ou_val - pred_total) / sigma_t)
+                ev_over = p_over * (dec_110 - 1) - (1 - p_over)
+                kf_over = min(kelly_fraction(p_over, dec_110), kelly_cap)
+                if ev_over > ev_threshold and kf_over > 0:
+                    stake = round(bankroll * kf_over * kelly_factor, 2)
+                    recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'Total', 'side': 'Over', 'provider': provider, 'price_american': -110, 'model_prob': round(p_over,4), 'implied_prob': round(1/(dec_110),4), 'edge': round(ev_over,4), 'kelly_f': round(kf_over,4), 'stake': stake, 'line': ou_val})
+                p_under = 1 - p_over
+                ev_under = p_under * (dec_110 - 1) - (1 - p_under)
+                kf_under = min(kelly_fraction(p_under, dec_110), kelly_cap)
+                if ev_under > ev_threshold and kf_under > 0:
+                    stake = round(bankroll * kf_under * kelly_factor, 2)
+                    recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'Total', 'side': 'Under', 'provider': provider, 'price_american': -110, 'model_prob': round(p_under,4), 'implied_prob': round(1/(dec_110),4), 'edge': round(ev_under,4), 'kelly_f': round(kf_under,4), 'stake': stake, 'line': ou_val})
+    recs.sort(key=lambda x: x['edge'], reverse=True)
+    return recs
+@app.route('/api/build-calibration', methods=['POST'])
+def build_calibration():
+    """Generate isotonic LUT and conference sigma CSV from historical data."""
+    try:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        script = os.path.join(base_dir, 'src', 'modeling', 'build_calibration_artifacts.py')
+        out = subprocess.run([sys.executable, script], capture_output=True, text=True, check=False)
+        return {'returncode': out.returncode, 'stdout': out.stdout[-8000:], 'stderr': out.stderr[-8000:]}, 200
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+
+@app.route('/', methods=['GET', 'POST'])
 def index():
-    sample = pred_df.head(10)
-    return sample.to_html()
+    # Default to upcoming games for the current week if not POST
+    import datetime as dt
+    weeks = sorted(pred_df['week'].dropna().unique())
+    selected_week = weeks[0] if weeks else None
+    if request.method == 'GET':
+        today = dt.datetime.now().date()
+        # Find the first week with upcoming games
+        filter_type = 'all'
+        for w in weeks:
+            week_df = pred_df[pred_df['week'] == w]
+            upcoming = week_df[(week_df['actual_home_points'].isnull()) & (week_df['actual_away_points'].isnull())]
+            if not upcoming.empty:
+                selected_week = w
+                filter_type = 'upcoming'
+                break
+        week_games = pred_df[pred_df['week'] == int(selected_week)].copy() if selected_week else pred_df.copy()
+        week_games['date_only'] = week_games['start_date'].str[:10]
+        all_dates = sorted(week_games['date_only'].dropna().unique())
+        filtered_games = week_games[(week_games['actual_home_points'].isnull()) & (week_games['actual_away_points'].isnull())]
+        selected_date = ''
+        selected_conference = ''
+        show_all = False
+        hide_unknown = True
+        sort_by = 'time'
+        # Apply hide_unknown and limit for GET defaults
+        try:
+            if hide_unknown:
+                filtered_games = filtered_games[(filtered_games['home_conference'] != 'Unknown') & (filtered_games['away_conference'] != 'Unknown')]
+        except Exception:
+            pass
+        filtered_games = filtered_games.head(30)
+    else:
+        # POST: Use form data to filter games
+        filter_type = request.form.get('filter_type', 'all')
+        selected_week = int(request.form.get('week', weeks[0] if weeks else 1))
+        selected_date = request.form.get('date', '')
+        selected_conference = request.form.get('conference', '')
+        show_all = bool(request.form.get('show_all'))
+        hide_unknown = bool(request.form.get('hide_unknown'))
+        sort_by = request.form.get('sort_by', 'time')
+        week_games = pred_df[pred_df['week'] == int(selected_week)].copy() if selected_week else pred_df.copy()
+        week_games['date_only'] = week_games['start_date'].str[:10]
+        all_dates = sorted(week_games['date_only'].dropna().unique())
+        filtered_games = week_games.copy()
+        if selected_date:
+            filtered_games = filtered_games[filtered_games['date_only'] == selected_date]
+        if selected_conference:
+            filtered_games = filtered_games[(filtered_games['home_conference'] == selected_conference) | (filtered_games['away_conference'] == selected_conference)]
+        if filter_type == 'completed':
+            filtered_games = filtered_games[(filtered_games['actual_home_points'].notnull()) & (filtered_games['actual_away_points'].notnull())]
+        elif filter_type == 'upcoming':
+            filtered_games = filtered_games[(filtered_games['actual_home_points'].isnull()) & (filtered_games['actual_away_points'].isnull())]
+        # Apply hide_unknown and limit for POST
+        try:
+            if hide_unknown:
+                filtered_games = filtered_games[(filtered_games['home_conference'] != 'Unknown') & (filtered_games['away_conference'] != 'Unknown')]
+        except Exception:
+            pass
+        if not show_all:
+            filtered_games = filtered_games.head(50)
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+    # Prepare game cards for all filtered games
+    def r2(val):
+        try:
+            return f"{float(val):.2f}"
+        except Exception:
+            return val
+    game_cards = []
+    for _, game_row in filtered_games.iterrows():
+        home_asset = get_team_asset(game_row['home_team'])
+        away_asset = get_team_asset(game_row['away_team'])
+        betting_lines = get_betting_lines(
+            year=int(game_row['season']),
+            week=int(game_row['week']),
+            home_team=game_row['home_team'],
+            away_team=game_row['away_team']
+        )
+        start_date_str = game_row.get('start_date', '')
+        central_time_str = ''
+        sort_ts = None
+        if start_date_str:
+            try:
+                dt_utc = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+                dt_central = dt_utc.astimezone(pytz.timezone('US/Central'))
+                central_time_str = dt_central.strftime('%A, %B %d, %Y %I:%M %p CT')
+                sort_ts = dt_central.timestamp()
+            except Exception:
+                central_time_str = start_date_str
+        conf_lower = conf_upper = conf_std = None
+        def normalize_team_name(name):
+            return str(name).strip().lower().replace('&', 'and').replace('  ', ' ')
+        if win_margin_conf_df is not None:
+            week_val = int(game_row.get('week', 0))
+            season_val = int(game_row.get('season', 0))
+            home_team = normalize_team_name(game_row.get('home_team', ''))
+            away_team = normalize_team_name(game_row.get('away_team', ''))
+            conf_row = win_margin_conf_df[(win_margin_conf_df['week'] == week_val) &
+                                         (win_margin_conf_df['season'] == season_val) &
+                                         (win_margin_conf_df['home_team'].apply(normalize_team_name) == home_team) &
+                                         (win_margin_conf_df['away_team'].apply(normalize_team_name) == away_team)]
+            if not conf_row.empty:
+                conf_lower = r2(conf_row.iloc[0].get('conf_interval_lower', None))
+                conf_upper = r2(conf_row.iloc[0].get('conf_interval_upper', None))
+                conf_std = r2(conf_row.iloc[0].get('conf_std', None))
+        actual_home = _safe_float(game_row.get('actual_home_points', None))
+        actual_away = _safe_float(game_row.get('actual_away_points', None))
+        def _is_valid_num(x):
+            try:
+                return x is not None and not (isinstance(x, float) and math.isnan(x))
+            except Exception:
+                return x is not None
+        predicted_home = _safe_float(game_row.get('predicted_home_points', None))
+        predicted_away = _safe_float(game_row.get('predicted_away_points', None))
+        predicted_winner = None
+        actual_winner = None
+        correct_prediction = None
+        if predicted_home is not None and predicted_away is not None:
+            if predicted_home > predicted_away:
+                predicted_winner = game_row['home_team']
+            elif predicted_home < predicted_away:
+                predicted_winner = game_row['away_team']
+        # Win probability via margin normal model
+        p_home_win = None
+        try:
+            if predicted_home is not None and predicted_away is not None:
+                pred_margin_tmp = _safe_float(game_row.get('predicted_win_margin'), predicted_home - predicted_away)
+                sigma_tmp = _get_conf_std_for_game(game_row)
+                p_home_win = _phi(pred_margin_tmp / sigma_tmp)
+        except Exception:
+            p_home_win = None
+        if _is_valid_num(actual_home) and _is_valid_num(actual_away):
+            if actual_home > actual_away:
+                actual_winner = game_row['home_team']
+            elif actual_home < actual_away:
+                actual_winner = game_row['away_team']
+        if predicted_winner and actual_winner:
+            correct_prediction = (predicted_winner == actual_winner)
+        actual_total_points = None
+        predicted_total_points = None
+        total_points_diff = None
+        if _is_valid_num(actual_home) and _is_valid_num(actual_away):
+            try:
+                s = actual_home + actual_away
+                if isinstance(s, float) and math.isnan(s):
+                    actual_total_points = None
+                else:
+                    actual_total_points = s
+            except Exception:
+                actual_total_points = None
+        if predicted_home is not None and predicted_away is not None:
+            predicted_total_points = predicted_home + predicted_away
+        if actual_total_points is not None and predicted_total_points is not None:
+            total_points_diff = actual_total_points - predicted_total_points
+        # Weather/context: expose temperature, wind, and applied total adjustment
+        wx_temp = _safe_float(game_row.get('wx_temp_f', None))
+        wx_wind = _safe_float(game_row.get('wx_wind_mph', None))
+        # Only consider wx_adjust_total when weather exists; do not default to 0.0
+        wx_adj = _safe_float(game_row.get('wx_adjust_total', None), None)
+        # Compute model (pre-adjust) vs weather-adjusted totals
+        pred_total_adj_num = _safe_float(game_row.get('predicted_total_points', None), None)
+        pred_total_pre_num = None
+        if pred_total_adj_num is not None:
+            try:
+                pred_total_pre_num = pred_total_adj_num - (wx_adj if wx_adj is not None else 0.0)
+            except Exception:
+                pred_total_pre_num = None
+        else:
+            if predicted_home is not None and predicted_away is not None:
+                pred_total_pre_num = predicted_home + predicted_away
+                pred_total_adj_num = pred_total_pre_num
+        # Compute representative O/U line and model vs actual totals correctness
+        ou_line = None
+        ou_model_lean = None
+        ou_edge = None
+        ou_actual_result = None
+        ou_correct = None
+        try:
+            ou_values = []
+            if betting_lines:
+                for bl in betting_lines:
+                    ou = bl.get('overUnder')
+                    try:
+                        if ou is not None and ou != '':
+                            ou_values.append(float(ou))
+                    except Exception:
+                        continue
+            if ou_values:
+                # Use the average across providers as the representative line
+                ou_line = sum(ou_values) / len(ou_values)
+        except Exception:
+            ou_line = None
+        # Model lean vs O/U and edge
+        if ou_line is not None and predicted_total_points is not None:
+            if predicted_total_points > ou_line:
+                ou_model_lean = 'Over'
+            elif predicted_total_points < ou_line:
+                ou_model_lean = 'Under'
+            else:
+                ou_model_lean = 'Push'
+            ou_edge = predicted_total_points - ou_line
+        # Actual totals result vs O/U and correctness
+        if ou_line is not None and actual_total_points is not None:
+            if actual_total_points > ou_line:
+                ou_actual_result = 'Over'
+            elif actual_total_points < ou_line:
+                ou_actual_result = 'Under'
+            else:
+                ou_actual_result = 'Push'
+            if ou_model_lean in ('Over', 'Under') and ou_actual_result in ('Over', 'Under'):
+                ou_correct = (ou_model_lean == ou_actual_result)
+            else:
+                ou_correct = None
+        # Compute representative ATS line from home perspective and correctness
+        ats_home_line = None  # threshold for home to cover (margin > ats_home_line)
+        ats_model_lean = None
+        ats_edge = None
+        ats_actual_result = None
+        ats_correct = None
+        try:
+            spread_vals = []
+            if betting_lines:
+                for bl in betting_lines:
+                    s_fmt = bl.get('formattedSpread')
+                    s_raw = bl.get('spread')
+                    val = None
+                    # Prefer formatted string to infer team orientation
+                    if isinstance(s_fmt, str) and s_fmt:
+                        try:
+                            # Try forms like 'Home -3.5', 'Away +3.5', or '<Team> -3.5'
+                            # If explicit Home/Away present
+                            if 'Home' in s_fmt or 'Away' in s_fmt:
+                                num = float(s_fmt.replace('Home','').replace('Away','').strip())
+                                if 'Home' in s_fmt:
+                                    # L_home equals the printed value (e.g., -3.5)
+                                    val = num
+                                else:
+                                    # Away x => convert to home perspective
+                                    val = -num
+                            else:
+                                # Match leading team name and signed number
+                                m = re.match(r"^(.*)\s+([+-]?[0-9]*\.?[0-9]+)$", s_fmt.strip())
+                                if m:
+                                    team_label = m.group(1).strip()
+                                    num = float(m.group(2))
+                                    # Determine if the labeled team is the home team
+                                    home_name = str(game_row.get('home_team','')).strip().lower()
+                                    away_name = str(game_row.get('away_team','')).strip().lower()
+                                    lbl = team_label.strip().lower()
+                                    # Simple contains check to handle abbreviations
+                                    is_home_labeled = (home_name in lbl) and not (away_name in lbl)
+                                    is_away_labeled = (away_name in lbl) and not (home_name in lbl)
+                                    if is_home_labeled:
+                                        val = num  # L_home equals printed spread for home
+                                    elif is_away_labeled:
+                                        val = -num  # Convert away to home perspective
+                                    else:
+                                        # Unknown mapping; skip this provider
+                                        val = None
+                                else:
+                                    val = None
+                        except Exception:
+                            val = None
+                    else:
+                        # Fallback: parse raw; assume it's numeric home threshold already
+                        try:
+                            if s_raw is not None and s_raw != '':
+                                val = float(s_raw)
+                        except Exception:
+                            val = None
+                    if val is not None:
+                        spread_vals.append(val)
+            if spread_vals:
+                ats_home_line = sum(spread_vals) / len(spread_vals)
+        except Exception:
+            ats_home_line = None
+        if ats_home_line is not None and predicted_home is not None and predicted_away is not None:
+            pred_margin = predicted_home - predicted_away
+            # Home covers if (margin + L_home) > 0
+            comp = pred_margin + ats_home_line
+            if comp > 0:
+                ats_model_lean = 'Home'
+            elif comp < 0:
+                ats_model_lean = 'Away'
+            else:
+                ats_model_lean = 'Push'
+            ats_edge = comp
+        if ats_home_line is not None and _is_valid_num(actual_home) and _is_valid_num(actual_away):
+            actual_margin = actual_home - actual_away
+            comp_a = actual_margin + ats_home_line
+            if comp_a > 0:
+                ats_actual_result = 'Home'
+            elif comp_a < 0:
+                ats_actual_result = 'Away'
+            else:
+                ats_actual_result = 'Push'
+            if ats_model_lean in ('Home','Away') and ats_actual_result in ('Home','Away'):
+                ats_correct = (ats_model_lean == ats_actual_result)
+            else:
+                ats_correct = None
+        def _format_ats_line(v):
+            if v is None:
+                return None
+            # v is L_home: negative means home is favorite (e.g., -3.5)
+            return f"Home {float(v):+0.1f}".replace('+', '+').replace('-0.0', '0.0')
+        game_cards.append({
+            'home_team': game_row['home_team'],
+            'away_team': game_row['away_team'],
+            'venue': game_row.get('venue', ''),
+            'game_time': central_time_str,
+            'sort_ts': sort_ts,
+            'predicted_total_points': r2(predicted_total_points),
+            'pred_total_adj': r2(pred_total_adj_num) if pred_total_adj_num is not None else None,
+            'pred_total_pre': r2(pred_total_pre_num) if pred_total_pre_num is not None else None,
+            'actual_total_points': r2(actual_total_points),
+            'total_points_diff': r2(total_points_diff) if total_points_diff is not None else None,
+            'predicted_home_points': r2(predicted_home),
+            'predicted_away_points': r2(predicted_away),
+            'actual_home_points': r2(actual_home) if _is_valid_num(actual_home) else None,
+            'actual_away_points': r2(actual_away) if _is_valid_num(actual_away) else None,
+            'predicted_win_margin': r2(game_row.get('predicted_win_margin', '')),
+            'home_win_prob_pct': f"{p_home_win*100:.1f}%" if p_home_win is not None else None,
+            'away_win_prob_pct': f"{(1-p_home_win)*100:.1f}%" if p_home_win is not None else None,
+            'home_win_prob': p_home_win,
+            'win_margin_conf_lower': conf_lower,
+            'win_margin_conf_upper': conf_upper,
+            'win_margin_conf_std': conf_std,
+            'home_logo': home_asset['logo'],
+            'home_color': home_asset['color'],
+            'home_alt_color': home_asset['alt_color'],
+            'away_logo': away_asset['logo'],
+            'away_color': away_asset['color'],
+            'away_alt_color': away_asset['alt_color'],
+            'betting_lines': betting_lines,
+            'ou_line': r2(ou_line) if ou_line is not None else None,
+            'ou_model_lean': ou_model_lean,
+            'ou_edge': r2(ou_edge) if ou_edge is not None else None,
+            'ou_edge_num': ou_edge,
+            'ou_actual_result': ou_actual_result,
+            'ou_correct': ou_correct,
+            'ats_line': _format_ats_line(ats_home_line),
+            'ats_model_lean': ats_model_lean,
+            'ats_edge': r2(ats_edge) if ats_edge is not None else None,
+            'ats_edge_num': ats_edge,
+            'ats_actual_result': ats_actual_result,
+            'ats_correct': ats_correct,
+            'wx_temp_f': r2(wx_temp) if wx_temp is not None else None,
+            'wx_wind_mph': r2(wx_wind) if wx_wind is not None else None,
+            'wx_adjust_total': r2(wx_adj) if wx_adj is not None else None,
+            'predicted_winner': predicted_winner,
+            'actual_winner': actual_winner,
+            'correct_prediction': correct_prediction,
+        })
+    # Summary metrics for this view
+    summary = { 'winners': {'correct':0,'total':0}, 'ou': {'correct':0,'push':0,'total':0}, 'ats': {'correct':0,'push':0,'total':0} }
+    for g in game_cards:
+        if g.get('correct_prediction') is not None:
+            summary['winners']['total'] += 1
+            if g['correct_prediction']:
+                summary['winners']['correct'] += 1
+        if g.get('ou_actual_result'):
+            if g['ou_actual_result'] == 'Push':
+                summary['ou']['push'] += 1
+            else:
+                summary['ou']['total'] += 1
+                if g.get('ou_correct') is True:
+                    summary['ou']['correct'] += 1
+        if g.get('ats_actual_result'):
+            if g['ats_actual_result'] == 'Push':
+                summary['ats']['push'] += 1
+            else:
+                summary['ats']['total'] += 1
+                if g.get('ats_correct') is True:
+                    summary['ats']['correct'] += 1
+
+    # Sorting
+    try:
+        if sort_by == 'winprob_desc':
+            game_cards.sort(key=lambda g: (g.get('home_win_prob') or 0.0), reverse=True)
+        elif sort_by == 'ou_edge_desc':
+            game_cards.sort(key=lambda g: abs(g.get('ou_edge_num') or 0.0), reverse=True)
+        elif sort_by == 'ats_edge_desc':
+            game_cards.sort(key=lambda g: abs(g.get('ats_edge_num') or 0.0), reverse=True)
+        else:
+            game_cards.sort(key=lambda g: (g.get('sort_ts') is None, g.get('sort_ts') or 0.0))
+    except Exception:
+        pass
+
+    return render_template_string('''
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6fa; margin: 0; padding: 0; }
+    .container { max-width: 900px; margin: 40px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); padding: 24px; }
+        h2 { text-align: center; color: #2c3e50; margin-bottom: 24px; }
+    form { display: flex; flex-direction: column; gap: 16px; margin-bottom: 32px; }
+    /* Centered filter bar (not sticky) */
+    .filterbar { position: static; z-index: 1; background: #fff; margin: 0 auto 16px; padding: 10px 12px; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); display: flex; flex-direction: row; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: center; max-width: 1000px; }
+        label { font-weight: 500; color: #34495e; }
+        select, button { padding: 8px 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 1em; }
+        button { background: #2980b9; color: #fff; border: none; cursor: pointer; transition: background 0.2s; }
+        button:hover { background: #3498db; }
+    .card { background: #f8f8f8; border-radius: 10px; box-shadow: 0 1px 6px rgba(0,0,0,0.07); padding: 16px; margin-top: 12px; }
+        .teams { display: flex; align-items: center; justify-content: center; gap: 32px; margin-bottom: 18px; }
+        .team { text-align: center; }
+    .team-logo { height: 52px; margin-bottom: 6px; }
+        .team-name { font-weight: bold; font-size: 1.1em; padding: 4px 10px; border-radius: 6px; display: inline-block; margin-top: 2px; }
+        .vs { font-size: 2em; color: #888; }
+        ul.prediction { list-style: none; padding: 0; margin: 0 0 18px 0; }
+    ul.prediction li { margin-bottom: 4px; font-size: 1.0em; }
+        .odds-table { width: 100%; border-collapse: collapse; margin-top: 10px; background: #fff; }
+        .odds-table th, .odds-table td { padding: 8px 10px; border: 1px solid #e0e0e0; text-align: center; }
+        .odds-table th { background: #eaf1fb; color: #2c3e50; }
+        .odds-table tr:nth-child(even) { background: #f4f6fa; }
+        .no-odds { color: #888; font-style: italic; }
+    .topbar { position: sticky; top: 0; z-index: 120; display:flex; justify-content: space-between; align-items:center; margin-bottom: 10px; padding: 10px 8px; background: rgba(255,255,255,0.92); border-bottom: 1px solid #eee; backdrop-filter: saturate(180%) blur(8px); border-top-left-radius: 12px; border-top-right-radius: 12px; }
+        .links a { color:#2980b9; margin-left:12px; text-decoration: underline; }
+        .summary { display:flex; gap:16px; justify-content:center; color:#2c3e50; font-weight:600; margin:10px 0 16px; }
+        .badge { padding:2px 8px; border-radius:12px; font-size:0.85em; font-weight:600; }
+        .ok { background:#eafaf1; color:#1e8449; }
+        .err { background:#fdecea; color:#c0392b; }
+        .push { background:#f4f6fa; color:#7f8c8d; }
+    .wx { font-size: 0.95em; color:#2c3e50; }
+    .muted { color:#7f8c8d; }
+        /* Responsive grid for cards */
+        .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+        @media (min-width: 900px) {
+            .grid { grid-template-columns: 1fr 1fr; }
+        }
+        @media (min-width: 1200px) {
+            .container { max-width: 1100px; }
+            .grid { grid-template-columns: 1fr 1fr 1fr; }
+        }
+    /* Filter control sizing and alignment */
+    .filterbar .control { display: inline-flex; align-items: center; gap: 8px; }
+    .filterbar .control label { font-size: 0.95em; margin: 0; color: #34495e; }
+    .filterbar select, .filterbar button, .filterbar input[type="checkbox"] { font-size: 0.95em; padding: 6px 10px; }
+    .filterbar button { height: 36px; }
+        /* Back to top */
+        #backToTop { position: fixed; right: 16px; bottom: 16px; padding: 8px 12px; border: none; border-radius: 18px; background: #2980b9; color: #fff; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.15); display: none; }
+        #backToTop:hover { background: #3498db; }
+    </style>
+    <div class="container">
+    <div class="topbar">
+            <div class="links">
+                <a href="/recommendations">Recommendations</a>
+    <a href="/recommendations/performance">Performance</a>
+        <a href="/analysis">Analysis</a>
+                <a href="/win-totals">Win Totals</a>
+                <a href="/conference-records">Conference Records</a>
+                <a href="/team-schedules">Team Schedules</a>
+            </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+                <button type="button" id="refreshBtn" title="Click = full refresh; Shift+Click = quick (scores+odds)" onclick="if(window.refreshData){try{window.refreshData();}catch(e){alert('Refresh error: '+e);}}else{fetch('/api/refresh-data',{method:'POST'}).then(()=>location.reload()).catch(e=>alert('Refresh failed: '+e));}">Refresh Data</button>
+                <span id="refreshStatus" style="font-size:0.95em; color:#555;"></span>
+                <small>
+                    <a href="/api/refresh-data" target="_blank" style="color:#2980b9; text-decoration:underline;">manual</a>
+                    • <a href="/api/refresh-data?mode=quick" target="_blank" style="color:#27ae60; text-decoration:underline;">fast</a>
+            • <a href="/refresh-status" target="_blank" style="color:#8e44ad; text-decoration:underline;">diagnostics</a>
+                </small>
+            </div>
+        </div>
+        <h2>2025 NCAA Football Predictions</h2>
+        <div class="summary">
+            <div>Winners: {{summary['winners']['correct']}} / {{summary['winners']['total']}}</div>
+            <div>ATS: {{summary['ats']['correct']}} / {{summary['ats']['total']}} (+{{summary['ats']['push']}} push)</div>
+            <div>Totals: {{summary['ou']['correct']}} / {{summary['ou']['total']}} (+{{summary['ou']['push']}} push)</div>
+        </div>
+        <div style="text-align:center; margin:-6px 0 10px;">
+            <label style="font-size:0.95em;color:#34495e;"><input type="checkbox" id="toggleWxTotals" checked> Show weather-adjusted totals</label>
+        </div>
+    <form method="post" id="mainForm" class="filterbar">
+            <div class="control">
+                <label for="week">Week</label>
+                <select name="week" id="week" onchange="document.getElementById('mainForm').submit();">
+                    {% for w in weeks %}
+                    <option value="{{w}}" {% if w == selected_week|int %}selected{% endif %}>Week {{w}}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="control">
+                <label for="date">Date</label>
+                <select name="date" id="date" onchange="document.getElementById('mainForm').submit();">
+                    <option value="">All Dates</option>
+                    {% for d in all_dates %}
+                    <option value="{{d}}" {% if d == selected_date %}selected{% endif %}>{{d}}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="control">
+                <label for="conference">Conference</label>
+                <select name="conference" id="conference" onchange="document.getElementById('mainForm').submit();">
+                    <option value="">All Conferences</option>
+                    {% for conf in all_conferences %}
+                    <option value="{{conf}}" {% if conf == selected_conference %}selected{% endif %}>{{conf}}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="control">
+                <label for="filter_type">Show</label>
+                <select name="filter_type" id="filter_type" onchange="document.getElementById('mainForm').submit();">
+                    <option value="all" {% if filter_type == 'all' %}selected{% endif %}>All games</option>
+                    <option value="completed" {% if filter_type == 'completed' %}selected{% endif %}>Completed games</option>
+                    <option value="upcoming" {% if filter_type == 'upcoming' %}selected{% endif %}>Upcoming games</option>
+                </select>
+            </div>
+            <div class="control">
+                <label for="sort_by">Sort by</label>
+                <select name="sort_by" id="sort_by">
+                    <option value="time" {% if sort_by == 'time' %}selected{% endif %}>Time</option>
+                    <option value="winprob_desc" {% if sort_by == 'winprob_desc' %}selected{% endif %}>Home Win Prob (desc)</option>
+                    <option value="ou_edge_desc" {% if sort_by == 'ou_edge_desc' %}selected{% endif %}>O/U Edge |abs| (desc)</option>
+                    <option value="ats_edge_desc" {% if sort_by == 'ats_edge_desc' %}selected{% endif %}>ATS Edge |abs| (desc)</option>
+                </select>
+            </div>
+            <label class="control"><input type="checkbox" name="show_all" {% if show_all %}checked{% endif %} onchange="document.getElementById('mainForm').submit();"> Show all games for week</label>
+            <label class="control"><input type="checkbox" name="hide_unknown" {% if hide_unknown %}checked{% endif %} onchange="document.getElementById('mainForm').submit();"> Hide Unknown conferences</label>
+            <button type="submit">Submit</button>
+        </form>
+    <div class="grid">
+    {% for game_info in game_cards %}
+    <div class="card" data-sort-ts="{{game_info['sort_ts'] or 0}}" data-home-win-prob="{{game_info['home_win_prob'] or 0}}" data-ou-edge="{{game_info['ou_edge_num'] or 0}}" data-ats-edge="{{game_info['ats_edge_num'] or 0}}" style="border-left: 6px solid {% if game_info['actual_home_points'] is not none and game_info['actual_away_points'] is not none %}{% if game_info['correct_prediction'] is not none %}{% if game_info['correct_prediction'] %}#2ecc71{% else %}#e74c3c{% endif %}{% else %}#95a5a6{% endif %}{% else %}#bdc3c7{% endif %};">
+            <div class="teams">
+                <div class="team">
+                    <img src="{{game_info['away_logo']}}" alt="{{game_info['away_team']}} logo" class="team-logo" onerror="this.onerror=null;this.src='';"><br>
+                    <span class="team-name" style="background:{{game_info['away_alt_color']}};padding:4px 10px;border-radius:6px;display:inline-block;color:{% if game_info['away_alt_color'] in ['#000', '#222', '#333', '#444', '#111', '#2c3e50', '#34495e', '#1a1a1a', '#232323'] %}#fff{% else %}#222{% endif %};">{{game_info['away_team']}}</span>
+                    <ul class="prediction">
+                        <li><strong>Predicted Away Team Points:</strong> {{game_info['predicted_away_points']}}</li>
+                        {% if game_info['actual_away_points'] is not none %}
+                        <li><strong>Actual Away Team Points:</strong> {{game_info['actual_away_points']}}</li>
+                        {% endif %}
+                    </ul>
+                </div>
+                <span class="vs">@</span>
+                <div class="team">
+                    <img src="{{game_info['home_logo']}}" alt="{{game_info['home_team']}} logo" class="team-logo" onerror="this.onerror=null;this.src='';"><br>
+                    <span class="team-name" style="background:{{game_info['home_alt_color']}};padding:4px 10px;border-radius:6px;display:inline-block;color:{% if game_info['home_alt_color'] in ['#000', '#222', '#333', '#444', '#111', '#2c3e50', '#34495e', '#1a1a1a', '#232323'] %}#fff{% else %}#222{% endif %};">{{game_info['home_team']}}</span>
+                    <ul class="prediction">
+                        <li><strong>Predicted Home Team Points:</strong> {{game_info['predicted_home_points']}}</li>
+                        {% if game_info['actual_home_points'] is not none %}
+                        <li><strong>Actual Home Team Points:</strong> {{game_info['actual_home_points']}}</li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </div>
+            <ul class="prediction" style="text-align:center;">
+                {% if game_info['actual_home_points'] is not none and game_info['actual_away_points'] is not none %}
+                    {% if game_info['correct_prediction'] is not none %}
+                        <li style="font-weight:bold; color:{% if game_info['correct_prediction'] %}#2ecc71{% else %}#e74c3c{% endif %};">FINAL — {% if game_info['correct_prediction'] %}Model Correct{% else %}Model Incorrect{% endif %}</li>
+                    {% else %}
+                        <li style="font-weight:bold; color:#2c3e50;">FINAL</li>
+                    {% endif %}
+                {% endif %}
+                <div class="badges">
+                    {% if game_info['correct_prediction'] is not none %}
+                        <span class="badge {% if game_info['correct_prediction'] %}ok{% else %}err{% endif %}">Winner {% if game_info['correct_prediction'] %}Correct{% else %}Wrong{% endif %}</span>
+                    {% endif %}
+                    {% if game_info['ats_actual_result'] %}
+                        {% if game_info['ats_actual_result'] == 'Push' %}
+                        <span class="badge push">ATS Push</span>
+                        {% else %}
+                        <span class="badge {% if game_info['ats_correct'] %}ok{% else %}err{% endif %}">ATS {% if game_info['ats_correct'] %}Correct{% else %}Wrong{% endif %}</span>
+                        {% endif %}
+                    {% endif %}
+                    {% if game_info['ou_actual_result'] %}
+                        {% if game_info['ou_actual_result'] == 'Push' %}
+                        <span class="badge push">O/U Push</span>
+                        {% else %}
+                        <span class="badge {% if game_info['ou_correct'] %}ok{% else %}err{% endif %}">O/U {% if game_info['ou_correct'] %}Correct{% else %}Wrong{% endif %}</span>
+                        {% endif %}
+                    {% endif %}
+                </div>
+                <li><strong>Venue:</strong> {{game_info['venue']}}</li>
+                <li><strong>Day & Time (Central):</strong> {{game_info['game_time']}}</li>
+                <li><strong>Predicted Total Points:</strong>
+                    <span class="total-adj">{{game_info['pred_total_adj'] or game_info['predicted_total_points']}}</span>
+                    <span class="total-pre" style="display:none;">{{game_info['pred_total_pre'] or game_info['predicted_total_points']}}</span>
+                </li>
+                {% if game_info['wx_temp_f'] or game_info['wx_wind_mph'] or game_info['wx_adjust_total'] %}
+                <li class="wx">
+                    <span class="muted">Weather:</span>
+                    {% if game_info['wx_temp_f'] %} {{game_info['wx_temp_f']}}°F{% endif %}
+                    {% if game_info['wx_wind_mph'] %} • {{game_info['wx_wind_mph']}} mph wind{% endif %}
+                    {% if game_info['wx_adjust_total'] %}
+                        • Δ {{game_info['wx_adjust_total']}}
+                    {% endif %}
+                </li>
+                {% endif %}
+                {% if game_info['ou_line'] %}
+                <li>
+                    <strong>Market O/U:</strong> {{game_info['ou_line']}} | <strong>Model Lean:</strong> {{game_info['ou_model_lean'] or '—'}}
+                    {% if game_info['ou_edge'] %}
+                        <span style="color:{% if game_info['ou_edge']|float > 0 %}green{% elif game_info['ou_edge']|float < 0 %}red{% else %}#444{% endif %};">(Edge: {{game_info['ou_edge']}})</span>
+                    {% endif %}
+                    {% if game_info['ou_actual_result'] %}
+                        <br/>
+                        <strong>Actual vs O/U:</strong> {{game_info['ou_actual_result']}}
+                        {% if game_info['ou_correct'] is not none %}
+                            <span style="font-weight:bold; color:{% if game_info['ou_correct'] %}#2ecc71{% else %}#e74c3c{% endif %};">— {% if game_info['ou_correct'] %}Model Correct{% else %}Model Incorrect{% endif %}</span>
+                        {% elif game_info['ou_actual_result'] == 'Push' %}
+                            <span style="color:#888;">— Push</span>
+                        {% endif %}
+                    {% endif %}
+                </li>
+                {% endif %}
+                {% if game_info['home_win_prob_pct'] %}
+                <li><strong>Win Prob:</strong> Away {{game_info['away_win_prob_pct']}} / Home {{game_info['home_win_prob_pct']}}</li>
+                {% endif %}
+                {% if game_info['actual_total_points'] is not none %}
+                <li><strong>Actual Total Points:</strong> {{game_info['actual_total_points']}}</li>
+                <li><strong>Difference (Actual - Predicted):</strong> <span style="font-weight:bold; color:{% if game_info['total_points_diff']|float > 0 %}blue{% elif game_info['total_points_diff']|float < 0 %}orange{% else %}black{% endif %};">{{game_info['total_points_diff']}}</span></li>
+                {% endif %}
+                <li><strong>Predicted Win Margin:</strong> {{game_info['predicted_win_margin']}}
+                    {% if game_info['win_margin_conf_lower'] and game_info['win_margin_conf_upper'] %}
+                        <br><span style="font-size:0.95em;color:#888;">95% CI: [{{game_info['win_margin_conf_lower']}}, {{game_info['win_margin_conf_upper']}}]</span>
+                        <br><span style="font-size:0.95em;color:#888;">Std Dev: {{game_info['win_margin_conf_std']}}</span>
+                    {% endif %}
+                </li>
+                {% if game_info['ats_line'] %}
+                <li>
+                    <strong>Market Spread:</strong> {{game_info['ats_line']}} | <strong>Model Lean:</strong> {{game_info['ats_model_lean'] or '—'}}
+                    {% if game_info['ats_edge'] %}
+                        <span style="color:{% if game_info['ats_edge']|float > 0 %}green{% elif game_info['ats_edge']|float < 0 %}red{% else %}#444{% endif %};">(Edge: {{game_info['ats_edge']}})</span>
+                    {% endif %}
+                    {% if game_info['ats_actual_result'] %}
+                        <br/>
+                        <strong>ATS Result:</strong> {{game_info['ats_actual_result']}}
+                        {% if game_info['ats_correct'] is not none %}
+                            <span style="font-weight:bold; color:{% if game_info['ats_correct'] %}#2ecc71{% else %}#e74c3c{% endif %};">— {% if game_info['ats_correct'] %}Model Correct{% else %}Model Incorrect{% endif %}</span>
+                        {% elif game_info['ats_actual_result'] == 'Push' %}
+                            <span style="color:#888;">— Push</span>
+                        {% endif %}
+                    {% endif %}
+                </li>
+                {% endif %}
+                {% if (game_info['actual_home_points'] is not none) and (game_info['actual_away_points'] is not none) %}
+                <li><strong>Winner Prediction:</strong>
+                    {% if game_info['correct_prediction'] is not none %}
+                        <span style="font-weight:bold; color:{% if game_info['correct_prediction'] %}green{% else %}red{% endif %};">
+                            {% if game_info['correct_prediction'] %}Correct{% else %}Incorrect{% endif %}
+                        </span>
+                        (Predicted: {{game_info['predicted_winner']}}, Actual: {{game_info['actual_winner']}})
+                    {% endif %}
+                </li>
+                {% endif %}
+            </ul>
+            {% if game_info['betting_lines'] and game_info['betting_lines']|length > 0 %}
+                <h4>Betting Odds</h4>
+                <table class="odds-table">
+                    <tr><th>Provider</th><th>Spread</th><th>Over/Under</th><th>Home ML</th><th>Away ML</th></tr>
+                    {% for odds in game_info['betting_lines'] %}
+                    <tr>
+                        <td>{{ odds['provider'] }}</td>
+                        <td>{{ odds['formattedSpread'] or odds['spread'] }}</td>
+                        <td>{{ odds['overUnder'] }}</td>
+                        <td>{{ odds['homeMoneyline'] }}</td>
+                        <td>{{ odds['awayMoneyline'] }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            {% else %}
+                <div class="no-odds">No betting odds available for this game.</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    </div>
+    <button id="backToTop" title="Back to top">Top</button>
+        <script>
+        (function(){
+            async function doRefresh(ev){
+                const btn = document.getElementById('refreshBtn');
+                const statusEl = document.getElementById('refreshStatus');
+                if(!btn) return;
+                const original = btn.textContent;
+                btn.disabled = true; btn.textContent = 'Refreshing…';
+                const quick = !!(ev && ev.shiftKey);
+                if(statusEl) { statusEl.textContent = quick ? 'Quick refresh (scores+odds)…' : 'Running full refresh in background… this can take ~60–180s'; }
+                try{
+                    // Start in background and poll progress
+                    const startUrl = quick ? '/api/refresh-start?mode=quick' : '/api/refresh-start';
+                    const startRes = await fetch(startUrl, {method:'POST'});
+                    if(!startRes.ok){
+                        const txt = await startRes.text();
+                        throw new Error('Failed to start refresh: ' + txt);
+                    }
+                    let done = false; let tries = 0;
+                    while(!done && tries < 180){ // up to ~3 minutes
+                        await new Promise(r=>setTimeout(r, 1000));
+                        tries++;
+                        const progRes = await fetch('/api/refresh-progress');
+                        const p = await progRes.json();
+                        if(statusEl){
+                            const elapsed = p.elapsed ? ` (${p.elapsed}s)` : '';
+                            statusEl.textContent = `Refreshing${elapsed}…`;
+                        }
+                        if(p.status && p.status !== 'running'){
+                            done = true;
+                            if(statusEl){
+                                const secs = p.seconds_total ? ` in ${p.seconds_total}s` : '';
+                                statusEl.textContent = `Done (${p.mode})${secs}: ${p.status}. Source=${p.pred_source}`;
+                            }
+                            break;
+                        }
+                    }
+                    // If not done after polling window, open diagnostics for details
+                    if(!done){
+                        const diagUrl = quick ? '/refresh-status?mode=quick' : '/refresh-status';
+                        window.open(diagUrl, '_blank');
+                    }
+                    // Refresh page when finished
+                    if(done) location.reload();
+                }catch(e){
+                    if(statusEl){ statusEl.textContent = 'Refresh failed: ' + e; } else { alert('Refresh failed: ' + e); }
+                }finally{
+                    btn.disabled = false; btn.textContent = original;
+                }
+            }
+            // Expose globally and bind click
+            window.refreshData = doRefresh;
+            document.addEventListener('DOMContentLoaded', function(){
+                const btn = document.getElementById('refreshBtn');
+                if(btn){ btn.addEventListener('click', doRefresh); }
+
+                // Client-side sorting
+                const sortSelect = document.getElementById('sort_by');
+                const grid = document.querySelector('.grid');
+                function getVal(card, mode){
+                    const ts = parseFloat(card.getAttribute('data-sort-ts') || '0');
+                    const p = parseFloat(card.getAttribute('data-home-win-prob') || '0');
+                    const ou = Math.abs(parseFloat(card.getAttribute('data-ou-edge') || '0'));
+                    const ats = Math.abs(parseFloat(card.getAttribute('data-ats-edge') || '0'));
+                    if(mode==='winprob_desc') return isNaN(p)?0:p;
+                    if(mode==='ou_edge_desc') return isNaN(ou)?0:ou;
+                    if(mode==='ats_edge_desc') return isNaN(ats)?0:ats;
+                    // default time asc; use large number when missing to push to bottom
+                    return isNaN(ts)? Number.MAX_SAFE_INTEGER : ts;
+                }
+                function resort(mode){
+                    if(!grid) return;
+                    const cards = Array.from(grid.children).filter(el => el.classList.contains('card'));
+                    if(!cards.length) return;
+                    cards.sort((a,b)=>{
+                        const va = getVal(a, mode);
+                        const vb = getVal(b, mode);
+                        if(mode==='winprob_desc' || mode==='ou_edge_desc' || mode==='ats_edge_desc'){
+                            return (vb - va);
+                        } else {
+                            return (va - vb);
+                        }
+                    });
+                    cards.forEach(c => grid.appendChild(c));
+                }
+                if(sortSelect){
+                    sortSelect.addEventListener('change', function(ev){
+                        // prevent form submission; client-side sort only
+                        ev.preventDefault();
+                        resort(sortSelect.value || 'time');
+                    });
+                    // initial align to current selection
+                    resort(sortSelect.value || 'time');
+                }
+
+                // Toggle model vs adjusted totals
+                const chk = document.getElementById('toggleWxTotals');
+                function applyToggle(){
+                    const showAdj = chk && chk.checked;
+                    document.querySelectorAll('.total-adj').forEach(el => el.style.display = showAdj ? '' : 'none');
+                    document.querySelectorAll('.total-pre').forEach(el => el.style.display = showAdj ? 'none' : '');
+                }
+                if(chk){ chk.addEventListener('change', applyToggle); applyToggle(); }
+
+                // Back to top behavior
+                const topBtn = document.getElementById('backToTop');
+                function toggleTop(){
+                    if(window.scrollY > 300){ topBtn.style.display = 'block'; } else { topBtn.style.display = 'none'; }
+                }
+                window.addEventListener('scroll', toggleTop);
+                toggleTop();
+                topBtn.addEventListener('click', function(){ window.scrollTo({ top: 0, behavior: 'smooth' }); });
+            });
+        })();
+        </script>
+    ''', weeks=weeks, selected_week=selected_week, all_dates=all_dates, selected_date=selected_date, show_all=show_all, hide_unknown=hide_unknown, all_conferences=pred_df['home_conference'].unique(), selected_conference=selected_conference, game_cards=game_cards, filter_type=filter_type, summary=summary, sort_by=sort_by)
+
+
+# New route: Projected Conference Records for 2025
+@app.route('/conference-records')
+def conference_records():
+    # Only use 2025 season games
+    conf_games = pred_df[pred_df['season'] == 2025].copy()
+    # Use merged conference info, skip non-conference games
+    conf_games = conf_games[(conf_games['home_conference'] == conf_games['away_conference'])]
+    conf_col = 'home_conference'
+    # Determine winner for each game
+    def get_winner(row):
+        try:
+            home_pts = float(row.get('predicted_home_points', 0))
+            away_pts = float(row.get('predicted_away_points', 0))
+            if home_pts > away_pts:
+                return row['home_team']
+            elif away_pts > home_pts:
+                return row['away_team']
+            else:
+                return 'TIE'
+        except Exception:
+            return None
+    conf_games['winner'] = conf_games.apply(get_winner, axis=1)
+    # Aggregate records
+    records = {}
+    for _, row in conf_games.iterrows():
+        home = row['home_team']
+        away = row['away_team']
+        winner = row['winner']
+        conference = row[conf_col] if conf_col else 'Unknown'
+        for team in [home, away]:
+            if team not in records:
+                records[team] = {'conference': conference, 'W': 0, 'L': 0, 'T': 0}
+        if winner == 'TIE':
+            records[home]['T'] += 1
+            records[away]['T'] += 1
+        elif winner == home:
+            records[home]['W'] += 1
+            records[away]['L'] += 1
+        elif winner == away:
+            records[away]['W'] += 1
+            records[home]['L'] += 1
+    # Convert to DataFrame for conference records
+    conf_rec_df = pd.DataFrame([
+        {'Team': team, 'Conference': rec['conference'], 'Conf_Wins': rec['W'], 'Conf_Losses': rec['L'], 'Conf_Ties': rec['T']}
+        for team, rec in records.items()
+    ])
+    conf_rec_df = conf_rec_df.sort_values(['Conference', 'Conf_Wins', 'Conf_Losses'], ascending=[True, False, True])
+
+    # Calculate overall records for all teams (all games, not just conference)
+    overall_records = {}
+    all_games = pred_df[pred_df['season'] == 2025]
+    for _, row in all_games.iterrows():
+        home = row['home_team']
+        away = row['away_team']
+        try:
+            home_pts = float(row.get('predicted_home_points', 0))
+            away_pts = float(row.get('predicted_away_points', 0))
+        except Exception:
+            home_pts = away_pts = 0
+        for team in [home, away]:
+            if team not in overall_records:
+                overall_records[team] = {'W': 0, 'L': 0, 'T': 0}
+        if home_pts == away_pts:
+            overall_records[home]['T'] += 1
+            overall_records[away]['T'] += 1
+        elif home_pts > away_pts:
+            overall_records[home]['W'] += 1
+            overall_records[away]['L'] += 1
+        elif away_pts > home_pts:
+            overall_records[away]['W'] += 1
+            overall_records[home]['L'] += 1
+
+    # Merge overall records into conference records
+    conf_rec_df['Overall_Wins'] = conf_rec_df['Team'].map(lambda t: overall_records.get(t, {}).get('W', 0))
+    conf_rec_df['Overall_Losses'] = conf_rec_df['Team'].map(lambda t: overall_records.get(t, {}).get('L', 0))
+    conf_rec_df['Overall_Ties'] = conf_rec_df['Team'].map(lambda t: overall_records.get(t, {}).get('T', 0))
+
+    # Load conference logos
+    conf_logo_df = pd.read_csv("src/data/conference_logos.csv")
+    conf_logo_map = dict(zip(conf_logo_df['conference'], conf_logo_df['logo_url']))
+    # Group by conference for cards
+    conferences = conf_rec_df['Conference'].unique()
+    conf_groups = {conf: conf_rec_df[conf_rec_df['Conference'] == conf] for conf in conferences}
+    conf_logos = {conf: conf_logo_map.get(conf, '') for conf in conferences}
+    # Load team assets for colors
+    assets_df = pd.read_csv("src/data/team_assets.csv")
+    team_color_map = dict(zip(assets_df['school'], assets_df['color']))
+    team_alt_color_map = dict(zip(assets_df['school'], assets_df.get('alt_color', ['']*len(assets_df))))
+    # Render as cards per conference
+    return render_template_string('''
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6fa; margin: 0; padding: 0; }
+        .container { max-width: 900px; margin: 40px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); padding: 32px; }
+        h2 { text-align: center; color: #2c3e50; margin-bottom: 24px; }
+        .conf-card { background: #f8f8f8; border-radius: 10px; box-shadow: 0 1px 6px rgba(0,0,0,0.07); padding: 24px; margin-bottom: 28px; }
+        .conf-title { font-size: 1.3em; font-weight: bold; color: #2980b9; margin-bottom: 12px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; background: #fff; }
+        th, td { padding: 8px 10px; border: 1px solid #e0e0e0; text-align: center; }
+        th { background: #eaf1fb; color: #2c3e50; }
+        tr:nth-child(even) { background: #f4f6fa; }
+    </style>
+    <div class="container">
+        <div style="text-align:right; margin: 12px 0 0 0;">
+            <a href="/" style="font-size:1.05em; color:#2980b9; text-decoration:underline; margin-right:18px;">&#8592; Back to Main Predictions</a>
+        </div>
+        <h2>2025 Projected Conference Records</h2>
+        {% for conf, group in conf_groups.items() %}
+        <div class="conf-card">
+            <div class="conf-title">
+                {% if conf_logos[conf] %}
+                    <img src="{{ conf_logos[conf] }}" alt="{{ conf }} logo" style="height:38px;vertical-align:middle;margin-right:10px;">
+                {% endif %}
+                {{ conf }}
+            </div>
+            <table>
+                <tr>
+                    <th>Team</th>
+                    <th>Conf W</th><th>Conf L</th><th>Conf T</th>
+                    <th>Overall W</th><th>Overall L</th><th>Overall T</th>
+                </tr>
+                {% for _, row in group.iterrows() %}
+                <tr>
+                    <td>
+                        <span style="color:{{ team_color_map.get(row['Team'], '#2c3e50') }};background:{{ team_alt_color_map.get(row['Team'], '#eaf1fb') }};padding:3px 10px;border-radius:6px;display:inline-block;">{{ row['Team'] }}</span>
+                    </td>
+                    <td>{{ row['Conf_Wins'] }}</td>
+                    <td>{{ row['Conf_Losses'] }}</td>
+                    <td>{{ row['Conf_Ties'] }}</td>
+                    <td>{{ row['Overall_Wins'] }}</td>
+                    <td>{{ row['Overall_Losses'] }}</td>
+                    <td>{{ row['Overall_Ties'] }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+        {% endfor %}
+    </div>
+    ''', conf_groups=conf_groups, conf_logos=conf_logos, team_color_map=team_color_map, team_alt_color_map=team_alt_color_map)
+
+# New route: Team Schedules
+@app.route('/team-schedules', methods=['GET', 'POST'])
+def team_schedules():
+    # Get all conferences and teams
+    all_teams_df = pred_df[pred_df['season'] == 2025].copy()
+    all_conferences = sorted(set(list(all_teams_df['home_conference'].dropna()) + list(all_teams_df['away_conference'].dropna())))
+    all_conferences = [conf for conf in all_conferences if conf != 'Unknown']
+    
+    selected_conference = request.form.get('conference', '')
+    selected_team = request.form.get('team', '')
+    
+    available_teams = []
+    team_schedule = None
+    team_info = None
+    if selected_conference:
+        conf_teams = set()
+        conf_games = all_teams_df[(all_teams_df['home_conference'] == selected_conference) | (all_teams_df['away_conference'] == selected_conference)]
+        for _, row in conf_games.iterrows():
+            if row['home_conference'] == selected_conference:
+                conf_teams.add(row['home_team'])
+            if row['away_conference'] == selected_conference:
+                conf_teams.add(row['away_team'])
+        available_teams = sorted(list(conf_teams))
+    if selected_team:
+        team_games = all_teams_df[(all_teams_df['home_team'] == selected_team) | (all_teams_df['away_team'] == selected_team)].copy()
+        team_games = team_games.sort_values('week')
+        schedule_data = []
+        team_record = {'W': 0, 'L': 0, 'T': 0}
+        for _, game in team_games.iterrows():
+            is_home = game['home_team'] == selected_team
+            opponent = game['away_team'] if is_home else game['home_team']
+            opp_asset = get_team_asset(opponent)
+            try:
+                home_pts = float(game.get('predicted_home_points', 0))
+                away_pts = float(game.get('predicted_away_points', 0))
+                team_pts = home_pts if is_home else away_pts
+                opp_pts = away_pts if is_home else home_pts
+                if team_pts > opp_pts:
+                    result = 'W'
+                    team_record['W'] += 1
+                elif opp_pts > team_pts:
+                    result = 'L'
+                    team_record['L'] += 1
+                else:
+                    result = 'T'
+                    team_record['T'] += 1
+            except:
+                result = '-'
+                team_pts = opp_pts = 0
+            game_date = game.get('start_date', '')[:10] if game.get('start_date') else ''
+            schedule_data.append({
+                'week': int(game['week']),
+                'date': game_date,
+                'opponent': opponent,
+                'is_home': is_home,
+                'venue': game.get('venue', ''),
+                'team_pts': f"{team_pts:.1f}" if team_pts else '',
+                'opp_pts': f"{opp_pts:.1f}" if opp_pts else '',
+                'result': result,
+                'opp_logo': opp_asset['logo'],
+                'opp_color': opp_asset['color'],
+                'opp_alt_color': opp_asset['alt_color']
+            })
+        team_schedule = schedule_data
+        team_asset = get_team_asset(selected_team)
+        team_info = {
+            'name': selected_team,
+            'logo': team_asset['logo'],
+            'color': team_asset['color'],
+            'alt_color': team_asset['alt_color'],
+            'record': team_record
+        }
+
+    return render_template_string('''
+    <style>
+        .container { max-width: 900px; margin: 40px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); padding: 32px; }
+        h2 { text-align: center; color: #2c3e50; margin-bottom: 24px; }
+        form { display: flex; flex-direction: column; gap: 16px; margin-bottom: 32px; }
+        label { font-weight: 500; color: #34495e; }
+        select, button { padding: 8px 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 1em; }
+        button { background: #2980b9; color: #fff; border: none; cursor: pointer; transition: background 0.2s; }
+        button:hover { background: #3498db; }
+        .team-header { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 24px; padding: 20px; background: #f8f8f8; border-radius: 10px; }
+        .team-logo { height: 80px; }
+        .team-name { font-size: 1.8em; font-weight: bold; padding: 8px 16px; border-radius: 8px; display: inline-block; }
+        .record { font-size: 1.2em; color: #2c3e50; margin-top: 8px; }
+        .schedule-table { width: 100%; border-collapse: collapse; margin-top: 16px; background: #fff; }
+        .schedule-table th, .schedule-table td { padding: 12px 8px; border: 1px solid #e0e0e0; text-align: center; }
+        .schedule-table th { background: #eaf1fb; color: #2c3e50; }
+        .schedule-table tr:nth-child(even) { background: #f4f6fa; }
+        .opponent { display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .opp-logo { height: 30px; }
+        .opp-name { padding: 2px 8px; border-radius: 4px; font-weight: 500; }
+        .result-w { color: #27ae60; font-weight: bold; }
+        .result-l { color: #e74c3c; font-weight: bold; }
+        .result-t { color: #f39c12; font-weight: bold; }
+        .home-indicator { color: #2980b9; font-weight: bold; }
+        .away-indicator { color: #7f8c8d; }
+    </style>
+    <div class="container">
+        <div style="text-align:right; margin: 12px 0 0 0;">
+            <a href="/" style="font-size:1.05em; color:#2980b9; text-decoration:underline; margin-right:18px;">&#8592; Back to Main Predictions</a>
+            <a href="/conference-records" style="font-size:1.05em; color:#2980b9; text-decoration:underline; margin-right:18px;">View Conference Records</a>
+        </div>
+        <h2>2025 Team Schedules</h2>
+        <form method="post" id="scheduleForm">
+            <label for="conference">Select Conference:</label>
+            <select name="conference" id="conference" onchange="document.getElementById('scheduleForm').submit();">
+                <option value="">Choose a Conference</option>
+                {% for conf in all_conferences %}
+                <option value="{{conf}}" {% if conf == selected_conference %}selected{% endif %}>{{conf}}</option>
+                {% endfor %}
+            </select>
+            {% if available_teams %}
+            <label for="team">Select Team:</label>
+            <select name="team" id="team" onchange="document.getElementById('scheduleForm').submit();">
+                <option value="">Choose a Team</option>
+                {% for team in available_teams %}
+                <option value="{{team}}" {% if team == selected_team %}selected{% endif %}>{{team}}</option>
+                {% endfor %}
+            </select>
+            {% endif %}
+        </form>
+        {% if team_info and team_schedule %}
+        <div class="team-header">
+            <img src="{{team_info['logo']}}" alt="{{team_info['name']}} logo" class="team-logo">
+            <div>
+                <div class="team-name" style="color:{{team_info['color']}};background:{{team_info['alt_color']}};">{{team_info['name']}}</div>
+                <div class="record">Projected Record: {{team_info['record']['W']}}-{{team_info['record']['L']}}{% if team_info['record']['T'] > 0 %}-{{team_info['record']['T']}}{% endif %}</div>
+            </div>
+        </div>
+        <table class="schedule-table">
+            <tr>
+                <th>Week</th>
+                <th>Date</th>
+                <th>Opponent</th>
+                <th>Location</th>
+                <th>Venue</th>
+                <th>Projected Score</th>
+                <th>Result</th>
+            </tr>
+            {% for game in team_schedule %}
+            <tr>
+                <td>{{game['week']}}</td>
+                <td>{{game['date']}}</td>
+                <td>
+                    <div class="opponent">
+                        <img src="{{game['opp_logo']}}" alt="{{game['opponent']}} logo" class="opp-logo">
+                        <span class="opp-name" style="color:{{game['opp_color']}};background:{{game['opp_alt_color']}};">{{game['opponent']}}</span>
+                    </div>
+                </td>
+                <td>
+                    {% if game['is_home'] %}
+                        <span class="home-indicator">HOME</span>
+                    {% else %}
+                        <span class="away-indicator">@ AWAY</span>
+                    {% endif %}
+                </td>
+                <td>{{game['venue']}}</td>
+                <td>
+                    {% if game['team_pts'] and game['opp_pts'] %}
+                        {{game['team_pts']}} - {{game['opp_pts']}}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td>
+                    {% if game['result'] == 'W' %}
+                        <span class="result-w">W</span>
+                    {% elif game['result'] == 'L' %}
+                        <span class="result-l">L</span>
+                    {% elif game['result'] == 'T' %}
+                        <span class="result-t">T</span>
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% endif %}
+    </div>
+    ''', all_conferences=all_conferences, selected_conference=selected_conference, available_teams=available_teams, selected_team=selected_team, team_schedule=team_schedule, team_info=team_info)
+
+@app.route('/api/analysis-2025', methods=['GET'])
+def analysis_2025():
+    # Analyze completed 2025 games: prediction vs actuals. Optional ?week= filter.
+    week_param = request.args.get('week')
+    df = pred_df[(pred_df['season'] == 2025) & pred_df['actual_home_points'].notna() & pred_df['actual_away_points'].notna()].copy()
+    if week_param:
+        try:
+            df = df[df['week'] == int(week_param)]
+        except Exception:
+            pass
+    if df.empty:
+        msg = 'No completed 2025 games found yet.' if not week_param else f'No completed 2025 games found for week {week_param}.'
+        return {'message': msg, 'count': 0}, 200
+
+    # Compute metrics
+    df['pred_home'] = df['predicted_home_points']
+    df['pred_away'] = df['predicted_away_points']
+    df['pred_total'] = df['pred_home'] + df['pred_away']
+    df['act_total'] = df['actual_home_points'] + df['actual_away_points']
+    df['pred_margin'] = df['pred_home'] - df['pred_away'] if 'predicted_win_margin' not in df.columns else df['predicted_win_margin'].fillna(df['pred_home'] - df['pred_away'])
+    df['act_margin'] = df['actual_home_points'] - df['actual_away_points']
+
+    total_mae = float((df['act_total'] - df['pred_total']).abs().mean())
+    margin_mae = float((df['act_margin'] - df['pred_margin']).abs().mean())
+
+    # Winner accuracy
+    df['pred_winner'] = df.apply(lambda r: r['home_team'] if r['pred_home'] > r['pred_away'] else (r['away_team'] if r['pred_away'] > r['pred_home'] else 'TIE'), axis=1)
+    df['act_winner'] = df.apply(lambda r: r['home_team'] if r['actual_home_points'] > r['actual_away_points'] else (r['away_team'] if r['actual_away_points'] > r['actual_home_points'] else 'TIE'), axis=1)
+    winner_acc = float((df['pred_winner'] == df['act_winner']).mean())
+
+    # Approx probability from margin normal model for Brier score
+    sig = df.apply(_get_conf_std_for_game, axis=1)
+    z = (df['pred_margin']) / sig
+    p_home = z.apply(_phi)
+    y_home = (df['act_winner'] == df['home_team']).astype(float)
+    brier = float(((p_home - y_home) ** 2).mean())
+
+    details = df[['season','week','home_team','away_team','pred_home','pred_away','actual_home_points','actual_away_points','pred_total','act_total','pred_margin','act_margin']].copy()
+    details = details.to_dict(orient='records')
+
+    return {
+        'count': int(len(df)),
+        'winner_accuracy': winner_acc,
+        'total_mae': total_mae,
+        'margin_mae': margin_mae,
+        'brier_homewin': brier,
+        'details_sample': details[:50]
+    }, 200
+
+
+@app.route('/analysis', methods=['GET'])
+def analysis_page():
+    # UI for model performance with a simple week selector
+    completed = pred_df[(pred_df['season'] == 2025) & pred_df['actual_home_points'].notna() & pred_df['actual_away_points'].notna()].copy()
+    completed_weeks = sorted(completed['week'].dropna().unique())
+    selected_week = request.args.get('week')
+    if selected_week:
+        try:
+            selected_week = int(selected_week)
+        except Exception:
+            selected_week = None
+    if not selected_week:
+        selected_week = completed_weeks[-1] if completed_weeks else None
+    # Compute metrics (reuse logic similar to API)
+    df = completed.copy()
+    if selected_week is not None:
+        df = df[df['week'] == selected_week]
+    metrics = None
+    rows = []
+    classes = {}
+    if not df.empty:
+        df['pred_home'] = df['predicted_home_points']
+        df['pred_away'] = df['predicted_away_points']
+        df['pred_total'] = df['pred_home'] + df['pred_away']
+        df['act_total'] = df['actual_home_points'] + df['actual_away_points']
+        df['pred_margin'] = df['pred_home'] - df['pred_away'] if 'predicted_win_margin' not in df.columns else df['predicted_win_margin'].fillna(df['pred_home'] - df['pred_away'])
+        df['act_margin'] = df['actual_home_points'] - df['actual_away_points']
+        total_mae = float((df['act_total'] - df['pred_total']).abs().mean())
+        margin_mae = float((df['act_margin'] - df['pred_margin']).abs().mean())
+        df['pred_winner'] = df.apply(lambda r: r['home_team'] if r['pred_home'] > r['pred_away'] else (r['away_team'] if r['pred_away'] > r['pred_home'] else 'TIE'), axis=1)
+        df['act_winner'] = df.apply(lambda r: r['home_team'] if r['actual_home_points'] > r['actual_away_points'] else (r['away_team'] if r['actual_away_points'] > r['actual_home_points'] else 'TIE'), axis=1)
+        winner_acc = float((df['pred_winner'] == df['act_winner']).mean())
+        sig = df.apply(_get_conf_std_for_game, axis=1)
+        z = (df['pred_margin']) / sig
+        p_home_raw = z.apply(_phi)
+        p_home_cal = p_home_raw.apply(_calibrate_win_prob)
+        y_home = (df['act_winner'] == df['home_team']).astype(float)
+        brier_raw = float(((p_home_raw - y_home) ** 2).mean())
+        brier_cal = float(((p_home_cal - y_home) ** 2).mean()) if p_home_cal is not None else brier_raw
+        metrics = {
+            'count': int(len(df)),
+            'winner_accuracy': round(winner_acc, 4),
+            'total_mae': round(total_mae, 3),
+            'margin_mae': round(margin_mae, 3),
+            'brier': round(brier_raw, 4),
+            'brier_cal': round(brier_cal, 4),
+            'brier_improve': round(brier_raw - brier_cal, 4)
+        }
+        # Traffic light classes
+        def _cls(name, val):
+            try:
+                v = float(val)
+            except Exception:
+                return 'na'
+            if name == 'winner_accuracy':
+                return 'good' if v >= 0.60 else ('ok' if v >= 0.50 else 'bad')
+            if name == 'total_mae':
+                return 'good' if v <= 10 else ('ok' if v <= 12 else 'bad')
+            if name == 'margin_mae':
+                return 'good' if v <= 10 else ('ok' if v <= 14 else 'bad')
+            if name == 'brier':
+                return 'good' if v <= 0.20 else ('ok' if v <= 0.25 else 'bad')
+            return 'na'
+        classes = {
+            'winner_accuracy': _cls('winner_accuracy', metrics['winner_accuracy']),
+            'total_mae': _cls('total_mae', metrics['total_mae']),
+            'margin_mae': _cls('margin_mae', metrics['margin_mae']),
+            'brier': _cls('brier', metrics['brier']),
+            'brier_cal': _cls('brier', metrics['brier_cal'])
+        }
+        show_cols = ['week','home_team','away_team','pred_home','pred_away','actual_home_points','actual_away_points','pred_total','act_total','pred_margin','act_margin']
+        rows = df[show_cols].head(25).to_dict(orient='records')
+    return render_template_string('''
+        <style>
+            body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6fa; }
+            .container { max-width: 900px; margin: 30px auto; background:#fff; padding:24px; border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,.08); }
+            .nav { text-align:right; margin-bottom:8px; }
+            select, button { padding:8px 10px; border:1px solid #ccc; border-radius:6px; }
+            table { width:100%; border-collapse:collapse; background:#fff; margin-top:12px; }
+            th,td { padding:8px 10px; border:1px solid #e0e0e0; text-align:center; }
+            th { background:#eaf1fb; }
+    .kpis { display:flex; gap:18px; justify-content:center; margin: 10px 0 18px; flex-wrap: wrap; }
+        .kpi { background:#f8f8f8; padding:10px 14px; border-radius:10px; display:flex; align-items:center; gap:8px; }
+        .dot { width:10px; height:10px; border-radius:50%; background:#bbb; display:inline-block; }
+        .kpi.good .dot { background:#2ecc71; }
+        .kpi.ok .dot { background:#f1c40f; }
+        .kpi.bad .dot { background:#e74c3c; }
+        </style>
+        <div class="container">
+            <div class="nav">
+        <a href="/">Main</a> | <a href="/recommendations">Recommendations</a> | <a href="/recommendations/performance">Performance</a>
+            </div>
+            <h2>Model Performance (2025)</h2>
+            <form method="get">
+                <label>Week</label>
+                <select name="week" onchange="this.form.submit()">
+                    {% for w in weeks %}
+                        <option value="{{w}}" {% if w == selected_week %}selected{% endif %}>Week {{w}}</option>
+                    {% endfor %}
+                </select>
+            </form>
+            {% if metrics %}
+            <div class="kpis">
+        <div class="kpi"><span class="dot"></span> Games: <b>{{metrics.count}}</b></div>
+        <div class="kpi {{classes.winner_accuracy}}"><span class="dot"></span> Winner Acc: <b>{{metrics.winner_accuracy}}</b></div>
+        <div class="kpi {{classes.total_mae}}"><span class="dot"></span> Total MAE: <b>{{metrics.total_mae}}</b></div>
+        <div class="kpi {{classes.margin_mae}}"><span class="dot"></span> Margin MAE: <b>{{metrics.margin_mae}}</b></div>
+    <div class="kpi {{classes.brier}}"><span class="dot"></span> Brier (raw): <b>{{metrics.brier}}</b></div>
+    <div class="kpi {{classes.brier_cal}}"><span class="dot"></span> Brier (cal): <b>{{metrics.brier_cal}}</b></div>
+    <div class="kpi"><span class="dot" style="background:#3498db"></span> Δ Brier: <b>{{metrics.brier_improve}}</b></div>
+            </div>
+            <table>
+                <tr><th>Wk</th><th>Matchup</th><th>Pred (A-H)</th><th>Actual (A-H)</th><th>Pred Total</th><th>Actual Total</th><th>Pred Margin</th><th>Actual Margin</th></tr>
+                {% for r in rows %}
+                <tr>
+                    <td>{{r['week']}}</td>
+                    <td>{{r['away_team']}} @ {{r['home_team']}}</td>
+                    <td>{{r['pred_away']}} - {{r['pred_home']}}</td>
+                    <td>{{r['actual_away_points']}} - {{r['actual_home_points']}}</td>
+                    <td>{{r['pred_total']}}</td>
+                    <td>{{r['act_total']}}</td>
+                    <td>{{r['pred_margin']}}</td>
+                    <td>{{r['act_margin']}}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% else %}
+            <div>No completed games found for the selected week.</div>
+            {% endif %}
+        </div>
+    ''', weeks=completed_weeks, selected_week=selected_week, metrics=metrics, rows=rows, classes=classes)
+
+
+@app.route('/api/recommendations', methods=['GET'])
+def recommendations():
+    # Recommend EV+ bets for upcoming games. Supports ?week=&bankroll=&kelly_factor=
+    week = request.args.get('week')
+    bankroll = _safe_float(request.args.get('bankroll', 1000), 1000)
+    kelly_factor = _safe_float(request.args.get('kelly_factor', 0.5), 0.5)
+    ev_threshold = _safe_float(request.args.get('ev_threshold', 0.02), 0.02)
+    recs = compute_recommendations(week=week, bankroll=bankroll, kelly_factor=kelly_factor, ev_threshold=ev_threshold)
+    top = recs[:100]
+
+    # Optionally log recommendations
+    if request.args.get('log', 'false').lower() == 'true' and top:
+        _ensure_recs_file()
+        ts = datetime.now(timezone.utc).isoformat()
+        out = []
+        for r in top:
+            out.append({
+                'timestamp': ts,
+                'season': r['season'], 'week': r['week'], 'home_team': r['home_team'], 'away_team': r['away_team'],
+                'market': r['market'], 'side': r['side'], 'price_american': r['price_american'], 'provider': r.get('provider'),
+                'line': r.get('line', None),
+                'model_prob': r['model_prob'], 'implied_prob': r['implied_prob'], 'edge': r['edge'],
+                'kelly_f': r['kelly_f'], 'bankroll': bankroll, 'stake': r['stake'],
+                'status': 'open', 'result': 'pending', 'pnl': 0.0
+            })
+        try:
+            existing = pd.read_csv(RECS_PATH) if os.path.exists(RECS_PATH) else pd.DataFrame()
+            new_df = pd.DataFrame(out)
+            all_df = pd.concat([existing, new_df], ignore_index=True)
+            all_df.to_csv(RECS_PATH, index=False)
+        except Exception:
+            pass
+
+    return {'count': len(top), 'recommendations': top}, 200
+
+
+@app.route('/api/recommendations/performance', methods=['GET'])
+def recommendations_performance():
+    # Evaluate and update tracking file using actual outcomes
+    if not os.path.exists(RECS_PATH):
+        return {'message': 'No recommendations logged yet.'}, 200
+    recs_df = pd.read_csv(RECS_PATH)
+    if recs_df.empty:
+        return {'message': 'No recommendations logged yet.'}, 200
+
+    # Merge in actuals
+    merged = recs_df.merge(
+        pred_df[['season','week','home_team','away_team','actual_home_points','actual_away_points']],
+        on=['season','week','home_team','away_team'], how='left'
+    )
+
+    pnl_list = []
+    wins = 0
+    losses = 0
+    pushes = 0
+    for idx, r in merged.iterrows():
+        status = r.get('status', 'open')
+        # If game completed and still open, settle
+        ah = r.get('actual_home_points')
+        aa = r.get('actual_away_points')
+        if pd.notna(ah) and pd.notna(aa) and status == 'open':
+            market = r['market']
+            outcome_win = False
+            push = False
+            # Determine outcome
+            if market == 'ML':
+                winner = 'Home' if ah > aa else ('Away' if aa > ah else 'Tie')
+                outcome_win = (winner == r['side'])
+                push = (winner == 'Tie')
+            elif market == 'Spread':
+                line = _safe_float(r.get('line', None))
+                if line is None:
+                    # If we can't evaluate spread, mark as push
+                    push = True
+                else:
+                    margin = ah - aa
+                    # Home bet wins if margin > line, push if == line
+                    if r['side'] == 'Home':
+                        outcome_win = margin > line
+                        push = (abs(margin - line) < 1e-9)
+                    else:  # Away
+                        outcome_win = margin < line
+                        push = (abs(margin - line) < 1e-9)
+            elif market == 'Total':
+                line = _safe_float(r.get('line', None))
+                total = ah + aa
+                if line is None:
+                    push = True
+                else:
+                    if r['side'] == 'Over':
+                        outcome_win = total > line
+                        push = (abs(total - line) < 1e-9)
+                    else:
+                        outcome_win = total < line
+                        push = (abs(total - line) < 1e-9)
+
+            price = _safe_float(r.get('price_american', -110), -110)
+            dec, net = american_to_decimal(price)
+            stake = _safe_float(r.get('stake', 0), 0)
+            pnl = 0.0
+            result = 'pending'
+            if push:
+                result = 'push'
+                pushes += 1
+                pnl = 0.0
+            elif outcome_win:
+                result = 'win'
+                wins += 1
+                pnl = stake * (dec - 1)
+            else:
+                result = 'loss'
+                losses += 1
+                pnl = -stake
+            pnl_list.append((idx, result, pnl))
+
+    # Apply PnL updates
+    if pnl_list:
+        for idx, result, pnl in pnl_list:
+            recs_df.loc[idx, 'status'] = 'closed'
+            recs_df.loc[idx, 'result'] = result
+            recs_df.loc[idx, 'pnl'] = round(pnl, 2)
+        recs_df.to_csv(RECS_PATH, index=False)
+
+    total_staked = float(recs_df['stake'].sum()) if 'stake' in recs_df.columns else 0.0
+    total_pnl = float(recs_df['pnl'].sum()) if 'pnl' in recs_df.columns else 0.0
+    roi = (total_pnl / total_staked) if total_staked > 0 else 0.0
+
+    return {
+        'bets_total': int(len(recs_df)),
+        'wins': int((recs_df['result'] == 'win').sum()) if 'result' in recs_df.columns else 0,
+        'losses': int((recs_df['result'] == 'loss').sum()) if 'result' in recs_df.columns else 0,
+        'pushes': int((recs_df['result'] == 'push').sum()) if 'result' in recs_df.columns else 0,
+        'total_staked': round(total_staked, 2),
+        'total_pnl': round(total_pnl, 2),
+        'roi': round(roi, 4)
+    }, 200
+
+
+@app.route('/recommendations', methods=['GET', 'POST'])
+def recommendations_page():
+        # Controls
+        week = request.values.get('week', '')
+        bankroll = _safe_float(request.values.get('bankroll', 1000), 1000)
+        kelly_factor = _safe_float(request.values.get('kelly_factor', 0.5), 0.5)
+        ev_threshold = _safe_float(request.values.get('ev_threshold', 0.02), 0.02)
+        action = request.values.get('action', '')
+
+        recs = compute_recommendations(week=week if week else None, bankroll=bankroll, kelly_factor=kelly_factor, ev_threshold=ev_threshold)
+        top = recs[:100]
+
+        message = ''
+        if action == 'log' and top:
+                _ensure_recs_file()
+                ts = datetime.now(timezone.utc).isoformat()
+                try:
+                        existing = pd.read_csv(RECS_PATH) if os.path.exists(RECS_PATH) else pd.DataFrame()
+                        new_df = pd.DataFrame([
+                                {
+                                        'timestamp': ts, 'season': r['season'], 'week': r['week'], 'home_team': r['home_team'], 'away_team': r['away_team'],
+                                'market': r['market'], 'side': r['side'], 'price_american': r['price_american'], 'provider': r.get('provider'), 'model_prob': r['model_prob'],
+                                'line': r.get('line', None), 'implied_prob': r['implied_prob'], 'edge': r['edge'], 'kelly_f': r['kelly_f'], 'bankroll': bankroll, 'stake': r['stake'],
+                                        'status': 'open', 'result': 'pending', 'pnl': 0.0
+                                } for r in top
+                        ])
+                        all_df = pd.concat([existing, new_df], ignore_index=True)
+                        all_df.to_csv(RECS_PATH, index=False)
+                        message = f"Logged {len(top)} recommendations."
+                except Exception as e:
+                        message = f"Log failed: {e}"
+
+        weeks = sorted(pred_df['week'].dropna().unique())
+        return render_template_string('''
+        <style>
+            body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6fa; }
+            .container { max-width: 900px; margin: 30px auto; background:#fff; padding:24px; border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,.08); }
+            h2 { text-align:center; margin-bottom:18px; }
+            form { display:grid; grid-template-columns: repeat(4, minmax(160px,1fr)); gap:12px; align-items:end; margin-bottom:18px; }
+            label { font-weight: 500; color: #34495e; }
+            select,input,button { padding:8px 10px; border:1px solid #ccc; border-radius:6px; }
+            .rec-card { background:#f8f8f8; border-radius:10px; padding:14px; margin:10px 0; }
+            .meta { font-size:.95em; color:#444; }
+            .edge { font-weight:bold; color:#2c3e50; }
+            .nav { text-align:right; margin-bottom:8px; }
+            .msg { color:#2c3e50; margin: 8px 0; }
+        </style>
+        <div class="container">
+            <div class="nav">
+                <a href="/">Main</a> | <a href="/conference-records">Conference Records</a> | <a href="/recommendations/performance">Performance</a>
+            </div>
+            <h2>Betting Recommendations</h2>
+            {% if message %}<div class="msg">{{message}}</div>{% endif %}
+            <form method="post">
+                <div>
+                    <label>Week</label>
+                    <select name="week">
+                        <option value="">All Upcoming</option>
+                        {% for w in weeks %}
+                            <option value="{{w}}" {% if (week|int)==w %}selected{% endif %}>Week {{w}}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label>Bankroll</label>
+                    <input type="number" step="1" name="bankroll" value="{{bankroll}}"/>
+                </div>
+                <div>
+                    <label>Kelly Factor</label>
+                    <input type="number" step="0.05" name="kelly_factor" value="{{kelly_factor}}"/>
+                </div>
+                <div>
+                    <label>EV Threshold</label>
+                    <input type="number" step="0.01" name="ev_threshold" value="{{ev_threshold}}"/>
+                </div>
+                <div style="grid-column: 1 / -1; display:flex; gap:10px;">
+                    <button type="submit">Refresh</button>
+                    <button type="submit" name="action" value="log">Log Top {{top|length}} Bets</button>
+                </div>
+            </form>
+            {% for r in top %}
+            <div class="rec-card">
+                <div class="meta">Wk {{r['week']}} — {{r['away_team']}} @ {{r['home_team']}} — {{r['provider']}}</div>
+                <div><b>{{r['market']}}</b> — {{r['side']}}{% if r.get('line') %} {{r['line']}}{% endif %} — Price {{r['price_american']}}</div>
+                <div>Model p: {{r['model_prob']}} | Implied: {{r['implied_prob']}} | Kelly: {{r['kelly_f']}} | Stake: ${{r['stake']}}</div>
+                <div class="edge">Edge: {{r['edge']}}</div>
+            </div>
+            {% endfor %}
+        </div>
+    ''', top=top, weeks=weeks, week=week, bankroll=bankroll, kelly_factor=kelly_factor, ev_threshold=ev_threshold, message=message)
+@app.route('/recommendations/performance')
+def recommendations_performance_page():
+    # Read performance via the same CSV and simple aggregation
+    if not os.path.exists(RECS_PATH):
+        recs_df = pd.DataFrame()
+    else:
+        recs_df = pd.read_csv(RECS_PATH)
+    total = int(len(recs_df)) if not recs_df.empty else 0
+    wins = int((recs_df['result'] == 'win').sum()) if total else 0
+    losses = int((recs_df['result'] == 'loss').sum()) if total else 0
+    pushes = int((recs_df['result'] == 'push').sum()) if total else 0
+    staked = float(recs_df['stake'].sum()) if total and 'stake' in recs_df.columns else 0.0
+    pnl = float(recs_df['pnl'].sum()) if total and 'pnl' in recs_df.columns else 0.0
+    roi = (pnl / staked) if staked > 0 else 0.0
+    last20 = recs_df.tail(20) if not recs_df.empty else pd.DataFrame()
+    return render_template_string('''
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6fa; }
+        .container { max-width: 900px; margin: 30px auto; background:#fff; padding:24px; border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,.08); }
+        h2 { text-align:center; margin-bottom:18px; }
+        table { width:100%; border-collapse:collapse; background:#fff; }
+        th,td { padding:8px 10px; border:1px solid #e0e0e0; text-align:center; }
+        th { background:#eaf1fb; }
+        .nav { text-align:right; margin-bottom:8px; }
+        .kpis { display:flex; gap:18px; justify-content:center; margin: 10px 0 18px; }
+        .kpi { background:#f8f8f8; padding:10px 14px; border-radius:10px; }
+    </style>
+    <div class="container">
+        <div class="nav">
+            <a href="/">Main</a> | <a href="/recommendations">Recommendations</a>
+        </div>
+        <h2>Betting Performance</h2>
+        <div class="kpis">
+            <div class="kpi">Total Bets: <b>{{total}}</b></div>
+            <div class="kpi">Wins: <b>{{wins}}</b></div>
+            <div class="kpi">Losses: <b>{{losses}}</b></div>
+            <div class="kpi">Pushes: <b>{{pushes}}</b></div>
+            <div class="kpi">Staked: <b>${{staked}}</b></div>
+            <div class="kpi">PnL: <b>${{pnl}}</b></div>
+            <div class="kpi">ROI: <b>{{roi}}</b></div>
+        </div>
+        <h3>Most Recent 20</h3>
+        <table>
+            <tr><th>Time</th><th>Week</th><th>Matchup</th><th>Market</th><th>Side</th><th>Price</th><th>Line</th><th>Stake</th><th>Status</th><th>Result</th><th>PnL</th></tr>
+            {% for _, r in last20.iterrows() %}
+            <tr>
+                <td>{{r.get('timestamp','')}}</td>
+                <td>{{r.get('week','')}}</td>
+                <td>{{r.get('away_team','')}} @ {{r.get('home_team','')}}</td>
+                <td>{{r.get('market','')}}</td>
+                <td>{{r.get('side','')}}</td>
+                <td>{{r.get('price_american','')}}</td>
+                <td>{{r.get('line','')}}</td>
+                <td>{{r.get('stake','')}}</td>
+                <td>{{r.get('status','')}}</td>
+                <td>{{r.get('result','')}}</td>
+                <td>{{r.get('pnl','')}}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+    ''', total=total, wins=wins, losses=losses, pushes=pushes, staked=round(staked,2), pnl=round(pnl,2), roi=round(roi,4), last20=last20)
+
+
+def _do_refresh(quick: bool):
+    """Execute the refresh pipeline and return (payload_dict, status_code)."""
+    base_dir = os.path.dirname(os.path.abspath(__file__))  # .../NCAFCompare
+    py = sys.executable or 'python'
+    # Try to honor week from current request context if available
+    week_arg = None
+    try:
+        from flask import request as _rq
+        w = _rq.args.get('week', '').strip()
+        week_arg = int(w) if w != '' else None
+    except Exception:
+        week_arg = None
+    if quick:
+        cmds = [
+            [py, os.path.join(base_dir, 'src', 'data', 'update_scores_2025.py')] + (["--week", str(week_arg)] if week_arg is not None else []),
+            [py, os.path.join(base_dir, 'src', 'data', 'fetch_2025_lines.py')] + (["--week", str(week_arg)] if week_arg is not None else []),
+        ]
+    else:
+        cmds = [
+            [py, os.path.join(base_dir, 'src', 'data', 'geocode_venues_2025.py'), '--max-new', '120'] + (["--week", str(week_arg)] if week_arg is not None else []),
+            [py, os.path.join(base_dir, 'src', 'data', 'enrich_weather_2025.py')] + (["--week", str(week_arg)] if week_arg is not None else []),
+            [py, os.path.join(base_dir, 'src', 'data', 'orchestrate_refresh.py')],
+            [py, os.path.join(base_dir, 'src', 'data', 'merge_all_features.py')],
+            [py, os.path.join(base_dir, 'generate_enhanced_predictions.py')],
+            [py, os.path.join(base_dir, 'src', 'data', 'update_scores_2025.py')] + (["--week", str(week_arg)] if week_arg is not None else []),
+            [py, os.path.join(base_dir, 'src', 'data', 'fetch_2025_lines.py')] + (["--week", str(week_arg)] if week_arg is not None else []),
+            [py, os.path.join(base_dir, 'generate_enhanced_predictions.py')],
+        ]
+    ran = []
+    t0 = time.time()
+    for cmd in cmds:
+        try:
+            step_start = time.time()
+            out = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            step_dur = round(time.time() - step_start, 2)
+            ran.append({'cmd': ' '.join(cmd), 'seconds': step_dur, 'returncode': out.returncode, 'stdout': out.stdout[-3000:], 'stderr': out.stderr[-1500:]})
+        except Exception as e:
+            ran.append({'cmd': ' '.join(cmd), 'error': str(e)})
+    # Reload predictions
+    try:
+        _reload_predictions()
+    except Exception as e:
+        ran.append({'step': 'reload_predictions', 'error': str(e)})
+        payload = {'status': 'error', 'details': ran, 'mode': ('quick' if quick else 'full')}
+        return payload, 500
+    # Reload lines if 2025 file exists; extend/overlay to lines_df
+    try:
+        lines_2025_path = os.path.join(base_dir, 'src', 'data', 'college_football_betting_lines_2025.csv')
+        if os.path.exists(lines_2025_path):
+            new_lines = pd.read_csv(lines_2025_path)
+            global lines_df, lines_index, lines_index_norm
+            if 'year' in lines_df.columns:
+                old_2025 = lines_df[lines_df['year'] == 2025]
+            else:
+                old_2025 = pd.DataFrame(columns=['year','week','homeTeam','awayTeam','lines'])
+            try:
+                new_keys = set((int(r['year']), int(r['week']), str(r['homeTeam']), str(r['awayTeam'])) for _, r in new_lines.iterrows())
+            except Exception:
+                new_keys = set()
+            to_keep = []
+            for _, r in old_2025.iterrows():
+                k = (int(r['year']), int(r['week']), str(r['homeTeam']), str(r['awayTeam']))
+                if k not in new_keys:
+                    to_keep.append(r)
+            preserved = pd.DataFrame(to_keep) if to_keep else pd.DataFrame(columns=new_lines.columns)
+            non_2025 = lines_df[lines_df['year'] != 2025] if 'year' in lines_df.columns else pd.DataFrame()
+            lines_df = pd.concat([non_2025, preserved, new_lines], ignore_index=True)
+            lines_index, lines_index_norm = _build_lines_index(lines_df)
+    except Exception as e:
+        ran.append({'step': 'reload_lines', 'error': str(e)})
+
+    try:
+        sub = pred_df[pred_df['season'] == 2025]
+        uh = sub['predicted_home_points'].nunique(dropna=True) if 'predicted_home_points' in sub.columns else None
+        ua = sub['predicted_away_points'].nunique(dropna=True) if 'predicted_away_points' in sub.columns else None
+        ut = sub['predicted_total_points'].nunique(dropna=True) if 'predicted_total_points' in sub.columns else None
+    except Exception:
+        uh = ua = ut = None
+    # Auto-log and settle
+    try:
+        from datetime import datetime as _dt
+        stamp = _dt.utcnow().strftime('%Y-%m-%d')
+        marker = os.path.join(base_dir, f'.autolog_{stamp}.txt')
+        if not os.path.exists(marker):
+            _ = compute_recommendations(week=None, bankroll=1000.0, kelly_factor=0.5, ev_threshold=0.03)
+            top = _[:25]
+            if top:
+                _ensure_recs_file()
+                ts = _dt.utcnow().isoformat()
+                import pandas as _pd
+                existing = _pd.read_csv(RECS_PATH) if os.path.exists(RECS_PATH) else _pd.DataFrame()
+                new_df = _pd.DataFrame([
+                    {'timestamp': ts, 'season': r['season'], 'week': r['week'], 'home_team': r['home_team'], 'away_team': r['away_team'], 'market': r['market'], 'side': r['side'], 'price_american': r['price_american'], 'provider': r.get('provider'), 'line': r.get('line', None), 'model_prob': r['model_prob'], 'implied_prob': r['implied_prob'], 'edge': r['edge'], 'kelly_f': r['kelly_f'], 'bankroll': 1000.0, 'stake': r['stake'], 'status': 'open', 'result': 'pending', 'pnl': 0.0}
+                    for r in top
+                ])
+                all_df = _pd.concat([existing, new_df], ignore_index=True)
+                all_df.to_csv(RECS_PATH, index=False)
+                with open(marker, 'w') as f: f.write('ok')
+        _ = recommendations_performance()
+    except Exception as e:
+        ran.append({'step': 'auto_log_or_settle', 'error': str(e)})
+
+    total_seconds = round(time.time() - t0, 2)
+    payload = {
+        'status': 'ok',
+        'details': ran,
+        'seconds_total': total_seconds,
+        'rows': int(len(pred_df)),
+        'lines_rows': int(len(lines_df)) if isinstance(lines_df, pd.DataFrame) else None,
+        'pred_source': PRED_SOURCE,
+        'mode': ('quick' if quick else 'full'),
+        'unique_home_preds': int(uh) if uh is not None else None,
+        'unique_away_preds': int(ua) if ua is not None else None,
+        'unique_total_preds': int(ut) if ut is not None else None,
+    }
+    return payload, 200
+
+@app.route('/api/refresh-data', methods=['GET','POST'])
+def refresh_data():
+    # Synchronous refresh (may take 1-3 minutes)
+    mode = request.args.get('mode', '').lower()
+    quick = (mode == 'quick')
+    payload, code = _do_refresh(quick)
+    return payload, code
+
+def _refresh_thread(quick: bool):
+    global REFRESH_STATE
+    try:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        py = sys.executable or 'python'
+        # Optional week filter from state
+        with _REFRESH_LOCK:
+            selected_week = REFRESH_STATE.get('week')
+        if quick:
+            cmds = [
+                [py, os.path.join(base_dir, 'src', 'data', 'update_scores_2025.py')] + (["--week", str(selected_week)] if selected_week is not None else []),
+                [py, os.path.join(base_dir, 'src', 'data', 'fetch_2025_lines.py')] + (["--week", str(selected_week)] if selected_week is not None else []),
+            ]
+        else:
+            cmds = []
+            if _geocode_needed(base_dir, selected_week):
+                cmds.append([py, os.path.join(base_dir, 'src', 'data', 'geocode_venues_2025.py'), '--max-new', '120'] + (["--week", str(selected_week)] if selected_week is not None else []))
+            else:
+                with _REFRESH_LOCK:
+                    REFRESH_STATE['details'].append({'step': 'geocode_venues_2025.py', 'skipped': 'cache up-to-date'})
+            cmds.extend([
+                [py, os.path.join(base_dir, 'src', 'data', 'enrich_weather_2025.py')] + (["--week", str(selected_week)] if selected_week is not None else []),
+                [py, os.path.join(base_dir, 'src', 'data', 'orchestrate_refresh.py')],
+                [py, os.path.join(base_dir, 'src', 'data', 'merge_all_features.py')],
+                [py, os.path.join(base_dir, 'generate_enhanced_predictions.py')],
+                [py, os.path.join(base_dir, 'src', 'data', 'update_scores_2025.py')] + (["--week", str(selected_week)] if selected_week is not None else []),
+                [py, os.path.join(base_dir, 'src', 'data', 'fetch_2025_lines.py')] + (["--week", str(selected_week)] if selected_week is not None else []),
+                [py, os.path.join(base_dir, 'generate_enhanced_predictions.py')],
+            ])
+        t0 = time.time()
+        # Run each step, updating progress between steps
+        for idx, cmd in enumerate(cmds):
+            with _REFRESH_LOCK:
+                REFRESH_STATE['details'].append({'cmd': ' '.join(cmd), 'status': 'running', 'started': time.time()})
+            step_start = time.time()
+            try:
+                out = subprocess.run(cmd, capture_output=True, text=True, check=False)
+                step_dur = round(time.time() - step_start, 2)
+                so = (out.stdout or '')[-3000:]
+                se = (out.stderr or '')[-1500:]
+                if not so and not se:
+                    so = '(no output)'
+                entry = {'cmd': ' '.join(cmd), 'seconds': step_dur, 'returncode': out.returncode, 'stdout': so, 'stderr': se}
+            except Exception as e:
+                entry = {'cmd': ' '.join(cmd), 'error': str(e)}
+            with _REFRESH_LOCK:
+                # Replace the running marker with final entry
+                REFRESH_STATE['details'][-1] = entry
+                REFRESH_STATE['seconds_total'] = round(time.time() - t0, 2)
+        # Reload predictions
+        try:
+            _reload_predictions()
+        except Exception as e:
+            with _REFRESH_LOCK:
+                REFRESH_STATE['details'].append({'step': 'reload_predictions', 'error': str(e)})
+                REFRESH_STATE['status'] = 'error'
+                REFRESH_STATE['finished_at'] = time.time()
+            return
+        # Reload lines overlay
+        try:
+            lines_2025_path = os.path.join(base_dir, 'src', 'data', 'college_football_betting_lines_2025.csv')
+            if os.path.exists(lines_2025_path):
+                new_lines = pd.read_csv(lines_2025_path)
+                global lines_df, lines_index, lines_index_norm
+                if 'year' in lines_df.columns:
+                    old_2025 = lines_df[lines_df['year'] == 2025]
+                else:
+                    old_2025 = pd.DataFrame(columns=['year','week','homeTeam','awayTeam','lines'])
+                try:
+                    new_keys = set((int(r['year']), int(r['week']), str(r['homeTeam']), str(r['awayTeam'])) for _, r in new_lines.iterrows())
+                except Exception:
+                    new_keys = set()
+                to_keep = []
+                for _, r in old_2025.iterrows():
+                    k = (int(r['year']), int(r['week']), str(r['homeTeam']), str(r['awayTeam']))
+                    if k not in new_keys:
+                        to_keep.append(r)
+                preserved = pd.DataFrame(to_keep) if to_keep else pd.DataFrame(columns=new_lines.columns)
+                non_2025 = lines_df[lines_df['year'] != 2025] if 'year' in lines_df.columns else pd.DataFrame()
+                lines_df = pd.concat([non_2025, preserved, new_lines], ignore_index=True)
+                lines_index, lines_index_norm = _build_lines_index(lines_df)
+        except Exception as e:
+            with _REFRESH_LOCK:
+                REFRESH_STATE['details'].append({'step': 'reload_lines', 'error': str(e)})
+        # Compute summary numbers
+        try:
+            sub = pred_df[pred_df['season'] == 2025]
+            uh = sub['predicted_home_points'].nunique(dropna=True) if 'predicted_home_points' in sub.columns else None
+            ua = sub['predicted_away_points'].nunique(dropna=True) if 'predicted_away_points' in sub.columns else None
+            ut = sub['predicted_total_points'].nunique(dropna=True) if 'predicted_total_points' in sub.columns else None
+        except Exception:
+            uh = ua = ut = None
+        # Auto-log/settle
+        try:
+            from datetime import datetime as _dt
+            stamp = _dt.utcnow().strftime('%Y-%m-%d')
+            marker = os.path.join(base_dir, f'.autolog_{stamp}.txt')
+            if not os.path.exists(marker):
+                _ = compute_recommendations(week=None, bankroll=1000.0, kelly_factor=0.5, ev_threshold=0.03)
+                top = _[:25]
+                if top:
+                    _ensure_recs_file()
+                    ts = _dt.utcnow().isoformat()
+                    import pandas as _pd
+                    existing = _pd.read_csv(RECS_PATH) if os.path.exists(RECS_PATH) else _pd.DataFrame()
+                    new_df = _pd.DataFrame([
+                        {'timestamp': ts, 'season': r['season'], 'week': r['week'], 'home_team': r['home_team'], 'away_team': r['away_team'], 'market': r['market'], 'side': r['side'], 'price_american': r['price_american'], 'provider': r.get('provider'), 'line': r.get('line', None), 'model_prob': r['model_prob'], 'implied_prob': r['implied_prob'], 'edge': r['edge'], 'kelly_f': r['kelly_f'], 'bankroll': 1000.0, 'stake': r['stake'], 'status': 'open', 'result': 'pending', 'pnl': 0.0}
+                        for r in top
+                    ])
+                    all_df = _pd.concat([existing, new_df], ignore_index=True)
+                    all_df.to_csv(RECS_PATH, index=False)
+                    with open(marker, 'w') as f: f.write('ok')
+            _ = recommendations_performance()
+        except Exception as e:
+            with _REFRESH_LOCK:
+                REFRESH_STATE['details'].append({'step': 'auto_log_or_settle', 'error': str(e)})
+        # Finalize state
+        with _REFRESH_LOCK:
+            REFRESH_STATE.update({
+                'status': 'ok',
+                'seconds_total': round(time.time() - t0, 2),
+                'rows': int(len(pred_df)),
+                'lines_rows': int(len(lines_df)) if isinstance(lines_df, pd.DataFrame) else None,
+                'pred_source': PRED_SOURCE,
+                'unique_home_preds': int(uh) if uh is not None else None,
+                'unique_away_preds': int(ua) if ua is not None else None,
+                'unique_total_preds': int(ut) if ut is not None else None,
+                'finished_at': time.time(),
+            })
+    except Exception as e:
+        with _REFRESH_LOCK:
+            REFRESH_STATE['status'] = 'error'
+            REFRESH_STATE['error'] = str(e)
+            REFRESH_STATE['finished_at'] = time.time()
+
+@app.route('/api/refresh-start', methods=['POST','GET'])
+def refresh_start():
+    # Start refresh in the background; immediate return for reliable UX
+    mode = request.args.get('mode', '').lower()
+    week = request.args.get('week', '').strip()
+    try:
+        week_int = int(week) if week != '' else None
+    except Exception:
+        week_int = None
+    quick = (mode == 'quick')
+    with _REFRESH_LOCK:
+        if REFRESH_STATE.get('status') == 'running':
+            return {**REFRESH_STATE, 'note': 'already running'}, 409
+        REFRESH_STATE.update({
+            'status': 'running', 'mode': ('quick' if quick else 'full'), 'started_at': time.time(), 'finished_at': None,
+            'seconds_total': None, 'details': [], 'pred_source': None, 'rows': None, 'lines_rows': None,
+            'unique_home_preds': None, 'unique_away_preds': None, 'unique_total_preds': None, 'error': None,
+            'week': week_int,
+        })
+    th = threading.Thread(target=_refresh_thread, args=(quick,), daemon=True)
+    th.start()
+    return {'status': 'running', 'mode': REFRESH_STATE['mode'], 'week': week_int}, 202
+
+@app.route('/api/refresh-progress')
+def refresh_progress():
+    with _REFRESH_LOCK:
+        state = dict(REFRESH_STATE)
+    # Add elapsed if running
+    if state.get('status') == 'running' and state.get('started_at'):
+        state['elapsed'] = round(time.time() - state['started_at'], 1)
+    return state, 200
+
+@app.route('/refresh-status')
+def refresh_status():
+    """Live refresh dashboard (non-blocking). Start background job and poll progress."""
+    return render_template_string('''
+    <style>
+        body { font-family: Segoe UI, Arial, sans-serif; background:#f6f8fb; margin:0; }
+        .wrap { max-width: 1000px; margin: 24px auto; background:#fff; border-radius:12px; padding:18px 22px; box-shadow:0 2px 10px rgba(0,0,0,.06); }
+        h2 { margin: 0 0 12px; color:#2c3e50; }
+        .meta { color:#34495e; margin: 8px 0 12px; }
+        table { width:100%; border-collapse: collapse; }
+        th, td { border:1px solid #e6e9ef; padding:8px 10px; text-align:left; font-size: 14px; }
+        th { background:#f0f4fa; }
+        .ok { color:#1e8449; font-weight:600; }
+        .err { color:#c0392b; font-weight:600; }
+        details { margin-top:6px; }
+        pre { max-height:160px; overflow:auto; background:#fafbfe; padding:8px; border-radius:6px; }
+        .actions button { margin-right:12px; }
+        .muted { color:#7f8c8d; }
+    </style>
+    <div class="wrap">
+        <h2>Refresh Diagnostics (Live)</h2>
+        <div class="actions">
+            <label>Week: <input id="weekInp" type="number" min="0" max="20" style="width:80px"></label>
+            <button id="runFull">Run Full</button>
+            <button id="runQuick">Run Quick</button>
+            <span id="note" class="muted"></span>
+        </div>
+        <div class="meta" id="meta">Loading…</div>
+        <div id="details"></div>
+    </div>
+    <script>
+    (function(){
+        async function start(mode){
+            document.getElementById('note').textContent = 'Starting ' + (mode||'full') + '…';
+            const wk = document.getElementById('weekInp').value.trim();
+            let url = '/api/refresh-start' + (mode==='quick'?'?mode=quick':'');
+            if(wk !== '') url += (url.includes('?')?'&':'?') + 'week=' + encodeURIComponent(wk);
+            const res = await fetch(url, {method:'POST'});
+            if(!res.ok){ document.getElementById('note').textContent = 'Start failed.'; return; }
+            poll();
+        }
+        async function poll(){
+            try{
+                const r = await fetch('/api/refresh-progress');
+                const j = await r.json();
+                const meta = document.getElementById('meta');
+                const det = document.getElementById('details');
+                const rows = j.rows ?? '-';
+                const lines = j.lines_rows ?? '-';
+                const secs = j.seconds_total ? (j.seconds_total + 's') : (j.elapsed ? (j.elapsed + 's') : '-');
+                meta.innerHTML = `Status: <b>${j.status}</b> • Mode: ${j.mode||'-'} • Time: ${secs} • Rows: ${rows} | Lines: ${lines} • Source: ${j.pred_source||'-'}`;
+                if(Array.isArray(j.details) && j.details.length){
+                    let html = '<table><thead><tr><th>#</th><th>Step</th><th>Seconds</th><th>Return</th><th>Output</th></tr></thead><tbody>';
+                    j.details.forEach((d,i)=>{
+                        html += `<tr><td>${i+1}</td><td style="word-break:break-all">${(d.cmd||d.step||'')}</td><td>${d.seconds??''}</td><td>${d.returncode??''}</td><td>`;
+                        if(d.stdout || d.stderr){
+                            html += '<details><summary>logs</summary>';
+                            if(d.stdout) html += `<div><strong>stdout</strong><pre>${d.stdout}</pre></div>`;
+                            if(d.stderr) html += `<div><strong>stderr</strong><pre>${d.stderr}</pre></div>`;
+                            html += '</details>';
+                        } else {
+                            html += '<span class="muted">(no logs)</span>';
+                        }
+                        html += '</td></tr>';
+                    });
+                    html += '</tbody></table>';
+                    det.innerHTML = html;
+                } else if(j.status === 'running') {
+                    det.innerHTML = '<div class="muted">Running… (details will appear when available)</div>';
+                }
+                if(j.status === 'running'){
+                    setTimeout(poll, 1000);
+                }
+            }catch(e){
+                document.getElementById('meta').textContent = 'Error loading progress: ' + e;
+            }
+        }
+        document.getElementById('runFull').addEventListener('click', ()=>start('full'));
+        document.getElementById('runQuick').addEventListener('click', ()=>start('quick'));
+        // If ?autostart=1, kick off a full run immediately
+        const params = new URLSearchParams(window.location.search);
+        if(params.get('autostart')==='1') { start('full'); }
+        // Always begin polling to show last known state
+        poll();
+    })();
+    </script>
+    ''')
+
+@app.route('/health')
+def health():
+    try:
+        sub = pred_df[pred_df['season'] == 2025] if 'season' in pred_df.columns else pred_df
+        return {
+            'status': 'ok',
+            'pred_source': PRED_SOURCE,
+            'rows': int(len(pred_df)),
+            'rows_2025': int(len(sub)),
+        }, 200
+    except Exception as e:
+        return {'status': 'error', 'error': str(e)}, 500
+
+@app.route('/win-totals')
+def win_totals_page():
+    # Compute expected wins for each team using per-game win probabilities
+    df = pred_df[pred_df['season'] == 2025].copy()
+    if df.empty:
+        return render_template_string('<div class="container"><h2>No 2025 schedule loaded.</h2></div>')
+    def _prob_home_win(row):
+        ph = _safe_float(row.get('predicted_home_points'))
+        pa = _safe_float(row.get('predicted_away_points'))
+        if ph is None or pa is None:
+            return None
+        pm = _safe_float(row.get('predicted_win_margin'), ph - pa)
+        sig = _get_conf_std_for_game(row)
+        return _phi(pm / sig)
+    df['p_home'] = df.apply(_prob_home_win, axis=1)
+    # Expected wins per team
+    exp = {}
+    for _, r in df.iterrows():
+        h = r['home_team']; a = r['away_team']
+        p = r.get('p_home', None)
+        if h not in exp: exp[h] = 0.0
+        if a not in exp: exp[a] = 0.0
+        if p is not None:
+            exp[h] += float(p)
+            exp[a] += float(1.0 - p)
+    rows = sorted(([t, round(w,2)] for t,w in exp.items()), key=lambda x: (-x[1], x[0]))
+    # Join conferences for context
+    conf_map_local = dict(zip(team_conf_df['school'], team_conf_df['conference']))
+    data = [{ 'team': t, 'exp_wins': w, 'conference': conf_map_local.get(t, 'Unknown') } for t,w in rows]
+    return render_template_string('''
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background:#f4f6fa; }
+        .container { max-width: 900px; margin: 30px auto; background:#fff; padding:24px; border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,.08); }
+        table { width:100%; border-collapse: collapse; }
+        th,td { padding:8px 10px; border:1px solid #e0e0e0; text-align:left; }
+        th { background:#eaf1fb; }
+        .nav { text-align:right; margin-bottom:8px; }
+    </style>
+    <div class="container">
+        <div class="nav">
+            <a href="/">Main</a> | <a href="/analysis">Analysis</a> | <a href="/recommendations">Recommendations</a>
+        </div>
+        <h2>2025 Expected Wins (Model)</h2>
+        <table>
+            <tr><th>Team</th><th>Conference</th><th>Expected Wins</th></tr>
+            {% for r in rows %}
+            <tr><td>{{r.team}}</td><td>{{r.conference}}</td><td>{{r.exp_wins}}</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+    ''', rows=data)
+
+if __name__ == '__main__':
+    import os
+    port = int(os.environ.get('PORT', 5051))
+    debug_flag = os.environ.get('DEBUG', '0') == '1'
+    app.run(host='0.0.0.0', port=port, debug=debug_flag)
