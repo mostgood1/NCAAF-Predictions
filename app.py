@@ -303,7 +303,9 @@ def index():
         <div class="card">
             <div class="teams">
                 <div class="team">
+                    {% if game_info['away_logo'] %}
                     <img src="{{game_info['away_logo']}}" alt="{{game_info['away_team']}} logo" class="team-logo"><br>
+                    {% endif %}
                     <span class="team-name" style="color:{{game_info['away_color']}};background:{{game_info['away_alt_color']}};padding:4px 10px;border-radius:6px;display:inline-block;">{{game_info['away_team']}}</span>
                     <ul class="prediction">
                         <li><strong>Predicted Away Team Points:</strong> {{game_info['predicted_away_points']}}</li>
@@ -311,7 +313,9 @@ def index():
                 </div>
                 <span class="vs">@</span>
                 <div class="team">
+                    {% if game_info['home_logo'] %}
                     <img src="{{game_info['home_logo']}}" alt="{{game_info['home_team']}} logo" class="team-logo"><br>
+                    {% endif %}
                     <span class="team-name" style="color:{{game_info['home_color']}};background:{{game_info['home_alt_color']}};padding:4px 10px;border-radius:6px;display:inline-block;">{{game_info['home_team']}}</span>
                     <ul class="prediction">
                         <li><strong>Predicted Home Team Points:</strong> {{game_info['predicted_home_points']}}</li>
