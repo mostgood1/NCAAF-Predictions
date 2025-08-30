@@ -1421,10 +1421,26 @@ def index():
                 try{
                     // Start in background and poll progress
                     const startUrl = quick ? '/api/refresh-start?mode=quick' : '/api/refresh-start';
-                    const startRes = await fetch(startUrl, {method:'POST'});
-                    if(!startRes.ok){
-                        const txt = await startRes.text();
-                        throw new Error('Failed to start refresh: ' + txt);
+                    // Try POST first; if 409 (already running) or non-OK, tolerate and proceed to polling.
+                    let startOk = false;
+                    try{
+                        const startRes = await fetch(startUrl, {method:'POST'});
+                        if(startRes.ok || startRes.status === 409){
+                            startOk = true;
+                        }else{
+                            // Some local servers may block POST; attempt GET as fallback
+                            const getRes = await fetch(startUrl.replace('/api/refresh-start','/api/refresh-start'), {method:'GET'});
+                            if(getRes.ok || getRes.status === 409){
+                                startOk = true;
+                            }else{
+                                const txt = await startRes.text().catch(()=> '');
+                                throw new Error('Failed to start refresh: ' + (txt || startRes.status));
+                            }
+                        }
+                    }catch(e){
+                        // If network error on start, still try to poll in case it actually started
+                        startOk = true;
+                        if(statusEl){ statusEl.textContent = 'Starting refresh… (retrying)'; }
                     }
                     let done = false; let tries = 0;
                     while(!done && tries < 180){ // up to ~3 minutes
