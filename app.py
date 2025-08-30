@@ -17,16 +17,25 @@ app = Flask(__name__)
 
 # Resolve paths relative to this file, so it works from any working directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Resolve DATA_DIR with robust fallbacks (env -> ./data -> ./src/data -> ./NCAFCompare/src/data)
 DATA_DIR = os.path.join(BASE_DIR, 'src', 'data')
-# Allow override via env var or fallback to repo root-level 'data/' if present
 _env_data_dir = os.environ.get('DATA_DIR')
 try:
-    if _env_data_dir and os.path.isdir(_env_data_dir):
-        DATA_DIR = _env_data_dir
-    elif not os.path.isdir(DATA_DIR):
-        _alt = os.path.join(os.path.dirname(BASE_DIR), 'data')
-        if os.path.isdir(_alt):
-            DATA_DIR = _alt
+    candidates = []
+    if _env_data_dir:
+        candidates.append(_env_data_dir)
+    candidates.extend([
+        os.path.join(BASE_DIR, 'data'),
+        os.path.join(BASE_DIR, 'src', 'data'),
+        os.path.join(BASE_DIR, 'NCAFCompare', 'src', 'data'),
+    ])
+    for d in candidates:
+        try:
+            if d and os.path.isdir(d):
+                DATA_DIR = d
+                break
+        except Exception:
+            continue
 except Exception:
     pass
 
@@ -57,8 +66,27 @@ REFRESH_STATE = {
 _REFRESH_LOCK = threading.Lock()
 
 # Load enhanced predictions with a validation step: if with_scores exists but is constant, fall back to enhanced
-pred_path_scores = os.path.join(DATA_DIR, "college_football_schedule_2025_predicted_totals_enhanced_with_scores.csv")
-pred_path_enh = os.path.join(DATA_DIR, "college_football_schedule_2025_predicted_totals_enhanced.csv")
+def _first_existing(paths: list[str]) -> str | None:
+    for p in paths:
+        try:
+            if p and os.path.exists(p):
+                return p
+        except Exception:
+            continue
+    return None
+
+pred_candidates_enh = [
+    os.path.join(DATA_DIR, "college_football_schedule_2025_predicted_totals_enhanced.csv"),
+    os.path.join(BASE_DIR, 'data', "college_football_schedule_2025_predicted_totals_enhanced.csv"),
+    os.path.join(BASE_DIR, 'src', 'data', "college_football_schedule_2025_predicted_totals_enhanced.csv"),
+]
+pred_candidates_scores = [
+    os.path.join(DATA_DIR, "college_football_schedule_2025_predicted_totals_enhanced_with_scores.csv"),
+    os.path.join(BASE_DIR, 'data', "college_football_schedule_2025_predicted_totals_enhanced_with_scores.csv"),
+    os.path.join(BASE_DIR, 'src', 'data', "college_football_schedule_2025_predicted_totals_enhanced_with_scores.csv"),
+]
+pred_path_enh = _first_existing(pred_candidates_enh)
+pred_path_scores = _first_existing(pred_candidates_scores)
 PRED_SOURCE = "unknown"
 
 # Optional: Win-probability isotonic calibration LUT
@@ -161,12 +189,12 @@ def _load_predictions_df() -> pd.DataFrame:
     actuals_df = None
     # Try reading both files if available
     try:
-        if os.path.exists(pred_path_enh):
+        if pred_path_enh and os.path.exists(pred_path_enh):
             df_enh = pd.read_csv(pred_path_enh)
     except Exception as e:
         print(f"[app] Failed to read enhanced: {e}")
     try:
-        if os.path.exists(pred_path_scores):
+        if pred_path_scores and os.path.exists(pred_path_scores):
             df_scores = pd.read_csv(pred_path_scores)
             if all(col in df_scores.columns for col in ['season','week','home_team','away_team','actual_home_points','actual_away_points']):
                 actuals_df = df_scores[['season','week','home_team','away_team','actual_home_points','actual_away_points','start_date_api']].copy()
@@ -180,7 +208,7 @@ def _load_predictions_df() -> pd.DataFrame:
         for col in ['actual_home_points', 'actual_away_points', 'start_date_api']:
             if col not in df.columns:
                 df[col] = pd.NA
-        if actuals_df is not None and not actuals_df.empty:
+        if actuals_df is not None and isinstance(actuals_df, pd.DataFrame) and not actuals_df.empty:
             try:
                 df = df.merge(actuals_df, on=['season','week','home_team','away_team'], how='left', suffixes=('', '_from_scores'))
                 for col in ['actual_home_points','actual_away_points','start_date_api']:
@@ -204,7 +232,7 @@ def _load_predictions_df() -> pd.DataFrame:
         return df
 
     # Fallback: no enhanced, try with_scores alone
-    if df_scores is not None and isinstance(df_scores, pd.DataFrame):
+    if df_scores is not None and isinstance(df_scores, pd.DataFrame) and not df_scores.empty:
         # Ensure columns present
         for col in ['actual_home_points', 'actual_away_points']:
             if col not in df_scores.columns:
@@ -220,8 +248,8 @@ def _load_predictions_df() -> pd.DataFrame:
         return df_scores
 
     # If here, nothing could be loaded
-    PRED_SOURCE = 'read_error'
-    raise RuntimeError('No predictions CSVs could be loaded')
+    PRED_SOURCE = 'none'
+    return pd.DataFrame(columns=['season','week','home_team','away_team'])
 
 pred_df = _load_predictions_df()
 
