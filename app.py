@@ -17,7 +17,7 @@ app = Flask(__name__)
 
 # Resolve paths relative to this file, so it works from any working directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# Resolve DATA_DIR with robust fallbacks (env -> ./data -> ./src/data -> ./NCAFCompare/src/data)
+# Resolve DATA_DIR with robust fallbacks; prefer a directory that actually contains our key CSVs
 DATA_DIR = os.path.join(BASE_DIR, 'src', 'data')
 _env_data_dir = os.environ.get('DATA_DIR')
 try:
@@ -29,13 +29,29 @@ try:
         os.path.join(BASE_DIR, 'src', 'data'),
         os.path.join(BASE_DIR, 'NCAFCompare', 'src', 'data'),
     ])
+    key_files = {
+        'college_football_schedule_2025_predicted_totals_enhanced.csv',
+        'college_football_schedule_2025_predicted_totals_enhanced_with_scores.csv',
+        'team_conferences.csv',
+        'team_assets.csv',
+        'college_football_betting_lines_last_15_years.csv',
+    }
+    chosen = None
     for d in candidates:
         try:
-            if d and os.path.isdir(d):
-                DATA_DIR = d
+            if not d or not os.path.isdir(d):
+                continue
+            # Prefer a directory that contains any key file
+            if any(os.path.exists(os.path.join(d, k)) for k in key_files):
+                chosen = d
                 break
+            # Otherwise remember the first existing directory as fallback
+            if chosen is None:
+                chosen = d
         except Exception:
             continue
+    if chosen:
+        DATA_DIR = chosen
 except Exception:
     pass
 
@@ -79,11 +95,13 @@ pred_candidates_enh = [
     os.path.join(DATA_DIR, "college_football_schedule_2025_predicted_totals_enhanced.csv"),
     os.path.join(BASE_DIR, 'data', "college_football_schedule_2025_predicted_totals_enhanced.csv"),
     os.path.join(BASE_DIR, 'src', 'data', "college_football_schedule_2025_predicted_totals_enhanced.csv"),
+    os.path.join(BASE_DIR, 'NCAFCompare', 'src', 'data', "college_football_schedule_2025_predicted_totals_enhanced.csv"),
 ]
 pred_candidates_scores = [
     os.path.join(DATA_DIR, "college_football_schedule_2025_predicted_totals_enhanced_with_scores.csv"),
     os.path.join(BASE_DIR, 'data', "college_football_schedule_2025_predicted_totals_enhanced_with_scores.csv"),
     os.path.join(BASE_DIR, 'src', 'data', "college_football_schedule_2025_predicted_totals_enhanced_with_scores.csv"),
+    os.path.join(BASE_DIR, 'NCAFCompare', 'src', 'data', "college_football_schedule_2025_predicted_totals_enhanced_with_scores.csv"),
 ]
 pred_path_enh = _first_existing(pred_candidates_enh)
 pred_path_scores = _first_existing(pred_candidates_scores)
