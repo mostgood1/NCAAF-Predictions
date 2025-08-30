@@ -1430,19 +1430,32 @@ def index():
                     while(!done && tries < 180){ // up to ~3 minutes
                         await new Promise(r=>setTimeout(r, 1000));
                         tries++;
-                        const progRes = await fetch('/api/refresh-progress');
-                        const p = await progRes.json();
-                        if(statusEl){
-                            const elapsed = p.elapsed ? ` (${p.elapsed}s)` : '';
-                            statusEl.textContent = `Refreshing${elapsed}…`;
-                        }
-                        if(p.status && p.status !== 'running'){
-                            done = true;
-                            if(statusEl){
-                                const secs = p.seconds_total ? ` in ${p.seconds_total}s` : '';
-                                statusEl.textContent = `Done (${p.mode})${secs}: ${p.status}. Source=${p.pred_source}`;
+                        let p = null;
+                        try{
+                            const progRes = await fetch('/api/refresh-progress', {cache:'no-store'});
+                            const ct = (progRes.headers.get('content-type')||'').toLowerCase();
+                            if(!progRes.ok || ct.indexOf('application/json') === -1){
+                                // Service may still be waking; skip this tick
+                                continue;
                             }
-                            break;
+                            p = await progRes.json();
+                        }catch(_e){
+                            // Non-JSON (Render wake page) or network hiccup — keep polling
+                            continue;
+                        }
+                        if(p){
+                            if(statusEl){
+                                const elapsed = p.elapsed ? ` (${p.elapsed}s)` : '';
+                                statusEl.textContent = `Refreshing${elapsed}…`;
+                            }
+                            if(p.status && p.status !== 'running'){
+                                done = true;
+                                if(statusEl){
+                                    const secs = p.seconds_total ? ` in ${p.seconds_total}s` : '';
+                                    statusEl.textContent = `Done (${p.mode})${secs}: ${p.status}. Source=${p.pred_source}`;
+                                }
+                                break;
+                            }
                         }
                     }
                     // If not done after polling window, open diagnostics for details
