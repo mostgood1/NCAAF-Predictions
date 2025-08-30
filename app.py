@@ -17,6 +17,41 @@ app = Flask(__name__)
 
 # Resolve paths relative to this file, so it works from any working directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ 
+# Load simple .env files (no external dependency) before reading environment variables
+def _load_env_file(path: str):
+    try:
+        if not os.path.exists(path):
+            return
+        with open(path, 'r', encoding='utf-8') as f:
+            for line in f:
+                s = line.strip()
+                if not s or s.startswith('#'):
+                    continue
+                if '=' not in s:
+                    continue
+                k, v = s.split('=', 1)
+                k = k.strip()
+                v = v.strip().strip('"').strip("'")
+                if k and (k not in os.environ):
+                    os.environ[k] = v
+    except Exception:
+        pass
+
+# Load .env (if present) and a local override file
+_load_env_file(os.path.join(BASE_DIR, '.env'))
+_load_env_file(os.path.join(BASE_DIR, '.env.local'))
+
+def _ensure_cfbd_key():
+    """Ensure CFBD_API_KEY is present in os.environ; reload .env files if missing."""
+    try:
+        if os.environ.get('CFBD_API_KEY') or os.environ.get('CFBD_TOKEN') or os.environ.get('CFBD'):
+            return
+        # Try to reload env files (in case they were added after app start)
+        _load_env_file(os.path.join(BASE_DIR, '.env'))
+        _load_env_file(os.path.join(BASE_DIR, '.env.local'))
+    except Exception:
+        pass
 # Resolve DATA_DIR with robust fallbacks; prefer a directory that actually contains our key CSVs
 DATA_DIR = os.path.join(BASE_DIR, 'src', 'data')
 _env_data_dir = os.environ.get('DATA_DIR')
@@ -209,13 +244,36 @@ def _load_predictions_df() -> pd.DataFrame:
     try:
         if pred_path_enh and os.path.exists(pred_path_enh):
             df_enh = pd.read_csv(pred_path_enh)
+            # Align week labels (Week 0 vs 1) before any merges
+            try:
+                df_enh = _apply_week0_label(df_enh)
+            except Exception:
+                pass
     except Exception as e:
         print(f"[app] Failed to read enhanced: {e}")
     try:
         if pred_path_scores and os.path.exists(pred_path_scores):
             df_scores = pd.read_csv(pred_path_scores)
             if all(col in df_scores.columns for col in ['season','week','home_team','away_team','actual_home_points','actual_away_points']):
-                actuals_df = df_scores[['season','week','home_team','away_team','actual_home_points','actual_away_points','start_date_api']].copy()
+                # Prefer including start_date when available so we can week-align on actuals as well
+                cols = ['season','week','home_team','away_team','actual_home_points','actual_away_points']
+                if 'start_date' in df_scores.columns:
+                    cols.append('start_date')
+                if 'start_date_api' in df_scores.columns:
+                    cols.append('start_date_api')
+                actuals_df = df_scores[cols].copy()
+                # Create a usable start_date column if only API format exists
+                try:
+                    if 'start_date' not in actuals_df.columns and 'start_date_api' in actuals_df.columns:
+                        tmp = pd.to_datetime(actuals_df['start_date_api'], errors='coerce')
+                        actuals_df['start_date'] = tmp.dt.tz_localize(None).astype(str)
+                except Exception:
+                    pass
+                # Align week 0/1 labels in actuals for 2025 before merge
+                try:
+                    actuals_df = _apply_week0_label(actuals_df)
+                except Exception:
+                    pass
     except Exception as e:
         print(f"[app] Failed to read with_scores: {e}")
 
@@ -228,6 +286,7 @@ def _load_predictions_df() -> pd.DataFrame:
                 df[col] = pd.NA
         if actuals_df is not None and isinstance(actuals_df, pd.DataFrame) and not actuals_df.empty:
             try:
+                # Primary merge on season+week+teams
                 df = df.merge(actuals_df, on=['season','week','home_team','away_team'], how='left', suffixes=('', '_from_scores'))
                 for col in ['actual_home_points','actual_away_points','start_date_api']:
                     alt = f"{col}_from_scores"
@@ -237,15 +296,42 @@ def _load_predictions_df() -> pd.DataFrame:
                 # Ensure numeric types for actuals
                 for col in ['actual_home_points','actual_away_points']:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
-                # Apply Week 0 relabeling after merge
-                df = _apply_week0_label(df)
+                # Fallback: for any remaining missing actuals in 2025, try a merge without week
+                try:
+                    missing_mask = (df.get('season', 0) == 2025) & (df['actual_home_points'].isna() | df['actual_away_points'].isna())
+                except Exception:
+                    missing_mask = pd.Series([False] * len(df))
+                if missing_mask.any():
+                    try:
+                        no_wk_cols = ['season','home_team','away_team','actual_home_points','actual_away_points']
+                        actuals_nowk = actuals_df[[c for c in no_wk_cols if c in actuals_df.columns]].copy()
+                        # Deduplicate on season+teams keeping any non-null actuals
+                        actuals_nowk = actuals_nowk.sort_values(by=[c for c in ['actual_home_points','actual_away_points'] if c in actuals_nowk.columns], ascending=False)
+                        actuals_nowk = actuals_nowk.drop_duplicates(subset=['season','home_team','away_team'], keep='first')
+                        left = df[missing_mask].merge(actuals_nowk, on=['season','home_team','away_team'], how='left', suffixes=('', '_nw'))
+                        for col in ['actual_home_points','actual_away_points']:
+                            alt = f"{col}_nw"
+                            if alt in left.columns:
+                                left[col] = left[col].where(left[col].notna(), left[alt])
+                        # Write back
+                        df.loc[missing_mask, ['actual_home_points','actual_away_points']] = left[['actual_home_points','actual_away_points']].values
+                    except Exception:
+                        pass
+                # Apply Week 0 relabeling after all merges (idempotent if already aligned)
+                try:
+                    df = _apply_week0_label(df)
+                except Exception:
+                    pass
                 PRED_SOURCE = 'enhanced+scores'
             except Exception as _merge_e:
                 print(f"[app] Merge actuals into enhanced failed: {_merge_e}")
                 PRED_SOURCE = 'enhanced'
         else:
             # Still apply Week 0 relabeling for clarity
-            df = _apply_week0_label(df)
+            try:
+                df = _apply_week0_label(df)
+            except Exception:
+                pass
             PRED_SOURCE = 'enhanced'
         return df
 
@@ -270,6 +356,15 @@ def _load_predictions_df() -> pd.DataFrame:
     return pd.DataFrame(columns=['season','week','home_team','away_team'])
 
 pred_df = _load_predictions_df()
+
+# Coerce core columns to numeric where applicable for reliable filtering/sorting
+try:
+    if 'week' in pred_df.columns:
+        pred_df['week'] = pd.to_numeric(pred_df['week'], errors='coerce')
+    if 'season' in pred_df.columns:
+        pred_df['season'] = pd.to_numeric(pred_df['season'], errors='coerce')
+except Exception:
+    pass
 
 team_conf_df = pd.read_csv(os.path.join(DATA_DIR, "team_conferences.csv"))
 team_conf_df['school_norm'] = team_conf_df['school'].str.strip().str.lower().str.replace('&', 'and').str.replace('  ', ' ')
@@ -552,6 +647,177 @@ def _reload_predictions():
     new_df['away_conference'] = new_df['away_team'].apply(lambda x: conf_map.get(norm(x), 'Unknown'))
     pred_df = new_df
 
+def _update_scores_with_cfbd(week: int | None = None) -> dict:
+    """Update actual scores in the with_scores CSV using CFBD API.
+    - Reads CFBD_API_KEY from environment; if missing, returns a skipped result.
+    - If with_scores CSV doesn't exist but enhanced does, creates it by copying enhanced and adding actuals cols.
+    - Matches games by (home_team, away_team) for season 2025 and optional week, with light normalization.
+    Returns a small summary dict with counts and path touched.
+    """
+    try:
+        import requests  # lightweight dep, widely available
+    except Exception:
+        return {'step': 'cfbd_update', 'skipped': 'requests_not_available'}
+
+    api_key = os.environ.get('CFBD_API_KEY') or os.environ.get('CFBD_TOKEN') or os.environ.get('CFBD')
+    if not api_key:
+        return {'step': 'cfbd_update', 'skipped': 'no_api_key'}
+
+    # Ensure we have a target CSV path to update
+    global pred_path_scores, pred_path_enh
+    target_path = pred_path_scores
+    try:
+        if not target_path:
+            # If scores file missing, but enhanced exists, initialize scores file from enhanced
+            if pred_path_enh and os.path.exists(pred_path_enh):
+                target_path = os.path.join(DATA_DIR, "college_football_schedule_2025_predicted_totals_enhanced_with_scores.csv")
+                base_df = pd.read_csv(pred_path_enh)
+                for col in ['actual_home_points','actual_away_points','start_date_api']:
+                    if col not in base_df.columns:
+                        base_df[col] = pd.NA
+                base_df.to_csv(target_path, index=False)
+                pred_path_scores = target_path
+            else:
+                return {'step': 'cfbd_update', 'skipped': 'no_scores_or_enhanced_file'}
+        elif not os.path.exists(target_path):
+            return {'step': 'cfbd_update', 'skipped': 'scores_path_not_found'}
+    except Exception as e:
+        return {'step': 'cfbd_update', 'error': f'prep_failed: {e}'}
+
+    try:
+        df = pd.read_csv(target_path)
+    except Exception as e:
+        return {'step': 'cfbd_update', 'error': f'read_failed: {e}'}
+
+    if df.empty or 'season' not in df.columns or 'home_team' not in df.columns or 'away_team' not in df.columns:
+        return {'step': 'cfbd_update', 'skipped': 'scores_df_invalid'}
+
+    def _norm_team_cfbd(name: str) -> str:
+        try:
+            s = str(name or '').strip().lower()
+            s = s.replace('&', 'and')
+            s = s.replace("ʻ", "'").replace("’", "'")
+            s = s.replace("hawai'i", "hawaii")
+            s = re.sub(r"\s+", " ", s)
+            return s
+        except Exception:
+            return str(name)
+
+    # Build a lookup of games from CFBD
+    base_url = 'https://api.collegefootballdata.com/games'
+    headers = {'Authorization': f'Bearer {api_key}', 'Accept': 'application/json'}
+    if week is None:
+        weeks = [0, 1, 2]
+    else:
+        try:
+            wv = int(week)
+        except Exception:
+            wv = None
+        if wv in (0, 1):
+            weeks = [wv, (1 if wv == 0 else 0)]
+        elif wv is not None:
+            weeks = [wv]
+        else:
+            weeks = [0, 1, 2]
+    updated = 0
+    fetched = 0
+    games_map = {}
+    http_notes = []
+    # Try a few parameter variants to avoid missing data due to filters
+    def _variants(wk: int):
+        return [
+            {'year': 2025, 'week': wk, 'seasonType': 'regular', 'division': 'fbs'},
+            {'year': 2025, 'week': wk, 'division': 'fbs'},
+            {'year': 2025, 'week': wk, 'seasonType': 'regular'},
+        ]
+    try:
+        for wk in weeks:
+            for pr in _variants(wk):
+                try:
+                    resp = requests.get(base_url, headers=headers, params=pr, timeout=25)
+                    http_notes.append({'week': wk, 'status': getattr(resp, 'status_code', None), 'len': len(getattr(resp, 'content', b''))})
+                    if resp.status_code != 200:
+                        continue
+                    data = resp.json() or []
+                    if not data:
+                        continue
+                    fetched += len(data)
+                    for g in data:
+                        ht = _norm_team_cfbd(g.get('home_team'))
+                        at = _norm_team_cfbd(g.get('away_team'))
+                        hp = g.get('home_points')
+                        ap = g.get('away_points')
+                        comp = g.get('completed')
+                        # Accept zeros; only skip if truly None
+                        if hp is None or ap is None:
+                            continue
+                        games_map[(wk, ht, at)] = {'home_points': hp, 'away_points': ap, 'completed': comp}
+                    # If we populated anything for this week, no need to try other variants
+                    if any(k[0] == wk for k in games_map.keys()):
+                        break
+                except Exception:
+                    continue
+    except Exception:
+        return {'step': 'cfbd_update', 'error': 'fetch_failed'}
+
+    if not games_map:
+        return {'step': 'cfbd_update', 'skipped': 'no_games_from_api', 'notes': http_notes}
+
+    # Apply updates into our CSV
+    try:
+        changed_rows = 0
+        for i, r in df.iterrows():
+            try:
+                if int(r.get('season', 0)) != 2025:
+                    continue
+            except Exception:
+                continue
+            # Optional week filter
+            try:
+                rw = int(r.get('week')) if pd.notna(r.get('week')) else None
+            except Exception:
+                rw = None
+            if week is not None and rw is not None and rw != int(week):
+                continue
+            # Skip if already has actuals
+            if pd.notna(r.get('actual_home_points')) and pd.notna(r.get('actual_away_points')):
+                continue
+            ht = _norm_team_cfbd(r.get('home_team'))
+            at = _norm_team_cfbd(r.get('away_team'))
+            # Try exact week key first, then try the other label (0<->1) for 2025 mismatch tolerance
+            keys = []
+            if rw is not None:
+                keys.append((rw, ht, at))
+                if rw in (0,1):
+                    keys.append(((1 if rw == 0 else 0), ht, at))
+            else:
+                for wk in weeks:
+                    keys.append((wk, ht, at))
+            hit = None
+            for k in keys:
+                if k in games_map:
+                    hit = games_map[k]
+                    break
+            if hit is None:
+                continue
+            hp = hit['home_points']
+            ap = hit['away_points']
+            try:
+                if pd.isna(r.get('actual_home_points')) and hp is not None:
+                    df.at[i, 'actual_home_points'] = int(hp)
+                if pd.isna(r.get('actual_away_points')) and ap is not None:
+                    df.at[i, 'actual_away_points'] = int(ap)
+                changed_rows += 1
+            except Exception:
+                continue
+        if changed_rows > 0:
+            df.to_csv(target_path, index=False)
+            updated = changed_rows
+    except Exception as e:
+        return {'step': 'cfbd_update', 'error': f'apply_failed: {e}'}
+
+    return {'step': 'cfbd_update', 'updated_rows': int(updated), 'fetched_games': int(fetched), 'path': target_path, 'notes': http_notes}
+
 def _geocode_needed(base_dir: str, selected_week: int | None) -> bool:
     try:
         sched_path = os.path.join(DATA_DIR, 'college_football_schedule_2025.csv')
@@ -745,31 +1011,33 @@ def index():
     selected_week = weeks[0] if weeks else None
     if request.method == 'GET':
         today = dt.datetime.now().date()
-        # Find the first week with upcoming games
+        # Pick the first week that still has upcoming games for default week selection,
+        # but do NOT filter to only-upcoming so completed games (e.g., yesterday) are visible.
         filter_type = 'all'
         for w in weeks:
             week_df = pred_df[pred_df['week'] == w]
             upcoming = week_df[(week_df['actual_home_points'].isnull()) & (week_df['actual_away_points'].isnull())]
             if not upcoming.empty:
                 selected_week = w
-                filter_type = 'upcoming'
                 break
+        # If no upcoming games found (e.g., all completed), pick the max available week
+        if selected_week is None and weeks:
+            selected_week = max(weeks)
         week_games = pred_df[pred_df['week'] == int(selected_week)].copy() if selected_week else pred_df.copy()
         week_games['date_only'] = week_games['start_date'].str[:10]
         all_dates = sorted(week_games['date_only'].dropna().unique())
-        filtered_games = week_games[(week_games['actual_home_points'].isnull()) & (week_games['actual_away_points'].isnull())]
+        filtered_games = week_games.copy()
         selected_date = ''
         selected_conference = ''
         show_all = False
-        hide_unknown = True
+        hide_unknown = False
         sort_by = 'time'
-        # Apply hide_unknown and limit for GET defaults
+        # Apply hide_unknown for GET defaults; do not cap results
         try:
             if hide_unknown:
                 filtered_games = filtered_games[(filtered_games['home_conference'] != 'Unknown') & (filtered_games['away_conference'] != 'Unknown')]
         except Exception:
             pass
-        filtered_games = filtered_games.head(30)
     else:
         # POST: Use form data to filter games
         filter_type = request.form.get('filter_type', 'all')
@@ -797,8 +1065,7 @@ def index():
                 filtered_games = filtered_games[(filtered_games['home_conference'] != 'Unknown') & (filtered_games['away_conference'] != 'Unknown')]
         except Exception:
             pass
-        if not show_all:
-            filtered_games = filtered_games.head(50)
+    # Do not cap results; allow full week view even when show_all is false to avoid missing dates/games
 
     # Prepare game cards for all filtered games
     def r2(val):
@@ -816,17 +1083,27 @@ def index():
             home_team=game_row['home_team'],
             away_team=game_row['away_team']
         )
-        start_date_str = game_row.get('start_date', '')
-        central_time_str = ''
+        # Time handling: pass ISO to client and render in user's local time via JS
+        start_date_str = str(game_row.get('start_date', '') or '')
+        start_iso = str(game_row.get('start_date_api', '') or start_date_str)
+        display_time_fallback = start_date_str
         sort_ts = None
-        if start_date_str:
+        if start_iso:
             try:
-                dt_utc = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
-                dt_central = dt_utc.astimezone(pytz.timezone('US/Central'))
-                central_time_str = dt_central.strftime('%A, %B %d, %Y %I:%M %p CT')
-                sort_ts = dt_central.timestamp()
+                iso_norm = start_iso
+                if 'T' not in iso_norm and ' ' in iso_norm:
+                    iso_norm = iso_norm.replace(' ', 'T')
+                if iso_norm.endswith('Z'):
+                    dt_utc = datetime.fromisoformat(iso_norm.replace('Z', '+00:00'))
+                else:
+                    dt_tmp = datetime.fromisoformat(iso_norm)
+                    if dt_tmp.tzinfo is None:
+                        dt_utc = dt_tmp.replace(tzinfo=pytz.UTC)
+                    else:
+                        dt_utc = dt_tmp.astimezone(pytz.UTC)
+                sort_ts = dt_utc.timestamp()
             except Exception:
-                central_time_str = start_date_str
+                pass
         conf_lower = conf_upper = conf_std = None
         def normalize_team_name(name):
             return str(name).strip().lower().replace('&', 'and').replace('  ', ' ')
@@ -1049,7 +1326,8 @@ def index():
             'home_team': game_row['home_team'],
             'away_team': game_row['away_team'],
             'venue': game_row.get('venue', ''),
-            'game_time': central_time_str,
+            'game_time': display_time_fallback,
+            'start_iso': start_iso,
             'sort_ts': sort_ts,
             'predicted_total_points': r2(predicted_total_points),
             'pred_total_adj': r2(pred_total_adj_num) if pred_total_adj_num is not None else None,
@@ -1222,7 +1500,7 @@ def index():
             </div>
             <div class="control">
                 <label for="date">Date</label>
-                <select name="date" id="date" onchange="document.getElementById('mainForm').submit();">
+                <select name="date" id="date">
                     <option value="">All Dates</option>
                     {% for d in all_dates %}
                     <option value="{{d}}" {% if d == selected_date %}selected{% endif %}>{{d}}</option>
@@ -1313,7 +1591,7 @@ def index():
                     {% endif %}
                 </div>
                 <li><strong>Venue:</strong> {{game_info['venue']}}</li>
-                <li><strong>Day & Time (Central):</strong> {{game_info['game_time']}}</li>
+                <li><strong>Day & Time (Local):</strong> <span class="local-time" data-iso="{{game_info['start_iso']}}">{{game_info['game_time']}}</span></li>
                 <li><strong>Predicted Total Points:</strong>
                     <span class="total-adj">{{game_info['pred_total_adj'] or game_info['predicted_total_points']}}</span>
                     <span class="total-pre" style="display:none;">{{game_info['pred_total_pre'] or game_info['predicted_total_points']}}</span>
@@ -1493,6 +1771,23 @@ def index():
                 const btn = document.getElementById('refreshBtn');
                 if(btn){ btn.addEventListener('click', doRefresh); }
 
+                // Render game times in user's local timezone
+                try {
+                    const opts = { weekday: 'short', month: 'short', day: '2-digit', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' };
+                    document.querySelectorAll('.local-time').forEach(el => {
+                        const iso = (el.getAttribute('data-iso') || '').trim();
+                        if(!iso) return;
+                        let s = iso;
+                        if(s.indexOf('T') === -1 && s.indexOf(' ') !== -1){ s = s.replace(' ', 'T'); }
+                        // If no timezone provided, assume UTC (append Z)
+                        if(!/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) s = s + 'Z';
+                        const d = new Date(s);
+                        if(!isNaN(d)){
+                            el.textContent = d.toLocaleString(undefined, opts);
+                        }
+                    });
+                } catch(e) { /* no-op */ }
+
                 // Client-side sorting
                 const sortSelect = document.getElementById('sort_by');
                 const grid = document.querySelector('.grid');
@@ -1540,6 +1835,49 @@ def index():
                     document.querySelectorAll('.total-pre').forEach(el => el.style.display = showAdj ? 'none' : '');
                 }
                 if(chk){ chk.addEventListener('change', applyToggle); applyToggle(); }
+
+                // Local-date dropdown and filtering (so yesterday's finals don't shift to today by UTC)
+                const dateSelect = document.getElementById('date');
+                function localDateKey(iso){
+                    if(!iso) return '';
+                    let s = iso;
+                    if(s.indexOf('T') === -1 && s.indexOf(' ') !== -1){ s = s.replace(' ', 'T'); }
+                    if(!/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) s = s + 'Z';
+                    const d = new Date(s);
+                    if(isNaN(d)) return '';
+                    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+                }
+                function rebuildDateOptions(){
+                    if(!dateSelect || !grid) return;
+                    const dates = new Set();
+                    const cards = Array.from(grid.children).filter(el => el.classList.contains('card'));
+                    cards.forEach(card => {
+                        const t = card.querySelector('.local-time');
+                        const iso = t ? t.getAttribute('data-iso') : '';
+                        const key = localDateKey(iso);
+                        if(key) dates.add(key);
+                    });
+                    const prev = dateSelect.value;
+                    const values = Array.from(dates).sort();
+                    dateSelect.innerHTML = '';
+                    const optAll = document.createElement('option'); optAll.value = ''; optAll.textContent = 'All Dates'; dateSelect.appendChild(optAll);
+                    values.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; dateSelect.appendChild(o); });
+                    dateSelect.value = (prev && values.includes(prev)) ? prev : '';
+                }
+                function applyDateFilter(){
+                    if(!dateSelect || !grid) return;
+                    const want = dateSelect.value;
+                    const cards = Array.from(grid.children).filter(el => el.classList.contains('card'));
+                    cards.forEach(card => {
+                        if(!want){ card.style.display = ''; return; }
+                        const t = card.querySelector('.local-time');
+                        const iso = t ? t.getAttribute('data-iso') : '';
+                        const key = localDateKey(iso);
+                        card.style.display = (key === want) ? '' : 'none';
+                    });
+                }
+                rebuildDateOptions();
+                if(dateSelect){ dateSelect.addEventListener('change', applyDateFilter); applyDateFilter(); }
 
                 // Back to top behavior
                 const topBtn = document.getElementById('backToTop');
@@ -2356,6 +2694,8 @@ def recommendations_performance_page():
 def _do_refresh(quick: bool):
     """Execute the refresh pipeline and return (payload_dict, status_code)."""
     base_dir = os.path.dirname(os.path.abspath(__file__))  # .../NCAFCompare
+    # Try to ensure CFBD key is loaded in env before any network steps
+    _ensure_cfbd_key()
     py = sys.executable or 'python'
     # Try to honor week from current request context if available
     week_arg = None
@@ -2365,22 +2705,54 @@ def _do_refresh(quick: bool):
         week_arg = int(w) if w != '' else None
     except Exception:
         week_arg = None
+    # Helper to resolve a script path across both top-level src/ and NCAFCompare/src/
+    def _resolve_script(rel_path: str) -> str | None:
+        cand = [
+            os.path.join(base_dir, 'src', 'data', rel_path),
+            os.path.join(base_dir, 'NCAFCompare', 'src', 'data', rel_path),
+        ]
+        for p in cand:
+            try:
+                if os.path.exists(p):
+                    return p
+            except Exception:
+                continue
+        return None
+
     if quick:
-        cmds = [
-            [py, os.path.join(base_dir, 'src', 'data', 'update_scores_2025.py')] + (["--week", str(week_arg)] if week_arg is not None else []),
-            [py, os.path.join(base_dir, 'src', 'data', 'fetch_2025_lines.py')] + (["--week", str(week_arg)] if week_arg is not None else []),
-        ]
+        cmds = []
+        s1 = _resolve_script('update_scores_2025.py')
+        s2 = _resolve_script('fetch_2025_lines.py')
+        if s1:
+            cmds.append([py, s1] + (["--week", str(week_arg)] if week_arg is not None else []))
+        if s2:
+            cmds.append([py, s2] + (["--week", str(week_arg)] if week_arg is not None else []))
     else:
-        cmds = [
-            [py, os.path.join(base_dir, 'src', 'data', 'geocode_venues_2025.py'), '--max-new', '120'] + (["--week", str(week_arg)] if week_arg is not None else []),
-            [py, os.path.join(base_dir, 'src', 'data', 'enrich_weather_2025.py')] + (["--week", str(week_arg)] if week_arg is not None else []),
-            [py, os.path.join(base_dir, 'src', 'data', 'orchestrate_refresh.py')],
-            [py, os.path.join(base_dir, 'src', 'data', 'merge_all_features.py')],
-            [py, os.path.join(base_dir, 'generate_enhanced_predictions.py')],
-            [py, os.path.join(base_dir, 'src', 'data', 'update_scores_2025.py')] + (["--week", str(week_arg)] if week_arg is not None else []),
-            [py, os.path.join(base_dir, 'src', 'data', 'fetch_2025_lines.py')] + (["--week", str(week_arg)] if week_arg is not None else []),
-            [py, os.path.join(base_dir, 'generate_enhanced_predictions.py')],
-        ]
+        cmds = []
+        g = _resolve_script('geocode_venues_2025.py')
+        if g:
+            cmds.append([py, g, '--max-new', '120'] + (["--week", str(week_arg)] if week_arg is not None else []))
+        e = _resolve_script('enrich_weather_2025.py')
+        if e:
+            cmds.append([py, e] + (["--week", str(week_arg)] if week_arg is not None else []))
+        o = _resolve_script('orchestrate_refresh.py')
+        if o:
+            cmds.append([py, o])
+        m = _resolve_script('merge_all_features.py')
+        if m:
+            cmds.append([py, m])
+        # generate_enhanced_predictions.py is at project root
+        gen = os.path.join(base_dir, 'generate_enhanced_predictions.py')
+        if os.path.exists(gen):
+            cmds.append([py, gen])
+        s1 = _resolve_script('update_scores_2025.py')
+        s2 = _resolve_script('fetch_2025_lines.py')
+        if s1:
+            cmds.append([py, s1] + (["--week", str(week_arg)] if week_arg is not None else []))
+        if s2:
+            cmds.append([py, s2] + (["--week", str(week_arg)] if week_arg is not None else []))
+        if os.path.exists(gen):
+            cmds.append([py, gen])
     ran = []
     t0 = time.time()
     for cmd in cmds:
@@ -2391,6 +2763,20 @@ def _do_refresh(quick: bool):
             ran.append({'cmd': ' '.join(cmd), 'seconds': step_dur, 'returncode': out.returncode, 'stdout': out.stdout[-3000:], 'stderr': out.stderr[-1500:]})
         except Exception as e:
             ran.append({'cmd': ' '.join(cmd), 'error': str(e)})
+    # Try to update actual scores via CFBD if API key is available
+    try:
+        week_hint = None
+        try:
+            from flask import request as _rq
+            w = _rq.args.get('week', '').strip()
+            week_hint = int(w) if w != '' else None
+        except Exception:
+            week_hint = None
+        cfbd_res = _update_scores_with_cfbd(week_hint)
+        if isinstance(cfbd_res, dict):
+            ran.append(cfbd_res)
+    except Exception as _e_cfbd:
+        ran.append({'step': 'cfbd_update', 'error': str(_e_cfbd)})
     # Reload predictions
     try:
         _reload_predictions()
@@ -2461,32 +2847,64 @@ def refresh_data():
 def _refresh_thread(quick: bool):
     global REFRESH_STATE
     try:
+        # Ensure CFBD key is present before we start
+        _ensure_cfbd_key()
         base_dir = os.path.dirname(os.path.abspath(__file__))
         py = sys.executable or 'python'
         # Optional week filter from state
         with _REFRESH_LOCK:
             selected_week = REFRESH_STATE.get('week')
-        if quick:
-            cmds = [
-                [py, os.path.join(base_dir, 'src', 'data', 'update_scores_2025.py')] + (["--week", str(selected_week)] if selected_week is not None else []),
-                [py, os.path.join(base_dir, 'src', 'data', 'fetch_2025_lines.py')] + (["--week", str(selected_week)] if selected_week is not None else []),
+        # Helper to resolve a script path across both top-level src/ and NCAFCompare/src/
+        def _resolve_script(rel_path: str) -> str | None:
+            cand = [
+                os.path.join(base_dir, 'src', 'data', rel_path),
+                os.path.join(base_dir, 'NCAFCompare', 'src', 'data', rel_path),
             ]
+            for p in cand:
+                try:
+                    if os.path.exists(p):
+                        return p
+                except Exception:
+                    continue
+            return None
+
+        if quick:
+            cmds = []
+            s1 = _resolve_script('update_scores_2025.py')
+            s2 = _resolve_script('fetch_2025_lines.py')
+            if s1:
+                cmds.append([py, s1] + (["--week", str(selected_week)] if selected_week is not None else []))
+            if s2:
+                cmds.append([py, s2] + (["--week", str(selected_week)] if selected_week is not None else []))
         else:
             cmds = []
-            if _geocode_needed(base_dir, selected_week):
-                cmds.append([py, os.path.join(base_dir, 'src', 'data', 'geocode_venues_2025.py'), '--max-new', '120'] + (["--week", str(selected_week)] if selected_week is not None else []))
-            else:
-                with _REFRESH_LOCK:
-                    REFRESH_STATE['details'].append({'step': 'geocode_venues_2025.py', 'skipped': 'cache up-to-date'})
-            cmds.extend([
-                [py, os.path.join(base_dir, 'src', 'data', 'enrich_weather_2025.py')] + (["--week", str(selected_week)] if selected_week is not None else []),
-                [py, os.path.join(base_dir, 'src', 'data', 'orchestrate_refresh.py')],
-                [py, os.path.join(base_dir, 'src', 'data', 'merge_all_features.py')],
-                [py, os.path.join(base_dir, 'generate_enhanced_predictions.py')],
-                [py, os.path.join(base_dir, 'src', 'data', 'update_scores_2025.py')] + (["--week", str(selected_week)] if selected_week is not None else []),
-                [py, os.path.join(base_dir, 'src', 'data', 'fetch_2025_lines.py')] + (["--week", str(selected_week)] if selected_week is not None else []),
-                [py, os.path.join(base_dir, 'generate_enhanced_predictions.py')],
-            ])
+            g = _resolve_script('geocode_venues_2025.py')
+            if g:
+                if _geocode_needed(base_dir, selected_week):
+                    cmds.append([py, g, '--max-new', '120'] + (["--week", str(selected_week)] if selected_week is not None else []))
+                else:
+                    with _REFRESH_LOCK:
+                        REFRESH_STATE['details'].append({'step': 'geocode_venues_2025.py', 'skipped': 'cache up-to-date'})
+            e = _resolve_script('enrich_weather_2025.py')
+            if e:
+                cmds.append([py, e] + (["--week", str(selected_week)] if selected_week is not None else []))
+            o = _resolve_script('orchestrate_refresh.py')
+            if o:
+                cmds.append([py, o])
+            m = _resolve_script('merge_all_features.py')
+            if m:
+                cmds.append([py, m])
+            gen = os.path.join(base_dir, 'generate_enhanced_predictions.py')
+            if os.path.exists(gen):
+                cmds.append([py, gen])
+            s1 = _resolve_script('update_scores_2025.py')
+            s2 = _resolve_script('fetch_2025_lines.py')
+            if s1:
+                cmds.append([py, s1] + (["--week", str(selected_week)] if selected_week is not None else []))
+            if s2:
+                cmds.append([py, s2] + (["--week", str(selected_week)] if selected_week is not None else []))
+            if os.path.exists(gen):
+                cmds.append([py, gen])
         t0 = time.time()
         # Run each step, updating progress between steps
         for idx, cmd in enumerate(cmds):
@@ -2507,6 +2925,16 @@ def _refresh_thread(quick: bool):
                 # Replace the running marker with final entry
                 REFRESH_STATE['details'][-1] = entry
                 REFRESH_STATE['seconds_total'] = round(time.time() - t0, 2)
+        # Update actual scores via CFBD if available (best-effort)
+        try:
+            with _REFRESH_LOCK:
+                wk = REFRESH_STATE.get('week')
+            res = _update_scores_with_cfbd(wk)
+            with _REFRESH_LOCK:
+                REFRESH_STATE['details'].append(res if isinstance(res, dict) else {'step': 'cfbd_update', 'note': 'no_result'})
+        except Exception as _e:
+            with _REFRESH_LOCK:
+                REFRESH_STATE['details'].append({'step': 'cfbd_update', 'error': str(_e)})
         # Reload predictions
         try:
             _reload_predictions()

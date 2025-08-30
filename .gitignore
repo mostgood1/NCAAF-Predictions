@@ -1,2 +1,6 @@
 minimal_deploy/
 NCAFCompare/
+# Local environment files
+.env
+.env.*
+*.env
