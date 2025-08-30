@@ -1,11 +1,15 @@
 services:
   - type: web
     name: ncaaf-frontend
-    env: DATA_DIR=/opt/render/project/src/data
-    buildCommand: pip install -r requirements.txt
+    env: python
+    buildCommand: |
+      git submodule update --init --recursive || true
+      pip install -r requirements.txt
     startCommand: gunicorn --bind 0.0.0.0:$PORT wsgi:application
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.16
+      - key: DATA_DIR
+        value: /opt/render/project/src/data
     plan: free
     autoDeploy: true
