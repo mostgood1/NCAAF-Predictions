@@ -1339,27 +1339,34 @@ def index():
             home_team=game_row['home_team'],
             away_team=game_row['away_team']
         )
-        # Time handling: pass ISO to client and render in user's local time via JS
-        start_date_str = str(game_row.get('start_date', '') or '')
-        start_iso = str(game_row.get('start_date_api', '') or start_date_str)
-        display_time_fallback = start_date_str
-        sort_ts = None
-        if start_iso:
-            try:
-                iso_norm = start_iso
-                if 'T' not in iso_norm and ' ' in iso_norm:
-                    iso_norm = iso_norm.replace(' ', 'T')
-                if iso_norm.endswith('Z'):
-                    dt_utc = datetime.fromisoformat(iso_norm.replace('Z', '+00:00'))
+    # Time handling: pass ISO to client and render in user's local time via JS.
+    # Also set a friendly UTC fallback so raw timestamps never show if JS doesn't run.
+    start_date_str = str(game_row.get('start_date', '') or '')
+    start_iso = str(game_row.get('start_date_api', '') or start_date_str)
+    display_time_fallback = start_date_str
+    sort_ts = None
+    if start_iso:
+        try:
+            iso_norm = start_iso
+            if 'T' not in iso_norm and ' ' in iso_norm:
+                iso_norm = iso_norm.replace(' ', 'T')
+            if iso_norm.endswith('Z'):
+                dt_utc = datetime.fromisoformat(iso_norm.replace('Z', '+00:00'))
+            else:
+                dt_tmp = datetime.fromisoformat(iso_norm)
+                if dt_tmp.tzinfo is None:
+                    dt_utc = dt_tmp.replace(tzinfo=pytz.UTC)
                 else:
-                    dt_tmp = datetime.fromisoformat(iso_norm)
-                    if dt_tmp.tzinfo is None:
-                        dt_utc = dt_tmp.replace(tzinfo=pytz.UTC)
-                    else:
-                        dt_utc = dt_tmp.astimezone(pytz.UTC)
-                sort_ts = dt_utc.timestamp()
+                    dt_utc = dt_tmp.astimezone(pytz.UTC)
+            sort_ts = dt_utc.timestamp()
+            # Normalize start_iso to strict ISO Z format and set friendly UTC fallback text
+            start_iso = dt_utc.isoformat().replace('+00:00', 'Z')
+            try:
+                display_time_fallback = dt_utc.strftime('%a, %b %d, %Y, %I:%M %p UTC')
             except Exception:
-                pass
+                display_time_fallback = dt_utc.isoformat().replace('+00:00','Z')
+        except Exception:
+            pass
         conf_lower = conf_upper = conf_std = None
         try:
             week_val = int(game_row.get('week', 0))
