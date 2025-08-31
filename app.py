@@ -1,5 +1,6 @@
 from flask import Flask, render_template_string, request, redirect, url_for
 import ast
+import unicodedata
 import pytz
 from datetime import datetime
 import pandas as pd
@@ -723,16 +724,61 @@ def _update_scores_with_cfbd(week: int | None = None, overwrite: bool = False) -
     if df.empty or 'season' not in df.columns or 'home_team' not in df.columns or 'away_team' not in df.columns:
         return {'step': 'cfbd_update', 'skipped': 'scores_df_invalid'}
 
-    def _norm_team_cfbd(name: str) -> str:
+    def _norm_team_base(name: str) -> str:
+        """Shared normalizer: lowercase, diacritics stripped, unify apostrophes, &->and, trim and collapse whitespace."""
         try:
             s = str(name or '').strip().lower()
+            # Unify symbols
             s = s.replace('&', 'and')
             s = s.replace("ʻ", "'").replace("’", "'")
+            # Fix common cases
             s = s.replace("hawai'i", "hawaii")
-            s = re.sub(r"\s+", " ", s)
+            # Strip diacritics (e.g., José -> Jose)
+            s = unicodedata.normalize('NFKD', s)
+            s = ''.join(ch for ch in s if not unicodedata.combining(ch))
+            # Normalize punctuation -> space for broad match
+            s = re.sub(r"[^a-z0-9 '\-\(\)]", " ", s)
+            s = re.sub(r"\s+", " ", s).strip()
             return s
         except Exception:
             return str(name)
+
+    def _norm_team_cfbd(name: str) -> str:
+        return _norm_team_base(name)
+
+    # Cleanup: clear any accidental 0-0 writes (no 0-0 finals exist in college football)
+    try:
+        cleared = 0
+        for i, r in df.iterrows():
+            try:
+                if int(r.get('season', 0)) != 2025:
+                    continue
+                ah = r.get('actual_home_points')
+                aa = r.get('actual_away_points')
+                if pd.notna(ah) and pd.notna(aa):
+                    try:
+                        ahv = float(ah)
+                        aav = float(aa)
+                    except Exception:
+                        # handle strings like '0'
+                        try:
+                            ahv = float(str(ah).strip())
+                            aav = float(str(aa).strip())
+                        except Exception:
+                            continue
+                    if ahv == 0.0 and aav == 0.0:
+                        df.at[i, 'actual_home_points'] = pd.NA
+                        df.at[i, 'actual_away_points'] = pd.NA
+                        cleared += 1
+            except Exception:
+                continue
+        if cleared > 0:
+            try:
+                df.to_csv(target_path, index=False)
+            except Exception:
+                pass
+    except Exception:
+        pass
 
     # Build a lookup of games from CFBD
     base_url = 'https://api.collegefootballdata.com/games'
@@ -758,13 +804,18 @@ def _update_scores_with_cfbd(week: int | None = None, overwrite: bool = False) -
     # Try a few parameter variants to avoid missing data due to filters
     def _variants(wk: int):
         base = {'year': 2025, 'week': wk}
-        # Try multiple combos: division/classification, seasonType, and status flags
+        # Try multiple combos to cover FBS/FCS and unscoped queries
         combos = [
             {'seasonType': 'regular', 'division': 'fbs'},
+            {'seasonType': 'regular', 'division': 'fcs'},
             {'division': 'fbs'},
+            {'division': 'fcs'},
             {'seasonType': 'regular'},
             {'classification': 'fbs'},
+            {'classification': 'fcs'},
             {'seasonType': 'regular', 'classification': 'fbs'},
+            {'seasonType': 'regular', 'classification': 'fcs'},
+            {},
         ]
         statuses = [None, 'completed', 'final']
         vars = []
@@ -798,18 +849,10 @@ def _update_scores_with_cfbd(week: int | None = None, overwrite: bool = False) -
             except Exception:
                 pass
             if not unique_dates:
-                unique_dates.update({'2025-08-28','2025-08-29','2025-08-30','2025-08-31'})
+                # Fallback coverage for Week 0/1 including Labor Day
+                unique_dates.update({'2025-08-28','2025-08-29','2025-08-30','2025-08-31','2025-09-01'})
             def _norm_team_generic(s):
-                try:
-                    s = str(s or '').strip().lower()
-                    s = s.replace('&','and')
-                    s = s.replace("ʻ", "'").replace("’", "'")
-                    s = s.replace("hawai'i", "hawaii")
-                    s = re.sub(r"[^a-z0-9 '\-\(\)]", " ", s)
-                    s = re.sub(r"\s+", " ", s).strip()
-                    return s
-                except Exception:
-                    return str(s)
+                return _norm_team_base(s)
             for dstr in sorted(unique_dates):
                 ymd = dstr.replace('-','')
                 es_urls = [
@@ -849,15 +892,25 @@ def _update_scores_with_cfbd(week: int | None = None, overwrite: bool = False) -
                                 hp = home.get('score')
                                 ap = away.get('score')
                             stype = (ev.get('status') or {}).get('type') or {}
-                            comp = bool(stype.get('completed')) or (str(stype.get('name','')).upper() in ('STATUS_FINAL','STATUS_FULL_TIME')) or ('final' in str(stype.get('description','')).lower())
+                            state = str(stype.get('state','')).lower()  # 'pre', 'in', 'post'
+                            nameu = str(stype.get('name','')).upper()
+                            comp = (stype.get('completed') is True) or (state in ('post','final')) or (nameu in ('STATUS_FINAL','STATUS_FULL_TIME'))
                             if hp is None or ap is None:
                                 continue
+                            # Never index 0-0 from ESPN; no such finals exist
+                            try:
+                                if int(hp) == 0 and int(ap) == 0:
+                                    continue
+                            except Exception:
+                                pass
                             if not comp:
                                 # Skip non-final games to avoid premature writes
                                 continue
                             for ht in hcands:
                                 for at in acands:
+                                    # Map in both orientations: (home, away) and (away, home) with swapped points
                                     games_map_nowk[(ht, at)] = {'home_points': hp, 'away_points': ap, 'completed': True}
+                                    games_map_nowk[(at, ht)] = {'home_points': ap, 'away_points': hp, 'completed': True}
                         if games_map_nowk:
                             break
                     except Exception:
@@ -890,6 +943,12 @@ def _update_scores_with_cfbd(week: int | None = None, overwrite: bool = False) -
                             comp = g.get('completed')
                             if hp is None or ap is None:
                                 continue
+                            # Skip 0-0 non-finals or erroneous entries
+                            try:
+                                if int(hp) == 0 and int(ap) == 0:
+                                    continue
+                            except Exception:
+                                pass
                             games_map[(wk, ht, at)] = {'home_points': hp, 'away_points': ap, 'completed': comp}
                         if any(k[0] == wk for k in games_map.keys()):
                             break
@@ -926,6 +985,12 @@ def _update_scores_with_cfbd(week: int | None = None, overwrite: bool = False) -
                         comp = g.get('completed') or g.get('status') in ('completed','final','Final')
                         if hp is None or ap is None:
                             continue
+                        # Skip 0-0 entries
+                        try:
+                            if int(hp) == 0 and int(ap) == 0:
+                                continue
+                        except Exception:
+                            pass
                         games_map[(wk, ht, at)] = {'home_points': hp, 'away_points': ap, 'completed': comp}
                     if any(k[0] == wk for k in games_map.keys()):
                         break
@@ -1218,12 +1283,13 @@ def index():
         selected_date = ''
         selected_conference = ''
         show_all = False
-        hide_unknown = False
+    # removed hide_unknown control
+        hide_both_unknown = False
         sort_by = 'time'
-        # Apply hide_unknown for GET defaults; cap results for speed on cold starts
+    # Cap results for speed on cold starts
         try:
-            if hide_unknown:
-                filtered_games = filtered_games[(filtered_games['home_conference'] != 'Unknown') & (filtered_games['away_conference'] != 'Unknown')]
+            if hide_both_unknown:
+                filtered_games = filtered_games[~((filtered_games['home_conference'] == 'Unknown') & (filtered_games['away_conference'] == 'Unknown'))]
         except Exception:
             pass
         # Cap initial payload to keep first render fast; users can Show All to expand
@@ -1235,7 +1301,7 @@ def index():
         selected_date = request.form.get('date', '')
         selected_conference = request.form.get('conference', '')
         show_all = bool(request.form.get('show_all'))
-        hide_unknown = bool(request.form.get('hide_unknown'))
+        hide_both_unknown = bool(request.form.get('hide_both_unknown'))
         sort_by = request.form.get('sort_by', 'time')
         week_games = pred_df[pred_df['week'] == int(selected_week)].copy() if selected_week else pred_df.copy()
         week_games['date_only'] = week_games['start_date'].str[:10]
@@ -1249,10 +1315,10 @@ def index():
             filtered_games = filtered_games[(filtered_games['actual_home_points'].notnull()) & (filtered_games['actual_away_points'].notnull())]
         elif filter_type == 'upcoming':
             filtered_games = filtered_games[(filtered_games['actual_home_points'].isnull()) & (filtered_games['actual_away_points'].isnull())]
-        # Apply hide_unknown and limit for POST
+    # Apply limiters for POST
         try:
-            if hide_unknown:
-                filtered_games = filtered_games[(filtered_games['home_conference'] != 'Unknown') & (filtered_games['away_conference'] != 'Unknown')]
+            if hide_both_unknown:
+                filtered_games = filtered_games[~((filtered_games['home_conference'] == 'Unknown') & (filtered_games['away_conference'] == 'Unknown'))]
         except Exception:
             pass
         # Do not cap POST results; user explicitly filtered
@@ -1720,7 +1786,8 @@ def index():
                 </select>
             </div>
             <label class="control"><input type="checkbox" name="show_all" {% if show_all %}checked{% endif %} onchange="document.getElementById('mainForm').submit();"> Show all games for week</label>
-            <label class="control"><input type="checkbox" name="hide_unknown" {% if hide_unknown %}checked{% endif %} onchange="document.getElementById('mainForm').submit();"> Hide Unknown conferences</label>
+            
+            <label class="control"><input type="checkbox" name="hide_both_unknown" {% if hide_both_unknown %}checked{% endif %} onchange="document.getElementById('mainForm').submit();"> Hide games where both conferences are Unknown</label>
             <button type="submit">Submit</button>
         </form>
     <div class="grid">
@@ -2035,7 +2102,7 @@ def index():
             });
         })();
         </script>
-    ''', weeks=weeks, selected_week=selected_week, all_dates=all_dates, selected_date=selected_date, show_all=show_all, hide_unknown=hide_unknown, all_conferences=pred_df['home_conference'].unique(), selected_conference=selected_conference, game_cards=game_cards, filter_type=filter_type, summary=summary, sort_by=sort_by, HIDE_REFRESH=HIDE_REFRESH)
+    ''', weeks=weeks, selected_week=selected_week, all_dates=all_dates, selected_date=selected_date, show_all=show_all, hide_both_unknown=hide_both_unknown, all_conferences=pred_df['home_conference'].unique(), selected_conference=selected_conference, game_cards=game_cards, filter_type=filter_type, summary=summary, sort_by=sort_by, HIDE_REFRESH=HIDE_REFRESH)
 
 
 # New route: Projected Conference Records for 2025
