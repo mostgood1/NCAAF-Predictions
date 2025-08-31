@@ -585,6 +585,292 @@ def get_betting_lines(year, week, home_team, away_team):
             return odds_alt
     return []
 
+def _build_game_card(game_row: pd.Series) -> dict:
+    def r2(val):
+        try:
+            return f"{float(val):.2f}"
+        except Exception:
+            return val
+    home_asset = get_team_asset(game_row['home_team'])
+    away_asset = get_team_asset(game_row['away_team'])
+    betting_lines = get_betting_lines(
+        year=int(game_row['season']),
+        week=int(game_row['week']),
+        home_team=game_row['home_team'],
+        away_team=game_row['away_team']
+    )
+    # Time handling and sort key
+    start_date_str = str(game_row.get('start_date', '') or '')
+    start_iso = str(game_row.get('start_date_api', '') or start_date_str)
+    display_time_fallback = start_date_str
+    sort_ts = None
+    if start_iso:
+        try:
+            iso_norm = start_iso
+            if 'T' not in iso_norm and ' ' in iso_norm:
+                iso_norm = iso_norm.replace(' ', 'T')
+            if iso_norm.endswith('Z'):
+                dt_utc = datetime.fromisoformat(iso_norm.replace('Z', '+00:00'))
+            else:
+                dt_tmp = datetime.fromisoformat(iso_norm)
+                if dt_tmp.tzinfo is None:
+                    dt_utc = dt_tmp.replace(tzinfo=pytz.UTC)
+                else:
+                    dt_utc = dt_tmp.astimezone(pytz.UTC)
+            sort_ts = dt_utc.timestamp()
+            start_iso = dt_utc.isoformat().replace('+00:00', 'Z')
+            try:
+                display_time_fallback = dt_utc.strftime('%a, %b %d, %Y, %I:%M %p UTC')
+            except Exception:
+                display_time_fallback = dt_utc.isoformat().replace('+00:00','Z')
+        except Exception:
+            pass
+    # Confidence bounds
+    conf_lower = conf_upper = conf_std = None
+    try:
+        week_val = int(game_row.get('week', 0))
+        season_val = int(game_row.get('season', 0))
+        key = (season_val, week_val, norm(game_row.get('home_team','')), norm(game_row.get('away_team','')))
+        if key in WIN_MARGIN_CONF_INDEX:
+            ent = WIN_MARGIN_CONF_INDEX[key]
+            conf_lower = r2(ent.get('lower', None))
+            conf_upper = r2(ent.get('upper', None))
+            conf_std = r2(ent.get('std', None))
+    except Exception:
+        pass
+    # Preds/actuals
+    actual_home = _safe_float(game_row.get('actual_home_points', None))
+    actual_away = _safe_float(game_row.get('actual_away_points', None))
+    def _is_valid_num(x):
+        try:
+            return x is not None and not (isinstance(x, float) and math.isnan(x))
+        except Exception:
+            return x is not None
+    predicted_home = _safe_float(game_row.get('predicted_home_points', None))
+    predicted_away = _safe_float(game_row.get('predicted_away_points', None))
+    predicted_winner = None
+    actual_winner = None
+    correct_prediction = None
+    if predicted_home is not None and predicted_away is not None:
+        if predicted_home > predicted_away:
+            predicted_winner = game_row['home_team']
+        elif predicted_home < predicted_away:
+            predicted_winner = game_row['away_team']
+    p_home_win = None
+    try:
+        if predicted_home is not None and predicted_away is not None:
+            pred_margin_tmp = _safe_float(game_row.get('predicted_win_margin'), predicted_home - predicted_away)
+            sigma_tmp = _get_conf_std_for_game(game_row)
+            p_home_win = _phi(pred_margin_tmp / sigma_tmp)
+    except Exception:
+        p_home_win = None
+    if _is_valid_num(actual_home) and _is_valid_num(actual_away):
+        if actual_home > actual_away:
+            actual_winner = game_row['home_team']
+        elif actual_home < actual_away:
+            actual_winner = game_row['away_team']
+    if predicted_winner and actual_winner:
+        correct_prediction = (predicted_winner == actual_winner)
+    actual_total_points = None
+    predicted_total_points = None
+    total_points_diff = None
+    if _is_valid_num(actual_home) and _is_valid_num(actual_away):
+        try:
+            s = actual_home + actual_away
+            if isinstance(s, float) and math.isnan(s):
+                actual_total_points = None
+            else:
+                actual_total_points = s
+        except Exception:
+            actual_total_points = None
+    if predicted_home is not None and predicted_away is not None:
+        predicted_total_points = predicted_home + predicted_away
+    if actual_total_points is not None and predicted_total_points is not None:
+        total_points_diff = actual_total_points - predicted_total_points
+    # Weather
+    wx_temp = _safe_float(game_row.get('wx_temp_f', None))
+    wx_wind = _safe_float(game_row.get('wx_wind_mph', None))
+    wx_adj = _safe_float(game_row.get('wx_adjust_total', None), None)
+    pred_total_adj_num = _safe_float(game_row.get('predicted_total_points', None), None)
+    pred_total_pre_num = None
+    if pred_total_adj_num is not None:
+        try:
+            pred_total_pre_num = pred_total_adj_num - (wx_adj if wx_adj is not None else 0.0)
+        except Exception:
+            pred_total_pre_num = None
+    else:
+        if predicted_home is not None and predicted_away is not None:
+            pred_total_pre_num = predicted_home + predicted_away
+            pred_total_adj_num = pred_total_pre_num
+    # O/U
+    ou_line = None
+    ou_model_lean = None
+    ou_edge = None
+    ou_actual_result = None
+    ou_correct = None
+    try:
+        ou_values = []
+        if betting_lines:
+            for bl in betting_lines:
+                ou = (
+                    bl.get('overUnder') or bl.get('total') or bl.get('over_under') or bl.get('OU') or bl.get('o_u')
+                )
+                try:
+                    if ou is not None and ou != '':
+                        ou_values.append(float(ou))
+                except Exception:
+                    continue
+        if ou_values:
+            ou_line = sum(ou_values) / len(ou_values)
+    except Exception:
+        ou_line = None
+    if ou_line is not None and predicted_total_points is not None:
+        if predicted_total_points > ou_line:
+            ou_model_lean = 'Over'
+        elif predicted_total_points < ou_line:
+            ou_model_lean = 'Under'
+        else:
+            ou_model_lean = 'Push'
+        ou_edge = predicted_total_points - ou_line
+    if ou_line is not None and actual_total_points is not None:
+        if actual_total_points > ou_line:
+            ou_actual_result = 'Over'
+        elif actual_total_points < ou_line:
+            ou_actual_result = 'Under'
+        else:
+            ou_actual_result = 'Push'
+        if ou_model_lean in ('Over', 'Under') and ou_actual_result in ('Over', 'Under'):
+            ou_correct = (ou_model_lean == ou_actual_result)
+        else:
+            ou_correct = None
+    # ATS
+    ats_home_line = None
+    ats_model_lean = None
+    ats_edge = None
+    ats_actual_result = None
+    ats_correct = None
+    try:
+        spread_vals = []
+        if betting_lines:
+            for bl in betting_lines:
+                s_fmt = bl.get('formattedSpread')
+                s_raw = bl.get('spread')
+                val = None
+                if isinstance(s_fmt, str) and s_fmt:
+                    try:
+                        if 'Home' in s_fmt or 'Away' in s_fmt:
+                            num = float(s_fmt.replace('Home','').replace('Away','').strip())
+                            if 'Home' in s_fmt:
+                                val = num
+                            else:
+                                val = -num
+                        else:
+                            m = re.match(r"^(.*)\s+([+-]?[0-9]*\.?[0-9]+)$", s_fmt.strip())
+                            if m:
+                                team_label = m.group(1).strip()
+                                num = float(m.group(2))
+                                home_name = str(game_row.get('home_team','')).strip().lower()
+                                away_name = str(game_row.get('away_team','')).strip().lower()
+                                lbl = team_label.strip().lower()
+                                is_home_labeled = (home_name in lbl) and not (away_name in lbl)
+                                is_away_labeled = (away_name in lbl) and not (home_name in lbl)
+                                if is_home_labeled:
+                                    val = num
+                                elif is_away_labeled:
+                                    val = -num
+                                else:
+                                    val = None
+                    except Exception:
+                        val = None
+                else:
+                    try:
+                        if s_raw is not None and s_raw != '':
+                            val = float(s_raw)
+                    except Exception:
+                        val = None
+                if val is not None:
+                    spread_vals.append(val)
+        if spread_vals:
+            ats_home_line = sum(spread_vals) / len(spread_vals)
+    except Exception:
+        ats_home_line = None
+    if ats_home_line is not None and predicted_home is not None and predicted_away is not None:
+        pred_margin = predicted_home - predicted_away
+        comp = pred_margin + ats_home_line
+        if comp > 0:
+            ats_model_lean = 'Home'
+        elif comp < 0:
+            ats_model_lean = 'Away'
+        else:
+            ats_model_lean = 'Push'
+        ats_edge = comp
+    if ats_home_line is not None and _is_valid_num(actual_home) and _is_valid_num(actual_away):
+        actual_margin = actual_home - actual_away
+        comp_a = actual_margin + ats_home_line
+        if comp_a > 0:
+            ats_actual_result = 'Home'
+        elif comp_a < 0:
+            ats_actual_result = 'Away'
+        else:
+            ats_actual_result = 'Push'
+        if ats_model_lean in ('Home','Away') and ats_actual_result in ('Home','Away'):
+            ats_correct = (ats_model_lean == ats_actual_result)
+        else:
+            ats_correct = None
+    def _format_ats_line(v):
+        if v is None:
+            return None
+        return f"Home {float(v):+0.1f}".replace('+', '+').replace('-0.0', '0.0')
+    return {
+        'home_team': game_row['home_team'],
+        'away_team': game_row['away_team'],
+        'venue': game_row.get('venue', ''),
+        'game_time': display_time_fallback,
+        'start_iso': start_iso,
+        'sort_ts': sort_ts,
+        'predicted_total_points': r2(predicted_total_points),
+        'pred_total_adj': r2(pred_total_adj_num) if pred_total_adj_num is not None else None,
+        'pred_total_pre': r2(pred_total_pre_num) if pred_total_pre_num is not None else None,
+        'actual_total_points': r2(actual_total_points),
+        'total_points_diff': r2(total_points_diff) if total_points_diff is not None else None,
+        'predicted_home_points': r2(predicted_home),
+        'predicted_away_points': r2(predicted_away),
+        'actual_home_points': r2(actual_home) if _is_valid_num(actual_home) else None,
+        'actual_away_points': r2(actual_away) if _is_valid_num(actual_away) else None,
+        'predicted_win_margin': r2(game_row.get('predicted_win_margin', '')),
+        'home_win_prob_pct': f"{p_home_win*100:.1f}%" if p_home_win is not None else None,
+        'away_win_prob_pct': f"{(1-p_home_win)*100:.1f}%" if p_home_win is not None else None,
+        'home_win_prob': p_home_win,
+        'win_margin_conf_lower': conf_lower,
+        'win_margin_conf_upper': conf_upper,
+        'win_margin_conf_std': conf_std,
+        'home_logo': home_asset['logo'],
+        'home_color': home_asset['color'],
+        'home_alt_color': home_asset['alt_color'],
+        'away_logo': away_asset['logo'],
+        'away_color': away_asset['color'],
+        'away_alt_color': away_asset['alt_color'],
+        'betting_lines': betting_lines,
+        'ou_line': r2(ou_line) if ou_line is not None else None,
+        'ou_model_lean': ou_model_lean,
+        'ou_edge': r2(ou_edge) if ou_edge is not None else None,
+        'ou_edge_num': ou_edge,
+        'ou_actual_result': ou_actual_result,
+        'ou_correct': ou_correct,
+        'ats_line': _format_ats_line(ats_home_line),
+        'ats_model_lean': ats_model_lean,
+        'ats_edge': r2(ats_edge) if ats_edge is not None else None,
+        'ats_edge_num': ats_edge,
+        'ats_actual_result': ats_actual_result,
+        'ats_correct': ats_correct,
+        'wx_temp_f': r2(wx_temp) if wx_temp is not None else None,
+        'wx_wind_mph': r2(wx_wind) if wx_wind is not None else None,
+        'wx_adjust_total': r2(wx_adj) if wx_adj is not None else None,
+        'predicted_winner': predicted_winner,
+        'actual_winner': actual_winner,
+        'correct_prediction': correct_prediction,
+    }
+
 # --- Helper functions for analysis and betting ---
 def _safe_float(x, default=None):
     try:
@@ -1354,313 +1640,14 @@ def index():
             pass
         # Do not cap POST results; user explicitly filtered
 
-    # Prepare game cards for all filtered games
-    def r2(val):
-        try:
-            return f"{float(val):.2f}"
-        except Exception:
-            return val
+    # Prepare game cards for all filtered games (fixed loop)
     game_cards = []
     for _, game_row in filtered_games.iterrows():
-        home_asset = get_team_asset(game_row['home_team'])
-        away_asset = get_team_asset(game_row['away_team'])
-        betting_lines = get_betting_lines(
-            year=int(game_row['season']),
-            week=int(game_row['week']),
-            home_team=game_row['home_team'],
-            away_team=game_row['away_team']
-        )
-    # Time handling: pass ISO to client and render in user's local time via JS.
-    # Also set a friendly UTC fallback so raw timestamps never show if JS doesn't run.
-    start_date_str = str(game_row.get('start_date', '') or '')
-    start_iso = str(game_row.get('start_date_api', '') or start_date_str)
-    display_time_fallback = start_date_str
-    sort_ts = None
-    if start_iso:
         try:
-            iso_norm = start_iso
-            if 'T' not in iso_norm and ' ' in iso_norm:
-                iso_norm = iso_norm.replace(' ', 'T')
-            if iso_norm.endswith('Z'):
-                dt_utc = datetime.fromisoformat(iso_norm.replace('Z', '+00:00'))
-            else:
-                dt_tmp = datetime.fromisoformat(iso_norm)
-                if dt_tmp.tzinfo is None:
-                    dt_utc = dt_tmp.replace(tzinfo=pytz.UTC)
-                else:
-                    dt_utc = dt_tmp.astimezone(pytz.UTC)
-            sort_ts = dt_utc.timestamp()
-            # Normalize start_iso to strict ISO Z format and set friendly UTC fallback text
-            start_iso = dt_utc.isoformat().replace('+00:00', 'Z')
-            try:
-                display_time_fallback = dt_utc.strftime('%a, %b %d, %Y, %I:%M %p UTC')
-            except Exception:
-                display_time_fallback = dt_utc.isoformat().replace('+00:00','Z')
+            game_cards.append(_build_game_card(game_row))
         except Exception:
-            pass
-        conf_lower = conf_upper = conf_std = None
-        try:
-            week_val = int(game_row.get('week', 0))
-            season_val = int(game_row.get('season', 0))
-            key = (season_val, week_val, norm(game_row.get('home_team','')), norm(game_row.get('away_team','')))
-            if key in WIN_MARGIN_CONF_INDEX:
-                ent = WIN_MARGIN_CONF_INDEX[key]
-                conf_lower = r2(ent.get('lower', None))
-                conf_upper = r2(ent.get('upper', None))
-                conf_std = r2(ent.get('std', None))
-        except Exception:
-            pass
-        actual_home = _safe_float(game_row.get('actual_home_points', None))
-        actual_away = _safe_float(game_row.get('actual_away_points', None))
-        def _is_valid_num(x):
-            try:
-                return x is not None and not (isinstance(x, float) and math.isnan(x))
-            except Exception:
-                return x is not None
-        predicted_home = _safe_float(game_row.get('predicted_home_points', None))
-        predicted_away = _safe_float(game_row.get('predicted_away_points', None))
-        predicted_winner = None
-        actual_winner = None
-        correct_prediction = None
-        if predicted_home is not None and predicted_away is not None:
-            if predicted_home > predicted_away:
-                predicted_winner = game_row['home_team']
-            elif predicted_home < predicted_away:
-                predicted_winner = game_row['away_team']
-        # Win probability via margin normal model
-        p_home_win = None
-        try:
-            if predicted_home is not None and predicted_away is not None:
-                pred_margin_tmp = _safe_float(game_row.get('predicted_win_margin'), predicted_home - predicted_away)
-                sigma_tmp = _get_conf_std_for_game(game_row)
-                p_home_win = _phi(pred_margin_tmp / sigma_tmp)
-        except Exception:
-            p_home_win = None
-        if _is_valid_num(actual_home) and _is_valid_num(actual_away):
-            if actual_home > actual_away:
-                actual_winner = game_row['home_team']
-            elif actual_home < actual_away:
-                actual_winner = game_row['away_team']
-        if predicted_winner and actual_winner:
-            correct_prediction = (predicted_winner == actual_winner)
-        actual_total_points = None
-        predicted_total_points = None
-        total_points_diff = None
-        if _is_valid_num(actual_home) and _is_valid_num(actual_away):
-            try:
-                s = actual_home + actual_away
-                if isinstance(s, float) and math.isnan(s):
-                    actual_total_points = None
-                else:
-                    actual_total_points = s
-            except Exception:
-                actual_total_points = None
-        if predicted_home is not None and predicted_away is not None:
-            predicted_total_points = predicted_home + predicted_away
-        if actual_total_points is not None and predicted_total_points is not None:
-            total_points_diff = actual_total_points - predicted_total_points
-        # Weather/context: expose temperature, wind, and applied total adjustment
-        wx_temp = _safe_float(game_row.get('wx_temp_f', None))
-        wx_wind = _safe_float(game_row.get('wx_wind_mph', None))
-        # Only consider wx_adjust_total when weather exists; do not default to 0.0
-        wx_adj = _safe_float(game_row.get('wx_adjust_total', None), None)
-        # Compute model (pre-adjust) vs weather-adjusted totals
-        pred_total_adj_num = _safe_float(game_row.get('predicted_total_points', None), None)
-        pred_total_pre_num = None
-        if pred_total_adj_num is not None:
-            try:
-                pred_total_pre_num = pred_total_adj_num - (wx_adj if wx_adj is not None else 0.0)
-            except Exception:
-                pred_total_pre_num = None
-        else:
-            if predicted_home is not None and predicted_away is not None:
-                pred_total_pre_num = predicted_home + predicted_away
-                pred_total_adj_num = pred_total_pre_num
-        # Compute representative O/U line and model vs actual totals correctness
-        ou_line = None
-        ou_model_lean = None
-        ou_edge = None
-        ou_actual_result = None
-        ou_correct = None
-        try:
-            ou_values = []
-            if betting_lines:
-                for bl in betting_lines:
-                    ou = (
-                        bl.get('overUnder') or bl.get('total') or bl.get('over_under') or bl.get('OU') or bl.get('o_u')
-                    )
-                    try:
-                        if ou is not None and ou != '':
-                            ou_values.append(float(ou))
-                    except Exception:
-                        continue
-            if ou_values:
-                # Use the average across providers as the representative line
-                ou_line = sum(ou_values) / len(ou_values)
-        except Exception:
-            ou_line = None
-        # Model lean vs O/U and edge
-        if ou_line is not None and predicted_total_points is not None:
-            if predicted_total_points > ou_line:
-                ou_model_lean = 'Over'
-            elif predicted_total_points < ou_line:
-                ou_model_lean = 'Under'
-            else:
-                ou_model_lean = 'Push'
-            ou_edge = predicted_total_points - ou_line
-        # Actual totals result vs O/U and correctness
-        if ou_line is not None and actual_total_points is not None:
-            if actual_total_points > ou_line:
-                ou_actual_result = 'Over'
-            elif actual_total_points < ou_line:
-                ou_actual_result = 'Under'
-            else:
-                ou_actual_result = 'Push'
-            if ou_model_lean in ('Over', 'Under') and ou_actual_result in ('Over', 'Under'):
-                ou_correct = (ou_model_lean == ou_actual_result)
-            else:
-                ou_correct = None
-        # Compute representative ATS line from home perspective and correctness
-        ats_home_line = None  # threshold for home to cover (margin > ats_home_line)
-        ats_model_lean = None
-        ats_edge = None
-        ats_actual_result = None
-        ats_correct = None
-        try:
-            spread_vals = []
-            if betting_lines:
-                for bl in betting_lines:
-                    s_fmt = bl.get('formattedSpread')
-                    s_raw = bl.get('spread')
-                    val = None
-                    # Prefer formatted string to infer team orientation
-                    if isinstance(s_fmt, str) and s_fmt:
-                        try:
-                            # Try forms like 'Home -3.5', 'Away +3.5', or '<Team> -3.5'
-                            # If explicit Home/Away present
-                            if 'Home' in s_fmt or 'Away' in s_fmt:
-                                num = float(s_fmt.replace('Home','').replace('Away','').strip())
-                                if 'Home' in s_fmt:
-                                    # L_home equals the printed value (e.g., -3.5)
-                                    val = num
-                                else:
-                                    # Away x => convert to home perspective
-                                    val = -num
-                            else:
-                                # Match leading team name and signed number
-                                m = re.match(r"^(.*)\s+([+-]?[0-9]*\.?[0-9]+)$", s_fmt.strip())
-                                if m:
-                                    team_label = m.group(1).strip()
-                                    num = float(m.group(2))
-                                    # Determine if the labeled team is the home team
-                                    home_name = str(game_row.get('home_team','')).strip().lower()
-                                    away_name = str(game_row.get('away_team','')).strip().lower()
-                                    lbl = team_label.strip().lower()
-                                    # Simple contains check to handle abbreviations
-                                    is_home_labeled = (home_name in lbl) and not (away_name in lbl)
-                                    is_away_labeled = (away_name in lbl) and not (home_name in lbl)
-                                    if is_home_labeled:
-                                        val = num  # L_home equals printed spread for home
-                                    elif is_away_labeled:
-                                        val = -num  # Convert away to home perspective
-                                    else:
-                                        # Unknown mapping; skip this provider
-                                        val = None
-                                else:
-                                    val = None
-                        except Exception:
-                            val = None
-                    else:
-                        # Fallback: parse raw; assume it's numeric home threshold already
-                        try:
-                            if s_raw is not None and s_raw != '':
-                                val = float(s_raw)
-                        except Exception:
-                            val = None
-                    if val is not None:
-                        spread_vals.append(val)
-            if spread_vals:
-                ats_home_line = sum(spread_vals) / len(spread_vals)
-        except Exception:
-            ats_home_line = None
-        if ats_home_line is not None and predicted_home is not None and predicted_away is not None:
-            pred_margin = predicted_home - predicted_away
-            # Home covers if (margin + L_home) > 0
-            comp = pred_margin + ats_home_line
-            if comp > 0:
-                ats_model_lean = 'Home'
-            elif comp < 0:
-                ats_model_lean = 'Away'
-            else:
-                ats_model_lean = 'Push'
-            ats_edge = comp
-        if ats_home_line is not None and _is_valid_num(actual_home) and _is_valid_num(actual_away):
-            actual_margin = actual_home - actual_away
-            comp_a = actual_margin + ats_home_line
-            if comp_a > 0:
-                ats_actual_result = 'Home'
-            elif comp_a < 0:
-                ats_actual_result = 'Away'
-            else:
-                ats_actual_result = 'Push'
-            if ats_model_lean in ('Home','Away') and ats_actual_result in ('Home','Away'):
-                ats_correct = (ats_model_lean == ats_actual_result)
-            else:
-                ats_correct = None
-        def _format_ats_line(v):
-            if v is None:
-                return None
-            # v is L_home: negative means home is favorite (e.g., -3.5)
-            return f"Home {float(v):+0.1f}".replace('+', '+').replace('-0.0', '0.0')
-        game_cards.append({
-            'home_team': game_row['home_team'],
-            'away_team': game_row['away_team'],
-            'venue': game_row.get('venue', ''),
-            'game_time': display_time_fallback,
-            'start_iso': start_iso,
-            'sort_ts': sort_ts,
-            'predicted_total_points': r2(predicted_total_points),
-            'pred_total_adj': r2(pred_total_adj_num) if pred_total_adj_num is not None else None,
-            'pred_total_pre': r2(pred_total_pre_num) if pred_total_pre_num is not None else None,
-            'actual_total_points': r2(actual_total_points),
-            'total_points_diff': r2(total_points_diff) if total_points_diff is not None else None,
-            'predicted_home_points': r2(predicted_home),
-            'predicted_away_points': r2(predicted_away),
-            'actual_home_points': r2(actual_home) if _is_valid_num(actual_home) else None,
-            'actual_away_points': r2(actual_away) if _is_valid_num(actual_away) else None,
-            'predicted_win_margin': r2(game_row.get('predicted_win_margin', '')),
-            'home_win_prob_pct': f"{p_home_win*100:.1f}%" if p_home_win is not None else None,
-            'away_win_prob_pct': f"{(1-p_home_win)*100:.1f}%" if p_home_win is not None else None,
-            'home_win_prob': p_home_win,
-            'win_margin_conf_lower': conf_lower,
-            'win_margin_conf_upper': conf_upper,
-            'win_margin_conf_std': conf_std,
-            'home_logo': home_asset['logo'],
-            'home_color': home_asset['color'],
-            'home_alt_color': home_asset['alt_color'],
-            'away_logo': away_asset['logo'],
-            'away_color': away_asset['color'],
-            'away_alt_color': away_asset['alt_color'],
-            'betting_lines': betting_lines,
-            'ou_line': r2(ou_line) if ou_line is not None else None,
-            'ou_model_lean': ou_model_lean,
-            'ou_edge': r2(ou_edge) if ou_edge is not None else None,
-            'ou_edge_num': ou_edge,
-            'ou_actual_result': ou_actual_result,
-            'ou_correct': ou_correct,
-            'ats_line': _format_ats_line(ats_home_line),
-            'ats_model_lean': ats_model_lean,
-            'ats_edge': r2(ats_edge) if ats_edge is not None else None,
-            'ats_edge_num': ats_edge,
-            'ats_actual_result': ats_actual_result,
-            'ats_correct': ats_correct,
-            'wx_temp_f': r2(wx_temp) if wx_temp is not None else None,
-            'wx_wind_mph': r2(wx_wind) if wx_wind is not None else None,
-            'wx_adjust_total': r2(wx_adj) if wx_adj is not None else None,
-            'predicted_winner': predicted_winner,
-            'actual_winner': actual_winner,
-            'correct_prediction': correct_prediction,
-        })
+            # Skip any problematic row but continue rendering others
+            continue
     # Summary metrics for this view
     summary = { 'winners': {'correct':0,'total':0}, 'ou': {'correct':0,'push':0,'total':0}, 'ats': {'correct':0,'push':0,'total':0} }
     for g in game_cards:
