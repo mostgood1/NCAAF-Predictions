@@ -2102,7 +2102,12 @@ def index():
                         if(s.indexOf('T') === -1 && s.indexOf(' ') !== -1){ s = s.replace(' ', 'T'); }
                         // If no timezone provided, assume UTC (append Z)
                         if(!/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) s = s + 'Z';
-                        const d = new Date(s);
+                        let d = new Date(s);
+                        if(isNaN(d)){
+                            // Coerce common raw form: YYYY-MM-DD HH:MM:SS+00:00 -> ISO Z
+                            const m = s.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\+00:00)?$/);
+                            if(m){ s = m[1] + 'T' + m[2] + 'Z'; d = new Date(s); }
+                        }
                         if(!isNaN(d)){
                             el.textContent = d.toLocaleString(undefined, opts);
                             // Normalize attribute for consistency next time
