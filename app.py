@@ -1306,21 +1306,17 @@ def index():
         # If no upcoming games found (e.g., all completed), pick the max available week
         if selected_week is None and weeks:
             selected_week = max(weeks)
-        # When Show All is checked and week is 0 or 1, include both weeks to account for provider labeling mismatches
-        if show_all and selected_week in (0, 1):
-            week_games = pred_df[pred_df['week'].isin([0, 1])].copy()
-        else:
-            week_games = pred_df[pred_df['week'] == int(selected_week)].copy() if selected_week else pred_df.copy()
+        week_games = pred_df[pred_df['week'] == int(selected_week)].copy() if selected_week else pred_df.copy()
         week_games['date_only'] = week_games['start_date'].str[:10]
         all_dates = sorted(week_games['date_only'].dropna().unique())
         filtered_games = week_games.copy()
         selected_date = ''
         selected_conference = ''
         show_all = False
-    # removed hide_unknown control
+        # removed hide_unknown control
         hide_both_unknown = False
         sort_by = 'time'
-    # Cap results for speed on cold starts
+        # Cap results for speed on cold starts
         try:
             if hide_both_unknown:
                 filtered_games = filtered_games[~((filtered_games['home_conference'] == 'Unknown') & (filtered_games['away_conference'] == 'Unknown'))]
