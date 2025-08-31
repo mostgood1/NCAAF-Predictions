@@ -1645,6 +1645,16 @@ def index():
                 if g.get('ats_correct') is True:
                     summary['ats']['correct'] += 1
 
+    # Compute summary percentages
+    try:
+        for key in ('winners','ou','ats'):
+            corr = summary[key].get('correct', 0) or 0
+            tot = summary[key].get('total', 0) or 0
+            summary[key]['pct'] = (f"{(corr/tot*100):.1f}%" if tot > 0 else '—')
+    except Exception:
+        for key in ('winners','ou','ats'):
+            summary[key]['pct'] = '—'
+
     # Sorting
     try:
         if sort_by == 'winprob_desc':
@@ -1749,9 +1759,9 @@ def index():
         </div>
         <h2>2025 NCAA Football Predictions</h2>
         <div class="summary">
-            <div>Winners: {{summary['winners']['correct']}} / {{summary['winners']['total']}}</div>
-            <div>ATS: {{summary['ats']['correct']}} / {{summary['ats']['total']}} (+{{summary['ats']['push']}} push)</div>
-            <div>Totals: {{summary['ou']['correct']}} / {{summary['ou']['total']}} (+{{summary['ou']['push']}} push)</div>
+            <div>Winners: {{summary['winners']['correct']}} / {{summary['winners']['total']}} ({{summary['winners']['pct']}})</div>
+            <div>ATS: {{summary['ats']['correct']}} / {{summary['ats']['total']}} ({{summary['ats']['pct']}}) +{{summary['ats']['push']}} push</div>
+            <div>Totals: {{summary['ou']['correct']}} / {{summary['ou']['total']}} ({{summary['ou']['pct']}}) +{{summary['ou']['push']}} push</div>
         </div>
         <div style="text-align:center; margin:-6px 0 10px;">
             <label style="font-size:0.95em;color:#34495e;"><input type="checkbox" id="toggleWxTotals" checked> Show weather-adjusted totals</label>
@@ -1865,7 +1875,7 @@ def index():
                 {% endif %}
                 {% if is_final and game_info['correct_prediction'] is not none %}
                     <div class="badges" style="margin-top:6px;">
-                        <span class="badge {% if game_info['correct_prediction'] %}ok{% else %}err{% endif %}">Winner {% if game_info['correct_prediction'] %}Correct{% else %}Wrong{% endif %}</span>
+                        <span class="badge {% if game_info['correct_prediction'] %}ok{% else %}err{% endif %}">Winner {% if game_info['correct_prediction'] %}Correct{% else %}Wrong{% endif %} <span class="muted">({{summary['winners']['pct']}})</span></span>
                     </div>
                 {% endif %}
             </div>
@@ -1876,7 +1886,7 @@ def index():
                     {% if is_final and game_info['ats_actual_result'] %}
                         <br><b>ATS:</b> {{game_info['ats_actual_result']}}
                         {% if game_info['ats_correct'] is not none %}
-                            <span class="badge {% if game_info['ats_correct'] %}ok{% else %}err{% endif %}" style="margin-left:6px;">{% if game_info['ats_correct'] %}Correct{% else %}Wrong{% endif %}</span>
+                            <span class="badge {% if game_info['ats_correct'] %}ok{% else %}err{% endif %}" style="margin-left:6px;">{% if game_info['ats_correct'] %}Correct{% else %}Wrong{% endif %} <span class="muted">({{summary['ats']['pct']}})</span></span>
                         {% elif game_info['ats_actual_result'] == 'Push' %}
                             <span class="badge push" style="margin-left:6px;">Push</span>
                         {% endif %}
@@ -1892,7 +1902,7 @@ def index():
                     {% if is_final and game_info['ou_actual_result'] %}
                         <br><b>Totals:</b> {{game_info['ou_actual_result']}}
                         {% if game_info['ou_correct'] is not none %}
-                            <span class="badge {% if game_info['ou_correct'] %}ok{% else %}err{% endif %}" style="margin-left:6px;">{% if game_info['ou_correct'] %}Correct{% else %}Wrong{% endif %}</span>
+                            <span class="badge {% if game_info['ou_correct'] %}ok{% else %}err{% endif %}" style="margin-left:6px;">{% if game_info['ou_correct'] %}Correct{% else %}Wrong{% endif %} <span class="muted">({{summary['ou']['pct']}})</span></span>
                         {% elif game_info['ou_actual_result'] == 'Push' %}
                             <span class="badge push" style="margin-left:6px;">Push</span>
                         {% endif %}
