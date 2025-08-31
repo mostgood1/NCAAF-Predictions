@@ -1759,6 +1759,7 @@ def index():
         </div>
         <h2>2025 NCAA Football Predictions</h2>
         <div class="summary">
+            <div class="muted" style="align-self:center;">This view</div>
             <div>Winners: {{summary['winners']['correct']}} / {{summary['winners']['total']}} ({{summary['winners']['pct']}})</div>
             <div>ATS: {{summary['ats']['correct']}} / {{summary['ats']['total']}} ({{summary['ats']['pct']}}) +{{summary['ats']['push']}} push</div>
             <div>Totals: {{summary['ou']['correct']}} / {{summary['ou']['total']}} ({{summary['ou']['pct']}}) +{{summary['ou']['push']}} push</div>
