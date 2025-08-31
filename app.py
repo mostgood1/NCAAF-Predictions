@@ -1661,51 +1661,66 @@ def index():
     return render_template_string('''
     <style>
         body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6fa; margin: 0; padding: 0; }
-    .container { max-width: 900px; margin: 40px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); padding: 24px; }
+        .container { max-width: 980px; margin: 40px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); padding: 24px; }
         h2 { text-align: center; color: #2c3e50; margin-bottom: 24px; }
-    form { display: flex; flex-direction: column; gap: 16px; margin-bottom: 32px; }
-    /* Centered filter bar (not sticky) */
-    .filterbar { position: static; z-index: 1; background: #fff; margin: 0 auto 16px; padding: 10px 12px; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); display: flex; flex-direction: row; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: center; max-width: 1000px; }
+        form { display: flex; flex-direction: column; gap: 16px; margin-bottom: 32px; }
+        /* Centered filter bar */
+        .filterbar { position: static; z-index: 1; background: #fff; margin: 0 auto 16px; padding: 10px 12px; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); display: flex; flex-direction: row; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: center; max-width: 1024px; }
         label { font-weight: 500; color: #34495e; }
         select, button { padding: 8px 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 1em; }
         button { background: #2980b9; color: #fff; border: none; cursor: pointer; transition: background 0.2s; }
         button:hover { background: #3498db; }
-    .card { background: #f8f8f8; border-radius: 10px; box-shadow: 0 1px 6px rgba(0,0,0,0.07); padding: 16px; margin-top: 12px; }
-        .teams { display: flex; align-items: center; justify-content: center; gap: 32px; margin-bottom: 18px; }
+
+        .card { background: #f9fafb; border-radius: 12px; box-shadow: 0 1px 6px rgba(0,0,0,0.07); padding: 14px 16px 12px; margin-top: 12px; border-left: 6px solid #bdc3c7; }
+        .card-header { display:flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .status { font-weight: 700; font-size: 0.85em; padding: 4px 8px; border-radius: 10px; }
+        .status.final { background:#eafaf1; color:#1e8449; }
+        .status.upcoming { background:#f4f6fa; color:#7f8c8d; }
+        .when { color:#34495e; font-size: 0.95em; }
+
+        .teams { display: grid; grid-template-columns: 1fr 60px 1fr; align-items: center; gap: 10px; }
         .team { text-align: center; }
-    .team-logo { height: 52px; margin-bottom: 6px; }
-        .team-name { font-weight: bold; font-size: 1.1em; padding: 4px 10px; border-radius: 6px; display: inline-block; margin-top: 2px; }
-        .vs { font-size: 2em; color: #888; }
-        ul.prediction { list-style: none; padding: 0; margin: 0 0 18px 0; }
-    ul.prediction li { margin-bottom: 4px; font-size: 1.0em; }
-        .odds-table { width: 100%; border-collapse: collapse; margin-top: 10px; background: #fff; }
+        .team-logo { height: 52px; margin-bottom: 6px; }
+        .team-name { font-weight: 700; font-size: 1.05em; padding: 4px 10px; border-radius: 6px; display: inline-block; margin-top: 2px; }
+        .vs { font-size: 1.8em; color: #888; font-weight: 700; }
+
+        .score-block { margin-top: 6px; }
+        .score { font-size: 1.6em; font-weight: 800; color: #2c3e50; }
+        .pred { font-size: 0.95em; color: #7f8c8d; }
+
+        .rows { display:grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin-top: 10px; }
+        .row { background:#fff; border:1px solid #eaecef; border-radius:8px; padding:8px 10px; font-size:0.95em; color:#2c3e50; }
+        .row b { color:#2c3e50; }
+        .badges { display:flex; flex-wrap:wrap; gap:6px; }
+        .badge { padding:2px 8px; border-radius:12px; font-size:0.85em; font-weight:700; }
+        .ok { background:#eafaf1; color:#1e8449; }
+        .err { background:#fdecea; color:#c0392b; }
+        .push { background:#f4f6fa; color:#7f8c8d; }
+        .muted { color:#7f8c8d; }
+
+        .odds-toggle { margin-top: 8px; text-align:center; }
+        .odds-toggle button { background:#6c5ce7; }
+        .odds { margin-top:8px; }
+        .odds-table { width: 100%; border-collapse: collapse; background: #fff; }
         .odds-table th, .odds-table td { padding: 8px 10px; border: 1px solid #e0e0e0; text-align: center; }
         .odds-table th { background: #eaf1fb; color: #2c3e50; }
         .odds-table tr:nth-child(even) { background: #f4f6fa; }
         .no-odds { color: #888; font-style: italic; }
-    .topbar { position: sticky; top: 0; z-index: 120; display:flex; justify-content: space-between; align-items:center; margin-bottom: 10px; padding: 10px 8px; background: rgba(255,255,255,0.92); border-bottom: 1px solid #eee; backdrop-filter: saturate(180%) blur(8px); border-top-left-radius: 12px; border-top-right-radius: 12px; }
+
+        .topbar { position: sticky; top: 0; z-index: 120; display:flex; justify-content: space-between; align-items:center; margin-bottom: 10px; padding: 10px 8px; background: rgba(255,255,255,0.92); border-bottom: 1px solid #eee; backdrop-filter: saturate(180%) blur(8px); border-top-left-radius: 12px; border-top-right-radius: 12px; }
         .links a { color:#2980b9; margin-left:12px; text-decoration: underline; }
         .summary { display:flex; gap:16px; justify-content:center; color:#2c3e50; font-weight:600; margin:10px 0 16px; }
-        .badge { padding:2px 8px; border-radius:12px; font-size:0.85em; font-weight:600; }
-        .ok { background:#eafaf1; color:#1e8449; }
-        .err { background:#fdecea; color:#c0392b; }
-        .push { background:#f4f6fa; color:#7f8c8d; }
-    .wx { font-size: 0.95em; color:#2c3e50; }
-    .muted { color:#7f8c8d; }
+
         /* Responsive grid for cards */
         .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
-        @media (min-width: 900px) {
-            .grid { grid-template-columns: 1fr 1fr; }
-        }
-        @media (min-width: 1200px) {
-            .container { max-width: 1100px; }
-            .grid { grid-template-columns: 1fr 1fr 1fr; }
-        }
-    /* Filter control sizing and alignment */
-    .filterbar .control { display: inline-flex; align-items: center; gap: 8px; }
-    .filterbar .control label { font-size: 0.95em; margin: 0; color: #34495e; }
-    .filterbar select, .filterbar button, .filterbar input[type="checkbox"] { font-size: 0.95em; padding: 6px 10px; }
-    .filterbar button { height: 36px; }
+        @media (min-width: 900px) { .grid { grid-template-columns: 1fr 1fr; } }
+        @media (min-width: 1200px) { .container { max-width: 1100px; } .grid { grid-template-columns: 1fr 1fr 1fr; } }
+
+        .filterbar .control { display: inline-flex; align-items: center; gap: 8px; }
+        .filterbar .control label { font-size: 0.95em; margin: 0; color: #34495e; }
+        .filterbar select, .filterbar button, .filterbar input[type="checkbox"] { font-size: 0.95em; padding: 6px 10px; }
+        .filterbar button { height: 36px; }
+
         /* Back to top */
         #backToTop { position: fixed; right: 16px; bottom: 16px; padding: 8px 12px; border: none; border-radius: 18px; background: #2980b9; color: #fff; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.15); display: none; }
         #backToTop:hover { background: #3498db; }
@@ -1792,150 +1807,133 @@ def index():
         </form>
     <div class="grid">
     {% for game_info in game_cards %}
-    <div class="card" data-sort-ts="{{game_info['sort_ts'] or 0}}" data-home-win-prob="{{game_info['home_win_prob'] or 0}}" data-ou-edge="{{game_info['ou_edge_num'] or 0}}" data-ats-edge="{{game_info['ats_edge_num'] or 0}}" style="border-left: 6px solid {% if game_info['actual_home_points'] is not none and game_info['actual_away_points'] is not none %}{% if game_info['correct_prediction'] is not none %}{% if game_info['correct_prediction'] %}#2ecc71{% else %}#e74c3c{% endif %}{% else %}#95a5a6{% endif %}{% else %}#bdc3c7{% endif %};">
-            <div class="teams">
-                <div class="team">
-                    <img src="{{game_info['away_logo']}}" alt="{{game_info['away_team']}} logo" class="team-logo" onerror="this.onerror=null;this.src='';"><br>
-                    <span class="team-name" style="background:{{game_info['away_alt_color']}};padding:4px 10px;border-radius:6px;display:inline-block;color:{% if game_info['away_alt_color'] in ['#000', '#222', '#333', '#444', '#111', '#2c3e50', '#34495e', '#1a1a1a', '#232323'] %}#fff{% else %}#222{% endif %};">{{game_info['away_team']}}</span>
-                    <ul class="prediction">
-                        <li><strong>Predicted Away Team Points:</strong> {{game_info['predicted_away_points']}}</li>
-                        {% if game_info['actual_away_points'] is not none %}
-                        <li><strong>Actual Away Team Points:</strong> {{game_info['actual_away_points']}}</li>
-                        {% endif %}
-                    </ul>
-                </div>
-                <span class="vs">@</span>
-                <div class="team">
-                    <img src="{{game_info['home_logo']}}" alt="{{game_info['home_team']}} logo" class="team-logo" onerror="this.onerror=null;this.src='';"><br>
-                    <span class="team-name" style="background:{{game_info['home_alt_color']}};padding:4px 10px;border-radius:6px;display:inline-block;color:{% if game_info['home_alt_color'] in ['#000', '#222', '#333', '#444', '#111', '#2c3e50', '#34495e', '#1a1a1a', '#232323'] %}#fff{% else %}#222{% endif %};">{{game_info['home_team']}}</span>
-                    <ul class="prediction">
-                        <li><strong>Predicted Home Team Points:</strong> {{game_info['predicted_home_points']}}</li>
-                        {% if game_info['actual_home_points'] is not none %}
-                        <li><strong>Actual Home Team Points:</strong> {{game_info['actual_home_points']}}</li>
-                        {% endif %}
-                    </ul>
+    {% set is_final = (game_info['actual_home_points'] is not none) and (game_info['actual_away_points'] is not none) %}
+    <div class="card" data-sort-ts="{{game_info['sort_ts'] or 0}}" data-home-win-prob="{{game_info['home_win_prob'] or 0}}" data-ou-edge="{{game_info['ou_edge_num'] or 0}}" data-ats-edge="{{game_info['ats_edge_num'] or 0}}" style="border-left-color: {% if is_final %}{% if game_info['correct_prediction'] is not none %}{% if game_info['correct_prediction'] %}#2ecc71{% else %}#e74c3c{% endif %}{% else %}#95a5a6{% endif %}{% else %}#bdc3c7{% endif %};">
+        <div class="card-header">
+            <div class="when">Venue: {{game_info['venue']}} • <span class="local-time" data-iso="{{game_info['start_iso']}}">{{game_info['game_time']}}</span></div>
+            <div class="status {% if is_final %}final{% else %}upcoming{% endif %}">{% if is_final %}FINAL{% else %}UPCOMING{% endif %}</div>
+        </div>
+        <div class="teams">
+            <div class="team">
+                <img src="{{game_info['away_logo']}}" alt="{{game_info['away_team']}} logo" class="team-logo" onerror="this.onerror=null;this.src='';"><br>
+                <span class="team-name" style="background:{{game_info['away_alt_color']}};color:{% if game_info['away_alt_color'] in ['#000','#111','#222','#333','#444','#1a1a1a','#232323','#2c3e50','#34495e'] %}#fff{% else %}#222{% endif %};">{{game_info['away_team']}}</span>
+                <div class="score-block">
+                    {% if is_final %}
+                        <div class="score">{{game_info['actual_away_points']}}</div>
+                        <div class="pred">Model: {{game_info['predicted_away_points']}}</div>
+                    {% else %}
+                        <div class="score">{{game_info['predicted_away_points']}}</div>
+                        <div class="pred muted">Projected</div>
+                    {% endif %}
                 </div>
             </div>
-            <ul class="prediction" style="text-align:center;">
-                {% if game_info['actual_home_points'] is not none and game_info['actual_away_points'] is not none %}
-                    {% if game_info['correct_prediction'] is not none %}
-                        <li style="font-weight:bold; color:{% if game_info['correct_prediction'] %}#2ecc71{% else %}#e74c3c{% endif %};">FINAL — {% if game_info['correct_prediction'] %}Model Correct{% else %}Model Incorrect{% endif %}</li>
+            <div class="vs">@</div>
+            <div class="team">
+                <img src="{{game_info['home_logo']}}" alt="{{game_info['home_team']}} logo" class="team-logo" onerror="this.onerror=null;this.src='';"><br>
+                <span class="team-name" style="background:{{game_info['home_alt_color']}};color:{% if game_info['home_alt_color'] in ['#000','#111','#222','#333','#444','#1a1a1a','#232323','#2c3e50','#34495e'] %}#fff{% else %}#222{% endif %};">{{game_info['home_team']}}</span>
+                <div class="score-block">
+                    {% if is_final %}
+                        <div class="score">{{game_info['actual_home_points']}}</div>
+                        <div class="pred">Model: {{game_info['predicted_home_points']}}</div>
                     {% else %}
-                        <li style="font-weight:bold; color:#2c3e50;">FINAL</li>
-                    {% endif %}
-                {% endif %}
-                <div class="badges">
-                    {% if game_info['correct_prediction'] is not none %}
-                        <span class="badge {% if game_info['correct_prediction'] %}ok{% else %}err{% endif %}">Winner {% if game_info['correct_prediction'] %}Correct{% else %}Wrong{% endif %}</span>
-                    {% endif %}
-                    {% if game_info['ats_actual_result'] %}
-                        {% if game_info['ats_actual_result'] == 'Push' %}
-                        <span class="badge push">ATS Push</span>
-                        {% else %}
-                        <span class="badge {% if game_info['ats_correct'] %}ok{% else %}err{% endif %}">ATS {% if game_info['ats_correct'] %}Correct{% else %}Wrong{% endif %}</span>
-                        {% endif %}
-                    {% endif %}
-                    {% if game_info['ou_actual_result'] %}
-                        {% if game_info['ou_actual_result'] == 'Push' %}
-                        <span class="badge push">O/U Push</span>
-                        {% else %}
-                        <span class="badge {% if game_info['ou_correct'] %}ok{% else %}err{% endif %}">O/U {% if game_info['ou_correct'] %}Correct{% else %}Wrong{% endif %}</span>
-                        {% endif %}
+                        <div class="score">{{game_info['predicted_home_points']}}</div>
+                        <div class="pred muted">Projected</div>
                     {% endif %}
                 </div>
-                <li><strong>Venue:</strong> {{game_info['venue']}}</li>
-                <li><strong>Day & Time (Local):</strong> <span class="local-time" data-iso="{{game_info['start_iso']}}">{{game_info['game_time']}}</span></li>
-                <li><strong>Predicted Total Points:</strong>
-                    <span class="total-adj">{{game_info['pred_total_adj'] or game_info['predicted_total_points']}}</span>
-                    <span class="total-pre" style="display:none;">{{game_info['pred_total_pre'] or game_info['predicted_total_points']}}</span>
-                </li>
+            </div>
+        </div>
+
+        <div class="rows">
+            <div class="row">
+                <b>Total (model):</b>
+                <span class="total-adj"> {{game_info['pred_total_adj'] or game_info['predicted_total_points']}} </span>
+                <span class="total-pre" style="display:none;"> {{game_info['pred_total_pre'] or game_info['predicted_total_points']}} </span>
+                {% if is_final %}
+                    {% if game_info['actual_total_points'] is not none %}
+                        <br><b>Total (actual):</b> {{game_info['actual_total_points']}}
+                        {% if game_info['total_points_diff'] is not none %}
+                            <br><b>Diff:</b> <span style="font-weight:700; color:{% if game_info['total_points_diff']|float > 0 %}#0b84ff{% elif game_info['total_points_diff']|float < 0 %}#ff7f0e{% else %}#2c3e50{% endif %};">{{game_info['total_points_diff']}}</span>
+                        {% endif %}
+                    {% endif %}
+                {% endif %}
+            </div>
+            <div class="row">
+                {% if game_info['home_win_prob_pct'] %}
+                    <b>Win Prob:</b> Away {{game_info['away_win_prob_pct']}} / Home {{game_info['home_win_prob_pct']}}
+                {% else %}
+                    <span class="muted">Win Prob: —</span>
+                {% endif %}
+                {% if is_final and game_info['correct_prediction'] is not none %}
+                    <div class="badges" style="margin-top:6px;">
+                        <span class="badge {% if game_info['correct_prediction'] %}ok{% else %}err{% endif %}">Winner {% if game_info['correct_prediction'] %}Correct{% else %}Wrong{% endif %}</span>
+                    </div>
+                {% endif %}
+            </div>
+            <div class="row">
+                {% if game_info['ats_line'] %}
+                    <b>Spread:</b> {{game_info['ats_line']}} • <b>Model:</b> {{game_info['ats_model_lean'] or '—'}}
+                    {% if game_info['ats_edge'] %}<span class="muted"> (Edge {{game_info['ats_edge']}})</span>{% endif %}
+                    {% if is_final and game_info['ats_actual_result'] %}
+                        <br><b>ATS:</b> {{game_info['ats_actual_result']}}
+                        {% if game_info['ats_correct'] is not none %}
+                            <span class="badge {% if game_info['ats_correct'] %}ok{% else %}err{% endif %}" style="margin-left:6px;">{% if game_info['ats_correct'] %}Correct{% else %}Wrong{% endif %}</span>
+                        {% elif game_info['ats_actual_result'] == 'Push' %}
+                            <span class="badge push" style="margin-left:6px;">Push</span>
+                        {% endif %}
+                    {% endif %}
+                {% else %}
+                    <span class="muted">Spread: —</span>
+                {% endif %}
+            </div>
+            <div class="row">
+                {% if game_info['ou_line'] %}
+                    <b>O/U:</b> {{game_info['ou_line']}} • <b>Model:</b> {{game_info['ou_model_lean'] or '—'}}
+                    {% if game_info['ou_edge'] %}<span class="muted"> (Edge {{game_info['ou_edge']}})</span>{% endif %}
+                    {% if is_final and game_info['ou_actual_result'] %}
+                        <br><b>Totals:</b> {{game_info['ou_actual_result']}}
+                        {% if game_info['ou_correct'] is not none %}
+                            <span class="badge {% if game_info['ou_correct'] %}ok{% else %}err{% endif %}" style="margin-left:6px;">{% if game_info['ou_correct'] %}Correct{% else %}Wrong{% endif %}</span>
+                        {% elif game_info['ou_actual_result'] == 'Push' %}
+                            <span class="badge push" style="margin-left:6px;">Push</span>
+                        {% endif %}
+                    {% endif %}
+                {% else %}
+                    <span class="muted">O/U: —</span>
+                {% endif %}
+            </div>
+            <div class="row">
                 {% if game_info['wx_temp_f'] or game_info['wx_wind_mph'] or game_info['wx_adjust_total'] %}
-                <li class="wx">
-                    <span class="muted">Weather:</span>
+                    <b>Weather:</b>
                     {% if game_info['wx_temp_f'] %} {{game_info['wx_temp_f']}}°F{% endif %}
                     {% if game_info['wx_wind_mph'] %} • {{game_info['wx_wind_mph']}} mph wind{% endif %}
-                    {% if game_info['wx_adjust_total'] %}
-                        • Δ {{game_info['wx_adjust_total']}}
-                    {% endif %}
-                </li>
+                    {% if game_info['wx_adjust_total'] %} • Δ {{game_info['wx_adjust_total']}}{% endif %}
+                {% else %}
+                    <span class="muted">Weather: —</span>
                 {% endif %}
-                {% if game_info['ou_line'] %}
-                <li>
-                    <strong>Market O/U:</strong> {{game_info['ou_line']}} | <strong>Model Lean:</strong> {{game_info['ou_model_lean'] or '—'}}
-                    {% if game_info['ou_edge'] %}
-                        <span style="color:{% if game_info['ou_edge']|float > 0 %}green{% elif game_info['ou_edge']|float < 0 %}red{% else %}#444{% endif %};">(Edge: {{game_info['ou_edge']}})</span>
-                    {% endif %}
-                    {% if game_info['ou_actual_result'] %}
-                        <br/>
-                        <strong>Actual vs O/U:</strong> {{game_info['ou_actual_result']}}
-                        {% if game_info['ou_correct'] is not none %}
-                            <span style="font-weight:bold; color:{% if game_info['ou_correct'] %}#2ecc71{% else %}#e74c3c{% endif %};">— {% if game_info['ou_correct'] %}Model Correct{% else %}Model Incorrect{% endif %}</span>
-                        {% elif game_info['ou_actual_result'] == 'Push' %}
-                            <span style="color:#888;">— Push</span>
-                        {% endif %}
-                    {% endif %}
-                </li>
-                {% endif %}
-                {% if game_info['home_win_prob_pct'] %}
-                <li><strong>Win Prob:</strong> Away {{game_info['away_win_prob_pct']}} / Home {{game_info['home_win_prob_pct']}}</li>
-                {% endif %}
-                {% if game_info['actual_total_points'] is not none %}
-                <li><strong>Actual Total Points:</strong> {{game_info['actual_total_points']}}</li>
-                <li><strong>Difference (Actual - Predicted):</strong> <span style="font-weight:bold; color:{% if game_info['total_points_diff']|float > 0 %}blue{% elif game_info['total_points_diff']|float < 0 %}orange{% else %}black{% endif %};">{{game_info['total_points_diff']}}</span></li>
-                {% endif %}
-                <li><strong>Predicted Win Margin:</strong> {{game_info['predicted_win_margin']}}
-                    {% if game_info['win_margin_conf_lower'] and game_info['win_margin_conf_upper'] %}
-                        <br><span style="font-size:0.95em;color:#888;">95% CI: [{{game_info['win_margin_conf_lower']}}, {{game_info['win_margin_conf_upper']}}]</span>
-                        <br><span style="font-size:0.95em;color:#888;">Std Dev: {{game_info['win_margin_conf_std']}}</span>
-                    {% endif %}
-                </li>
-                {% if game_info['ats_line'] %}
-                <li>
-                    <strong>Market Spread:</strong> {{game_info['ats_line']}} | <strong>Model Lean:</strong> {{game_info['ats_model_lean'] or '—'}}
-                    {% if game_info['ats_edge'] %}
-                        <span style="color:{% if game_info['ats_edge']|float > 0 %}green{% elif game_info['ats_edge']|float < 0 %}red{% else %}#444{% endif %};">(Edge: {{game_info['ats_edge']}})</span>
-                    {% endif %}
-                    {% if game_info['ats_actual_result'] %}
-                        <br/>
-                        <strong>ATS Result:</strong> {{game_info['ats_actual_result']}}
-                        {% if game_info['ats_correct'] is not none %}
-                            <span style="font-weight:bold; color:{% if game_info['ats_correct'] %}#2ecc71{% else %}#e74c3c{% endif %};">— {% if game_info['ats_correct'] %}Model Correct{% else %}Model Incorrect{% endif %}</span>
-                        {% elif game_info['ats_actual_result'] == 'Push' %}
-                            <span style="color:#888;">— Push</span>
-                        {% endif %}
-                    {% endif %}
-                </li>
-                {% endif %}
-                {% if (game_info['actual_home_points'] is not none) and (game_info['actual_away_points'] is not none) %}
-                <li><strong>Winner Prediction:</strong>
-                    {% if game_info['correct_prediction'] is not none %}
-                        <span style="font-weight:bold; color:{% if game_info['correct_prediction'] %}green{% else %}red{% endif %};">
-                            {% if game_info['correct_prediction'] %}Correct{% else %}Incorrect{% endif %}
-                        </span>
-                        (Predicted: {{game_info['predicted_winner']}}, Actual: {{game_info['actual_winner']}})
-                    {% endif %}
-                </li>
-                {% endif %}
-            </ul>
-            {% if game_info['betting_lines'] and game_info['betting_lines']|length > 0 %}
-                <h4>Betting Odds</h4>
-                <table class="odds-table">
-                    <tr><th>Provider</th><th>Spread</th><th>Over/Under</th><th>Home ML</th><th>Away ML</th></tr>
-                    {% for odds in game_info['betting_lines'] %}
-                    <tr>
-                        <td>{{ odds['provider'] }}</td>
-                        <td>{{ odds['formattedSpread'] or odds['spread'] }}</td>
-                        <td>{{ odds['overUnder'] }}</td>
-                        <td>{{ odds['homeMoneyline'] }}</td>
-                        <td>{{ odds['awayMoneyline'] }}</td>
-                    </tr>
-                    {% endfor %}
-                </table>
-            {% else %}
-                <div class="no-odds">No betting odds available for this game.</div>
-            {% endif %}
+            </div>
         </div>
-        {% endfor %}
+
+        {% if game_info['betting_lines'] and game_info['betting_lines']|length > 0 %}
+        <div class="odds-toggle"><button type="button" class="toggleOddsBtn">Show Odds</button></div>
+        <div class="odds" style="display:none;">
+            <table class="odds-table">
+                <tr><th>Provider</th><th>Spread</th><th>Over/Under</th><th>Home ML</th><th>Away ML</th></tr>
+                {% for odds in game_info['betting_lines'] %}
+                <tr>
+                    <td>{{ odds['provider'] }}</td>
+                    <td>{{ odds['formattedSpread'] or odds['spread'] }}</td>
+                    <td>{{ odds['overUnder'] }}</td>
+                    <td>{{ odds['homeMoneyline'] }}</td>
+                    <td>{{ odds['awayMoneyline'] }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+        {% else %}
+            <div class="no-odds">No betting odds available for this game.</div>
+        {% endif %}
+    </div>
+    {% endfor %}
     </div>
     </div>
     <button id="backToTop" title="Back to top">Top</button>
@@ -2090,6 +2088,24 @@ def index():
                 if(chk){ chk.addEventListener('change', applyToggle); applyToggle(); }
 
                 // Date filtering is server-driven via form submit on change (keeps initial payload light)
+
+                // Toggle per-card odds table
+                document.querySelectorAll('.toggleOddsBtn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const card = btn.closest('.card');
+                        if(!card) return;
+                        const odds = card.querySelector('.odds');
+                        if(!odds) return;
+                        const isHidden = window.getComputedStyle(odds).display === 'none';
+                        if(isHidden){
+                            odds.style.display = '';
+                            btn.textContent = 'Hide Odds';
+                        } else {
+                            odds.style.display = 'none';
+                            btn.textContent = 'Show Odds';
+                        }
+                    });
+                });
 
                 // Back to top behavior
                 const topBtn = document.getElementById('backToTop');
