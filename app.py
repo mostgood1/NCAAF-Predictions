@@ -2026,8 +2026,12 @@ def index():
                 try {
                     const opts = { weekday: 'short', month: 'short', day: '2-digit', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' };
                     document.querySelectorAll('.local-time').forEach(el => {
-                        const iso = (el.getAttribute('data-iso') || '').trim();
-                        if(!iso) return;
+                        let iso = (el.getAttribute('data-iso') || '').trim();
+                        // Fallback: parse the visible text if no data-iso present
+                        if(!iso){
+                            iso = (el.textContent || '').trim();
+                            if(!iso) return;
+                        }
                         let s = iso;
                         if(s.indexOf('T') === -1 && s.indexOf(' ') !== -1){ s = s.replace(' ', 'T'); }
                         // If no timezone provided, assume UTC (append Z)
@@ -2035,6 +2039,8 @@ def index():
                         const d = new Date(s);
                         if(!isNaN(d)){
                             el.textContent = d.toLocaleString(undefined, opts);
+                            // Normalize attribute for consistency next time
+                            el.setAttribute('data-iso', s);
                         }
                     });
                 } catch(e) { /* no-op */ }
