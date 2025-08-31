@@ -756,11 +756,25 @@ def _update_scores_with_cfbd(week: int | None = None) -> dict:
     http_notes = []
     # Try a few parameter variants to avoid missing data due to filters
     def _variants(wk: int):
-        return [
-            {'year': 2025, 'week': wk, 'seasonType': 'regular', 'division': 'fbs'},
-            {'year': 2025, 'week': wk, 'division': 'fbs'},
-            {'year': 2025, 'week': wk, 'seasonType': 'regular'},
+        base = {'year': 2025, 'week': wk}
+        # Try multiple combos: division/classification, seasonType, and status flags
+        combos = [
+            {'seasonType': 'regular', 'division': 'fbs'},
+            {'division': 'fbs'},
+            {'seasonType': 'regular'},
+            {'classification': 'fbs'},
+            {'seasonType': 'regular', 'classification': 'fbs'},
         ]
+        statuses = [None, 'completed', 'final']
+        vars = []
+        for c in combos:
+            for st in statuses:
+                pr = dict(base)
+                pr.update(c)
+                if st:
+                    pr['status'] = st
+                vars.append(pr)
+        return vars
     try:
         for wk in weeks:
             for pr in _variants(wk):
