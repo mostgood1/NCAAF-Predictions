@@ -5,7 +5,7 @@ services:
     buildCommand: |
       git submodule update --init --recursive || true
       pip install -r requirements.txt
-    startCommand: gunicorn --bind 0.0.0.0:$PORT wsgi:application
+  startCommand: gunicorn --bind 0.0.0.0:$PORT --workers=1 --threads=2 --timeout 60 wsgi:application
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9

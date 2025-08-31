@@ -1036,6 +1036,9 @@ def build_calibration():
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    # Fast path for platform HEAD probes
+    if request.method == 'HEAD':
+        return '', 200
     # Default to upcoming games for the current week if not POST
     import datetime as dt
     weeks = sorted(pred_df['week'].dropna().unique())
@@ -3109,8 +3112,10 @@ def refresh_status():
     </script>
     ''')
 
-@app.route('/health')
+@app.route('/health', methods=['GET','HEAD'])
 def health():
+    if request.method == 'HEAD':
+        return '', 200
     try:
         sub = pred_df[pred_df['season'] == 2025] if 'season' in pred_df.columns else pred_df
         return {
