@@ -1,0 +1,26 @@
+timestamp,season,week,home_team,away_team,market,side,price_american,line,provider,model_prob,implied_prob,edge,kelly_f,bankroll,stake,status,result,pnl
+2025-08-30T15:56:33.758998,2025,1,Florida International,Bethune-Cookman,ML,Away,1500,,ESPN Bet,0.6782,0.0625,9.8518,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,Michigan State,Western Michigan,ML,Away,1000,,ESPN Bet,0.5583,0.0909,5.1417,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,New Mexico State,Bryant,ML,Away,700,,ESPN Bet,0.6572,0.125,4.2573,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,Michigan State,Western Michigan,ML,Away,800,,Bovada,0.5583,0.1111,4.025,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,Michigan State,Western Michigan,ML,Away,625,,DraftKings,0.5583,0.1379,3.048,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,Syracuse,Tennessee,ML,Away,410,,DraftKings,0.7843,0.1961,3.0001,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,Sam Houston,UNLV,ML,Home,380,,DraftKings,0.8316,0.2083,2.9916,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,Wake Forest,Kennesaw State,ML,Away,700,,ESPN Bet,0.4908,0.125,2.9262,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,Wake Forest,Kennesaw State,ML,Away,700,,Bovada,0.4908,0.125,2.9262,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,Syracuse,Tennessee,ML,Away,400,,ESPN Bet,0.7843,0.2,2.9217,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,Sam Houston,UNLV,ML,Home,370,,Bovada,0.8316,0.2128,2.9085,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,Syracuse,Tennessee,ML,Away,390,,Bovada,0.7843,0.2041,2.8433,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,Troy,Nicholls,ML,Away,1100,,ESPN Bet,0.3173,0.0833,2.8074,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,Wake Forest,Kennesaw State,ML,Away,650,,DraftKings,0.4908,0.1333,2.6808,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,Virginia,Coastal Carolina,ML,Away,400,,ESPN Bet,0.7332,0.2,2.6662,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,Purdue,Ball State,ML,Away,575,,DraftKings,0.5398,0.1481,2.6437,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,Purdue,Ball State,ML,Away,575,,Bovada,0.5398,0.1481,2.6437,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,Purdue,Ball State,ML,Away,550,,ESPN Bet,0.5398,0.1538,2.5087,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,Virginia,Coastal Carolina,ML,Away,360,,DraftKings,0.7332,0.2174,2.3729,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,San José State,Central Michigan,ML,Away,400,,ESPN Bet,0.66,0.2,2.3,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,Army,Tarleton State,ML,Away,500,,Bovada,0.5497,0.1667,2.2982,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,Texas State,Eastern Michigan,ML,Away,440,,DraftKings,0.6098,0.1852,2.2929,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,Virginia,Coastal Carolina,ML,Away,345,,Bovada,0.7332,0.2247,2.263,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,Louisiana Tech,SE Louisiana,ML,Away,360,,ESPN Bet,0.7079,0.2174,2.2563,0.025,1000.0,12.5,open,pending,0.0
+2025-08-30T15:56:33.758998,2025,1,Texas State,Eastern Michigan,ML,Away,400,,ESPN Bet,0.6098,0.2,2.049,0.025,1000.0,12.5,open,pending,0.0
