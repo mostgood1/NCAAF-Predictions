@@ -806,7 +806,40 @@ def _update_scores_with_cfbd(week: int | None = None) -> dict:
         return {'step': 'cfbd_update', 'error': 'fetch_failed'}
 
     if not games_map:
-        return {'step': 'cfbd_update', 'skipped': 'no_games_from_api', 'notes': http_notes}
+        # Fallback: try the scoreboard endpoint which sometimes surfaces scores earlier
+        try:
+            sb_url = 'https://api.collegefootballdata.com/scoreboard'
+            def _score_of(obj, key_candidates):
+                for k in key_candidates:
+                    if k in obj and obj[k] is not None:
+                        return obj[k]
+                return None
+            for wk in weeks:
+                for pr in _variants(wk):
+                    params = {k:v for k,v in pr.items() if k in ('year','week','seasonType','division','classification','status')}
+                    resp = requests.get(sb_url, headers=headers, params=params, timeout=25)
+                    http_notes.append({'scoreboard': True, 'week': wk, 'status': getattr(resp, 'status_code', None), 'len': len(getattr(resp, 'content', b''))})
+                    if resp.status_code != 200:
+                        continue
+                    data = resp.json() or {}
+                    games = data.get('games') or data.get('events') or data.get('data') or []
+                    if not games:
+                        continue
+                    for g in games:
+                        ht = _norm_team_cfbd(g.get('home_team') or g.get('home') or g.get('homeTeam') or g.get('home_name'))
+                        at = _norm_team_cfbd(g.get('away_team') or g.get('away') or g.get('awayTeam') or g.get('away_name'))
+                        hp = _score_of(g, ['home_points','home_points_total','home_score','homeScore'])
+                        ap = _score_of(g, ['away_points','away_points_total','away_score','awayScore'])
+                        comp = g.get('completed') or g.get('status') in ('completed','final','Final')
+                        if hp is None or ap is None:
+                            continue
+                        games_map[(wk, ht, at)] = {'home_points': hp, 'away_points': ap, 'completed': comp}
+                    if any(k[0] == wk for k in games_map.keys()):
+                        break
+        except Exception:
+            pass
+        if not games_map:
+            return {'step': 'cfbd_update', 'skipped': 'no_games_from_api', 'notes': http_notes}
 
     # Apply updates into our CSV
     try:
