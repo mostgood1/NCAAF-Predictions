@@ -848,13 +848,16 @@ def _update_scores_with_cfbd(week: int | None = None) -> dict:
                             except Exception:
                                 hp = home.get('score')
                                 ap = away.get('score')
-                            st = ((ev.get('status') or {}).get('type') or {}).get('completed')
-                            comp = bool(st)
+                            stype = (ev.get('status') or {}).get('type') or {}
+                            comp = bool(stype.get('completed')) or (str(stype.get('name','')).upper() in ('STATUS_FINAL','STATUS_FULL_TIME')) or ('final' in str(stype.get('description','')).lower())
                             if hp is None or ap is None:
+                                continue
+                            if not comp:
+                                # Skip non-final games to avoid premature writes
                                 continue
                             for ht in hcands:
                                 for at in acands:
-                                    games_map_nowk[(ht, at)] = {'home_points': hp, 'away_points': ap, 'completed': comp}
+                                    games_map_nowk[(ht, at)] = {'home_points': hp, 'away_points': ap, 'completed': True}
                         if games_map_nowk:
                             break
                     except Exception:
@@ -972,6 +975,8 @@ def _update_scores_with_cfbd(week: int | None = None) -> dict:
                 # Fall back to ESPN no-week map using normalized team names
                 hit = games_map_nowk.get((ht, at))
             if hit is None:
+                continue
+            if not hit.get('completed'):
                 continue
             hp = hit['home_points']
             ap = hit['away_points']
