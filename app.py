@@ -1833,8 +1833,8 @@ def index():
             </div>
             <div class="control">
                 <label for="date">Date</label>
-                <select name="date" id="date" onchange="document.getElementById('mainForm').submit();">
-                    <option value="">All Dates</option>
+                <select name="date" id="date">
+                    <option value="">All Dates (Local)</option>
                     {% for d in all_dates %}
                     <option value="{{d}}" {% if d == selected_date %}selected{% endif %}>{{d}}</option>
                     {% endfor %}
@@ -2114,6 +2114,59 @@ def index():
                             el.setAttribute('data-iso', s);
                         }
                     });
+                } catch(e) { /* no-op */ }
+
+                // Build Date dropdown from cards (local dates)
+                try {
+                    const dateSel = document.getElementById('date');
+                    const grid = document.querySelector('.grid');
+                    const dOpts = new Map(); // key: yyyy-mm-dd (local), val: Label
+                    const cards = Array.from(document.querySelectorAll('.grid .card'));
+                    const fmt2d = n=> (n<10?('0'+n):(''+n));
+                    cards.forEach(c=>{
+                        const el = c.querySelector('.local-time');
+                        if(!el) return;
+                        let iso = (el.getAttribute('data-iso')||'').trim();
+                        if(!iso){ iso = (el.textContent||'').trim(); }
+                        if(!iso) return;
+                        let s = iso; if(s.indexOf('T')===-1 && s.indexOf(' ')!==-1) s = s.replace(' ','T');
+                        if(!/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) s += 'Z';
+                        const d = new Date(s); if(isNaN(d)) return;
+                        const key = `${d.getFullYear()}-${fmt2d(d.getMonth()+1)}-${fmt2d(d.getDate())}`;
+                        const label = d.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'2-digit', year:'numeric' });
+                        dOpts.set(key, label);
+                        c.setAttribute('data-local-date', key);
+                    });
+                    if(dateSel && dOpts.size){
+                        const keep = dateSel.value; // server-provided selection (UTC-based)
+                        // Clear and rebuild options
+                        dateSel.innerHTML = '';
+                        const optAll = document.createElement('option');
+                        optAll.value = ''; optAll.textContent = 'All Dates (Local)';
+                        dateSel.appendChild(optAll);
+                        Array.from(dOpts.keys()).sort().forEach(k=>{
+                            const o = document.createElement('option');
+                            o.value = k; o.textContent = dOpts.get(k);
+                            dateSel.appendChild(o);
+                        });
+                        // If a previous local key was stored, select it
+                        const stored = sessionStorage.getItem('selectedLocalDate') || '';
+                        if(stored && dOpts.has(stored)) dateSel.value = stored; else dateSel.value = '';
+                        // Apply initial filter if any
+                        const applyLocalDateFilter = () => {
+                            const val = dateSel.value || '';
+                            sessionStorage.setItem('selectedLocalDate', val);
+                            cards.forEach(c=>{
+                                const k = c.getAttribute('data-local-date') || '';
+                                c.style.display = (!val || val===k) ? '' : 'none';
+                            });
+                        };
+                        dateSel.addEventListener('change', (ev)=>{
+                            ev.preventDefault();
+                            applyLocalDateFilter();
+                        });
+                        applyLocalDateFilter();
+                    }
                 } catch(e) { /* no-op */ }
 
                 // Client-side sorting
