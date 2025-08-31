@@ -1040,12 +1040,14 @@ def index():
         show_all = False
         hide_unknown = False
         sort_by = 'time'
-        # Apply hide_unknown for GET defaults; do not cap results
+        # Apply hide_unknown for GET defaults; cap results for speed on cold starts
         try:
             if hide_unknown:
                 filtered_games = filtered_games[(filtered_games['home_conference'] != 'Unknown') & (filtered_games['away_conference'] != 'Unknown')]
         except Exception:
             pass
+        # Cap initial payload to keep first render fast; users can Show All to expand
+        filtered_games = filtered_games.head(80)
     else:
         # POST: Use form data to filter games
         filter_type = request.form.get('filter_type', 'all')
@@ -1073,7 +1075,7 @@ def index():
                 filtered_games = filtered_games[(filtered_games['home_conference'] != 'Unknown') & (filtered_games['away_conference'] != 'Unknown')]
         except Exception:
             pass
-    # Do not cap results; allow full week view even when show_all is false to avoid missing dates/games
+        # Do not cap POST results; user explicitly filtered
 
     # Prepare game cards for all filtered games
     def r2(val):
@@ -1508,7 +1510,7 @@ def index():
             </div>
             <div class="control">
                 <label for="date">Date</label>
-                <select name="date" id="date">
+                <select name="date" id="date" onchange="document.getElementById('mainForm').submit();">
                     <option value="">All Dates</option>
                     {% for d in all_dates %}
                     <option value="{{d}}" {% if d == selected_date %}selected{% endif %}>{{d}}</option>
@@ -1844,48 +1846,7 @@ def index():
                 }
                 if(chk){ chk.addEventListener('change', applyToggle); applyToggle(); }
 
-                // Local-date dropdown and filtering (so yesterday's finals don't shift to today by UTC)
-                const dateSelect = document.getElementById('date');
-                function localDateKey(iso){
-                    if(!iso) return '';
-                    let s = iso;
-                    if(s.indexOf('T') === -1 && s.indexOf(' ') !== -1){ s = s.replace(' ', 'T'); }
-                    if(!/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) s = s + 'Z';
-                    const d = new Date(s);
-                    if(isNaN(d)) return '';
-                    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-                }
-                function rebuildDateOptions(){
-                    if(!dateSelect || !grid) return;
-                    const dates = new Set();
-                    const cards = Array.from(grid.children).filter(el => el.classList.contains('card'));
-                    cards.forEach(card => {
-                        const t = card.querySelector('.local-time');
-                        const iso = t ? t.getAttribute('data-iso') : '';
-                        const key = localDateKey(iso);
-                        if(key) dates.add(key);
-                    });
-                    const prev = dateSelect.value;
-                    const values = Array.from(dates).sort();
-                    dateSelect.innerHTML = '';
-                    const optAll = document.createElement('option'); optAll.value = ''; optAll.textContent = 'All Dates'; dateSelect.appendChild(optAll);
-                    values.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; dateSelect.appendChild(o); });
-                    dateSelect.value = (prev && values.includes(prev)) ? prev : '';
-                }
-                function applyDateFilter(){
-                    if(!dateSelect || !grid) return;
-                    const want = dateSelect.value;
-                    const cards = Array.from(grid.children).filter(el => el.classList.contains('card'));
-                    cards.forEach(card => {
-                        if(!want){ card.style.display = ''; return; }
-                        const t = card.querySelector('.local-time');
-                        const iso = t ? t.getAttribute('data-iso') : '';
-                        const key = localDateKey(iso);
-                        card.style.display = (key === want) ? '' : 'none';
-                    });
-                }
-                rebuildDateOptions();
-                if(dateSelect){ dateSelect.addEventListener('change', applyDateFilter); applyDateFilter(); }
+                // Date filtering is server-driven via form submit on change (keeps initial payload light)
 
                 // Back to top behavior
                 const topBtn = document.getElementById('backToTop');
