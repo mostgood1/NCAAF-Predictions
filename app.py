@@ -1346,6 +1346,12 @@ def index():
                 filtered_games = filtered_games[~((filtered_games['home_conference'] == 'Unknown') & (filtered_games['away_conference'] == 'Unknown'))]
         except Exception:
             pass
+        # If Show All is checked but the result is still 1 game (data labeling quirks), broaden to full 2025 slate
+        try:
+            if show_all and len(filtered_games) <= 1 and 'season' in pred_df.columns:
+                filtered_games = pred_df[pred_df['season'] == 2025].copy()
+        except Exception:
+            pass
         # Do not cap POST results; user explicitly filtered
 
     # Prepare game cards for all filtered games
@@ -2127,6 +2133,21 @@ def index():
                     // initial align to current selection
                     resort(sortSelect.value || 'time');
                 }
+
+                // If only one card is rendered after server filters, ensure it's not due to DOM filtering
+                try {
+                    const gridCards = Array.from(document.querySelectorAll('.grid .card'));
+                    if (gridCards.length <= 1) {
+                        // No-op; optionally could display a hint
+                        const summary = document.querySelector('.summary');
+                        if(summary){
+                            const hint = document.createElement('div');
+                            hint.className = 'muted';
+                            hint.textContent = '(Only one game matched the current filters)';
+                            summary.appendChild(hint);
+                        }
+                    }
+                } catch(_) {}
 
                 // Toggle model vs adjusted totals
                 const chk = document.getElementById('toggleWxTotals');
