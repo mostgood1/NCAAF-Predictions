@@ -599,32 +599,61 @@ def _build_game_card(game_row: pd.Series) -> dict:
         home_team=game_row['home_team'],
         away_team=game_row['away_team']
     )
-    # Time handling and sort key
-    start_date_str = str(game_row.get('start_date', '') or '')
-    start_iso = str(game_row.get('start_date_api', '') or start_date_str)
-    display_time_fallback = start_date_str
-    sort_ts = None
-    if start_iso:
+    # Time handling and sort key (robust to NaN/NaT/None)
+    def _is_bad_date_val(v):
         try:
-            iso_norm = start_iso
-            if 'T' not in iso_norm and ' ' in iso_norm:
-                iso_norm = iso_norm.replace(' ', 'T')
-            if iso_norm.endswith('Z'):
-                dt_utc = datetime.fromisoformat(iso_norm.replace('Z', '+00:00'))
-            else:
-                dt_tmp = datetime.fromisoformat(iso_norm)
-                if dt_tmp.tzinfo is None:
-                    dt_utc = dt_tmp.replace(tzinfo=pytz.UTC)
+            if v is None:
+                return True
+            if isinstance(v, float) and math.isnan(v):
+                return True
+            if isinstance(v, str):
+                s = v.strip().lower()
+                return s in ('', 'nan', 'nat', 'none', 'null')
+            return False
+        except Exception:
+            return True
+    raw_api = game_row.get('start_date_api', None)
+    raw_sd = game_row.get('start_date', None)
+    val_api = None if _is_bad_date_val(raw_api) else str(raw_api).strip()
+    val_sd = None if _is_bad_date_val(raw_sd) else str(raw_sd).strip()
+    display_time_fallback = val_sd or val_api or ''
+    start_iso = ''
+    sort_ts = None
+    candidates = [c for c in [val_api, val_sd] if c]
+    for c in candidates:
+        try:
+            s = c
+            # Normalize space to 'T'
+            if 'T' not in s and ' ' in s:
+                s = s.replace(' ', 'T')
+            # Parse with fromisoformat; if fails, try pandas
+            dt_obj = None
+            try:
+                if s.endswith('Z'):
+                    dt_obj = datetime.fromisoformat(s.replace('Z', '+00:00'))
                 else:
-                    dt_utc = dt_tmp.astimezone(pytz.UTC)
+                    dt_obj = datetime.fromisoformat(s)
+            except Exception:
+                try:
+                    dt_obj = pd.to_datetime(c, errors='coerce').to_pydatetime() if c else None
+                except Exception:
+                    dt_obj = None
+            if not dt_obj:
+                continue
+            # Ensure timezone-aware UTC
+            if getattr(dt_obj, 'tzinfo', None) is None:
+                dt_utc = dt_obj.replace(tzinfo=pytz.UTC)
+            else:
+                dt_utc = dt_obj.astimezone(pytz.UTC)
             sort_ts = dt_utc.timestamp()
             start_iso = dt_utc.isoformat().replace('+00:00', 'Z')
             try:
                 display_time_fallback = dt_utc.strftime('%a, %b %d, %Y, %I:%M %p UTC')
             except Exception:
-                display_time_fallback = dt_utc.isoformat().replace('+00:00','Z')
+                display_time_fallback = start_iso
+            break
         except Exception:
-            pass
+            continue
     # Confidence bounds
     conf_lower = conf_upper = conf_std = None
     try:
