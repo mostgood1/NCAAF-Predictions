@@ -1144,6 +1144,36 @@ def debug_pred_source():
         return {'error': str(e), 'pred_source': PRED_SOURCE}, 500
 
 
+@app.route('/api/debug-week-counts')
+def debug_week_counts():
+    try:
+        df = pred_df[pred_df.get('season', 0) == 2025].copy()
+        if df.empty:
+            return {'message': 'No 2025 rows loaded', 'pred_source': PRED_SOURCE}, 200
+        weeks = sorted([int(w) for w in pd.to_numeric(df['week'], errors='coerce').dropna().unique()]) if 'week' in df.columns else []
+        counts = {}
+        for w in weeks:
+            sub = df[df['week'] == w]
+            counts[int(w)] = int(len(sub))
+        # sample a few from week 0 and 1
+        def sample_week(w):
+            if 'start_date' in df.columns:
+                cols = ['week','away_team','home_team','start_date']
+            else:
+                cols = ['week','away_team','home_team']
+            sub = df[df['week'] == w]
+            return sub[cols].head(5).to_dict(orient='records') if not sub.empty else []
+        return {
+            'pred_source': PRED_SOURCE,
+            'weeks': weeks,
+            'counts': counts,
+            'sample_w0': sample_week(0),
+            'sample_w1': sample_week(1),
+        }, 200
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+
 def compute_recommendations(week=None, bankroll=1000.0, kelly_factor=0.5, ev_threshold=0.02):
     """Core engine to compute EV+ recommendations, reused by API and UI."""
     df = pred_df[(pred_df['season'] == 2025)].copy()
@@ -1307,13 +1337,16 @@ def index():
         week_games['date_only'] = week_games['start_date'].str[:10]
         all_dates = sorted(week_games['date_only'].dropna().unique())
         filtered_games = week_games.copy()
-        if selected_date:
+        # Date filter is ignored when "Show all" is checked
+        if selected_date and not show_all:
             filtered_games = filtered_games[filtered_games['date_only'] == selected_date]
         if selected_conference:
             filtered_games = filtered_games[(filtered_games['home_conference'] == selected_conference) | (filtered_games['away_conference'] == selected_conference)]
-        if filter_type == 'completed':
+        # If Show All is checked, do not restrict to upcoming/completed — show the entire week
+        effective_filter = (filter_type if not show_all else 'all')
+        if effective_filter == 'completed':
             filtered_games = filtered_games[(filtered_games['actual_home_points'].notnull()) & (filtered_games['actual_away_points'].notnull())]
-        elif filter_type == 'upcoming':
+        elif effective_filter == 'upcoming':
             filtered_games = filtered_games[(filtered_games['actual_home_points'].isnull()) & (filtered_games['actual_away_points'].isnull())]
     # Apply limiters for POST
         try:
@@ -1767,6 +1800,7 @@ def index():
         <h2>2025 NCAA Football Predictions</h2>
         <div class="summary">
             <div class="muted" style="align-self:center;">This view</div>
+            <div class="muted" style="align-self:center;">{{ game_cards|length }} shown</div>
             <div>Winners: {{summary['winners']['correct']}} / {{summary['winners']['total']}} ({{summary['winners']['pct']}})</div>
             <div>ATS: {{summary['ats']['correct']}} / {{summary['ats']['total']}} ({{summary['ats']['pct']}}) +{{summary['ats']['push']}} push</div>
             <div>Totals: {{summary['ou']['correct']}} / {{summary['ou']['total']}} ({{summary['ou']['pct']}}) +{{summary['ou']['push']}} push</div>
