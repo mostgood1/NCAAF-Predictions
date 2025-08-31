@@ -691,8 +691,8 @@ def _update_scores_with_cfbd(week: int | None = None) -> dict:
         return {'step': 'cfbd_update', 'skipped': 'requests_not_available'}
 
     api_key = os.environ.get('CFBD_API_KEY') or os.environ.get('CFBD_TOKEN') or os.environ.get('CFBD')
-    if not api_key:
-        return {'step': 'cfbd_update', 'skipped': 'no_api_key'}
+    use_espn_only = (os.environ.get('USE_ESPN_ONLY', '0') == '1') or (not api_key)
+    use_espn_first = os.environ.get('USE_ESPN_FIRST', '1') != '0'
 
     # Ensure we have a target CSV path to update
     global pred_path_scores, pred_path_enh
@@ -752,7 +752,8 @@ def _update_scores_with_cfbd(week: int | None = None) -> dict:
             weeks = [0, 1, 2]
     updated = 0
     fetched = 0
-    games_map = {}
+    games_map = {}       # keyed by (week, ht, at)
+    games_map_nowk = {}  # keyed by (ht, at) for ESPN-only matching
     http_notes = []
     # Try a few parameter variants to avoid missing data due to filters
     def _variants(wk: int):
@@ -775,38 +776,127 @@ def _update_scores_with_cfbd(week: int | None = None) -> dict:
                     pr['status'] = st
                 vars.append(pr)
         return vars
-    try:
-        for wk in weeks:
-            for pr in _variants(wk):
-                try:
-                    resp = requests.get(base_url, headers=headers, params=pr, timeout=25)
-                    http_notes.append({'week': wk, 'status': getattr(resp, 'status_code', None), 'len': len(getattr(resp, 'content', b''))})
-                    if resp.status_code != 200:
-                        continue
-                    data = resp.json() or []
-                    if not data:
-                        continue
-                    fetched += len(data)
-                    for g in data:
-                        ht = _norm_team_cfbd(g.get('home_team'))
-                        at = _norm_team_cfbd(g.get('away_team'))
-                        hp = g.get('home_points')
-                        ap = g.get('away_points')
-                        comp = g.get('completed')
-                        # Accept zeros; only skip if truly None
-                        if hp is None or ap is None:
+    # Optionally try ESPN first or exclusively
+    def _fetch_espn_nowk():
+        nonlocal games_map_nowk
+        try:
+            unique_dates = set()
+            try:
+                if 'start_date' in df.columns:
+                    for _, r in df.iterrows():
+                        try:
+                            if int(r.get('season', 0)) != 2025:
+                                continue
+                            rw = int(r.get('week')) if pd.notna(r.get('week')) else None
+                        except Exception:
+                            rw = None
+                        if week is not None and rw is not None and rw != int(week):
                             continue
-                        games_map[(wk, ht, at)] = {'home_points': hp, 'away_points': ap, 'completed': comp}
-                    # If we populated anything for this week, no need to try other variants
-                    if any(k[0] == wk for k in games_map.keys()):
-                        break
+                        d = pd.to_datetime(r.get('start_date'), errors='coerce')
+                        if pd.notna(d):
+                            unique_dates.add(d.date().isoformat())
+            except Exception:
+                pass
+            if not unique_dates:
+                unique_dates.update({'2025-08-28','2025-08-29','2025-08-30','2025-08-31'})
+            def _norm_team_generic(s):
+                try:
+                    s = str(s or '').strip().lower()
+                    s = s.replace('&','and')
+                    s = s.replace("ʻ", "'").replace("’", "'")
+                    s = s.replace("hawai'i", "hawaii")
+                    s = re.sub(r"[^a-z0-9 '\-\(\)]", " ", s)
+                    s = re.sub(r"\s+", " ", s).strip()
+                    return s
                 except Exception:
-                    continue
-    except Exception:
-        return {'step': 'cfbd_update', 'error': 'fetch_failed'}
+                    return str(s)
+            for dstr in sorted(unique_dates):
+                ymd = dstr.replace('-','')
+                es_urls = [
+                    f'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates={ymd}&groups=80',
+                    f'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates={ymd}',
+                ]
+                for u in es_urls:
+                    try:
+                        r = requests.get(u, timeout=20, headers={'Accept':'application/json','User-Agent':'Mozilla/5.0'})
+                        http_notes.append({'espn': True, 'date': dstr, 'url': u, 'status': getattr(r,'status_code',None), 'len': len(getattr(r,'content',b''))})
+                        if r.status_code != 200:
+                            continue
+                        j = r.json() or {}
+                        events = j.get('events') or []
+                        for ev in events:
+                            comps = (ev.get('competitions') or [{}])[0]
+                            comps_list = comps.get('competitors') or []
+                            if len(comps_list) != 2:
+                                continue
+                            home = next((c for c in comps_list if c.get('homeAway')=='home'), comps_list[0])
+                            away = next((c for c in comps_list if c.get('homeAway')=='away'), comps_list[-1])
+                            hteam = home.get('team') or {}
+                            ateam = away.get('team') or {}
+                            def _cands(t):
+                                return [
+                                    _norm_team_generic(t.get('location')),
+                                    _norm_team_generic(t.get('shortDisplayName')),
+                                    _norm_team_generic(t.get('displayName')),
+                                    _norm_team_generic(t.get('abbreviation')),
+                                ]
+                            hcands = [c for c in _cands(hteam) if c]
+                            acands = [c for c in _cands(ateam) if c]
+                            try:
+                                hp = int(home.get('score')) if home.get('score') is not None else None
+                                ap = int(away.get('score')) if away.get('score') is not None else None
+                            except Exception:
+                                hp = home.get('score')
+                                ap = away.get('score')
+                            st = ((ev.get('status') or {}).get('type') or {}).get('completed')
+                            comp = bool(st)
+                            if hp is None or ap is None:
+                                continue
+                            for ht in hcands:
+                                for at in acands:
+                                    games_map_nowk[(ht, at)] = {'home_points': hp, 'away_points': ap, 'completed': comp}
+                        if games_map_nowk:
+                            break
+                    except Exception:
+                        continue
+        except Exception:
+            pass
 
-    if not games_map:
-        # Fallback: try the scoreboard endpoint which sometimes surfaces scores earlier
+    if use_espn_first or use_espn_only:
+        _fetch_espn_nowk()
+
+    # CFBD fetch only if not ESPN-only and if we still need more
+    if not use_espn_only and not games_map_nowk:
+        try:
+            for wk in weeks:
+                for pr in _variants(wk):
+                    try:
+                        resp = requests.get(base_url, headers=headers, params=pr, timeout=25)
+                        http_notes.append({'week': wk, 'status': getattr(resp, 'status_code', None), 'len': len(getattr(resp, 'content', b''))})
+                        if resp.status_code != 200:
+                            continue
+                        data = resp.json() or []
+                        if not data:
+                            continue
+                        fetched += len(data)
+                        for g in data:
+                            ht = _norm_team_cfbd(g.get('home_team'))
+                            at = _norm_team_cfbd(g.get('away_team'))
+                            hp = g.get('home_points')
+                            ap = g.get('away_points')
+                            comp = g.get('completed')
+                            if hp is None or ap is None:
+                                continue
+                            games_map[(wk, ht, at)] = {'home_points': hp, 'away_points': ap, 'completed': comp}
+                        if any(k[0] == wk for k in games_map.keys()):
+                            break
+                    except Exception:
+                        continue
+        except Exception:
+            return {'step': 'cfbd_update', 'error': 'fetch_failed'}
+
+    if not games_map and not use_espn_only and not games_map_nowk:
+        # Fallback 1: CFBD scoreboard endpoint which sometimes surfaces scores earlier
         try:
             sb_url = 'https://api.collegefootballdata.com/scoreboard'
             def _score_of(obj, key_candidates):
@@ -838,12 +928,14 @@ def _update_scores_with_cfbd(week: int | None = None) -> dict:
                         break
         except Exception:
             pass
-        if not games_map:
+    # ESPN fetch already handled above in ESPN-first path
+    if not games_map and not games_map_nowk:
             return {'step': 'cfbd_update', 'skipped': 'no_games_from_api', 'notes': http_notes}
 
     # Apply updates into our CSV
     try:
         changed_rows = 0
+    # games_map_nowk is already defined above
         for i, r in df.iterrows():
             try:
                 if int(r.get('season', 0)) != 2025:
@@ -876,6 +968,9 @@ def _update_scores_with_cfbd(week: int | None = None) -> dict:
                 if k in games_map:
                     hit = games_map[k]
                     break
+            if hit is None and games_map_nowk:
+                # Fall back to ESPN no-week map using normalized team names
+                hit = games_map_nowk.get((ht, at))
             if hit is None:
                 continue
             hp = hit['home_points']
