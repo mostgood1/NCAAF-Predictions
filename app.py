@@ -1875,7 +1875,7 @@ def index():
                 {% endif %}
                 {% if is_final and game_info['correct_prediction'] is not none %}
                     <div class="badges" style="margin-top:6px;">
-                        <span class="badge {% if game_info['correct_prediction'] %}ok{% else %}err{% endif %}">Winner {% if game_info['correct_prediction'] %}Correct{% else %}Wrong{% endif %} <span class="muted">({{summary['winners']['pct']}})</span></span>
+                        <span class="badge {% if game_info['correct_prediction'] %}ok{% else %}err{% endif %}">Winner {% if game_info['correct_prediction'] %}Correct{% else %}Wrong{% endif %}</span>
                     </div>
                 {% endif %}
             </div>
@@ -1886,7 +1886,7 @@ def index():
                     {% if is_final and game_info['ats_actual_result'] %}
                         <br><b>ATS:</b> {{game_info['ats_actual_result']}}
                         {% if game_info['ats_correct'] is not none %}
-                            <span class="badge {% if game_info['ats_correct'] %}ok{% else %}err{% endif %}" style="margin-left:6px;">{% if game_info['ats_correct'] %}Correct{% else %}Wrong{% endif %} <span class="muted">({{summary['ats']['pct']}})</span></span>
+                            <span class="badge {% if game_info['ats_correct'] %}ok{% else %}err{% endif %}" style="margin-left:6px;">{% if game_info['ats_correct'] %}Correct{% else %}Wrong{% endif %}</span>
                         {% elif game_info['ats_actual_result'] == 'Push' %}
                             <span class="badge push" style="margin-left:6px;">Push</span>
                         {% endif %}
@@ -1902,7 +1902,7 @@ def index():
                     {% if is_final and game_info['ou_actual_result'] %}
                         <br><b>Totals:</b> {{game_info['ou_actual_result']}}
                         {% if game_info['ou_correct'] is not none %}
-                            <span class="badge {% if game_info['ou_correct'] %}ok{% else %}err{% endif %}" style="margin-left:6px;">{% if game_info['ou_correct'] %}Correct{% else %}Wrong{% endif %} <span class="muted">({{summary['ou']['pct']}})</span></span>
+                            <span class="badge {% if game_info['ou_correct'] %}ok{% else %}err{% endif %}" style="margin-left:6px;">{% if game_info['ou_correct'] %}Correct{% else %}Wrong{% endif %}</span>
                         {% elif game_info['ou_actual_result'] == 'Push' %}
                             <span class="badge push" style="margin-left:6px;">Push</span>
                         {% endif %}
