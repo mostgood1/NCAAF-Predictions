@@ -853,6 +853,8 @@ def _build_game_card(game_row: pd.Series) -> dict:
     return {
         'home_team': game_row['home_team'],
         'away_team': game_row['away_team'],
+    'home_conference': game_row.get('home_conference', ''),
+    'away_conference': game_row.get('away_conference', ''),
         'venue': game_row.get('venue', ''),
         'game_time': display_time_fallback,
         'start_iso': start_iso,
@@ -1814,10 +1816,10 @@ def index():
         <h2>2025 NCAA Football Predictions</h2>
         <div class="summary">
             <div class="muted" style="align-self:center;">This view</div>
-            <div class="muted" style="align-self:center;">{{ game_cards|length }} shown</div>
-            <div>Winners: {{summary['winners']['correct']}} / {{summary['winners']['total']}} ({{summary['winners']['pct']}})</div>
-            <div>ATS: {{summary['ats']['correct']}} / {{summary['ats']['total']}} ({{summary['ats']['pct']}}) +{{summary['ats']['push']}} push</div>
-            <div>Totals: {{summary['ou']['correct']}} / {{summary['ou']['total']}} ({{summary['ou']['pct']}}) +{{summary['ou']['push']}} push</div>
+            <div class="muted" style="align-self:center;"><span id="sum-count-shown">{{ game_cards|length }}</span> shown</div>
+            <div>Winners: <span id="sum-winners-correct">{{summary['winners']['correct']}}</span> / <span id="sum-winners-total">{{summary['winners']['total']}}</span> (<span id="sum-winners-pct">{{summary['winners']['pct']}}</span>)</div>
+            <div>ATS: <span id="sum-ats-correct">{{summary['ats']['correct']}}</span> / <span id="sum-ats-total">{{summary['ats']['total']}}</span> (<span id="sum-ats-pct">{{summary['ats']['pct']}}</span>) +<span id="sum-ats-push">{{summary['ats']['push']}}</span> push</div>
+            <div>Totals: <span id="sum-ou-correct">{{summary['ou']['correct']}}</span> / <span id="sum-ou-total">{{summary['ou']['total']}}</span> (<span id="sum-ou-pct">{{summary['ou']['pct']}}</span>) +<span id="sum-ou-push">{{summary['ou']['push']}}</span> push</div>
         </div>
         <div style="text-align:center; margin:-6px 0 10px;">
             <label style="font-size:0.95em;color:#34495e;"><input type="checkbox" id="toggleWxTotals" checked> Show weather-adjusted totals</label>
@@ -1867,14 +1869,14 @@ def index():
                 </select>
             </div>
             <label class="control"><input type="checkbox" name="show_all" {% if show_all %}checked{% endif %} onchange="document.getElementById('mainForm').submit();"> Show all games for week</label>
-            
-            <label class="control"><input type="checkbox" name="hide_both_unknown" {% if hide_both_unknown %}checked{% endif %} onchange="document.getElementById('mainForm').submit();"> Hide games where both conferences are Unknown</label>
+
+            <label class="control"><input type="checkbox" id="hideBothUnknown" name="hide_both_unknown" {% if hide_both_unknown %}checked{% endif %}> Hide games where both conferences are Unknown</label>
             <button type="submit">Submit</button>
         </form>
     <div class="grid">
     {% for game_info in game_cards %}
     {% set is_final = (game_info['actual_home_points'] is not none) and (game_info['actual_away_points'] is not none) %}
-    <div class="card" data-sort-ts="{{game_info['sort_ts'] or 0}}" data-home-win-prob="{{game_info['home_win_prob'] or 0}}" data-ou-edge="{{game_info['ou_edge_num'] or 0}}" data-ats-edge="{{game_info['ats_edge_num'] or 0}}" style="border-left-color: {% if is_final %}{% if game_info['correct_prediction'] is not none %}{% if game_info['correct_prediction'] %}#2ecc71{% else %}#e74c3c{% endif %}{% else %}#95a5a6{% endif %}{% else %}#bdc3c7{% endif %};">
+    <div class="card" data-sort-ts="{{game_info['sort_ts'] or 0}}" data-home-win-prob="{{game_info['home_win_prob'] or 0}}" data-ou-edge="{{game_info['ou_edge_num'] or 0}}" data-ats-edge="{{game_info['ats_edge_num'] or 0}}" data-home-conf="{{game_info['home_conference']}}" data-away-conf="{{game_info['away_conference']}}" data-ats-actual="{{game_info['ats_actual_result'] or ''}}" data-ats-correct="{% if game_info['ats_correct'] is not none %}{{ 'true' if game_info['ats_correct'] else 'false' }}{% else %}{% endif %}" data-ou-actual="{{game_info['ou_actual_result'] or ''}}" data-ou-correct="{% if game_info['ou_correct'] is not none %}{{ 'true' if game_info['ou_correct'] else 'false' }}{% else %}{% endif %}" data-winner-correct="{% if game_info['correct_prediction'] is not none %}{{ 'true' if game_info['correct_prediction'] else 'false' }}{% else %}{% endif %}" style="border-left-color: {% if is_final %}{% if game_info['correct_prediction'] is not none %}{% if game_info['correct_prediction'] %}#2ecc71{% else %}#e74c3c{% endif %}{% else %}#95a5a6{% endif %}{% else %}#bdc3c7{% endif %};">
         <div class="card-header">
             <div class="when">Venue: {{game_info['venue']}} • <span class="local-time" data-iso="{{game_info['start_iso']}}">{{game_info['game_time']}}</span></div>
             <div class="status {% if is_final %}final{% else %}upcoming{% endif %}">{% if is_final %}FINAL{% else %}UPCOMING{% endif %}</div>
@@ -2119,6 +2121,7 @@ def index():
                 // Build Date dropdown from cards (local dates)
                 try {
                     const dateSel = document.getElementById('date');
+                    const hideUnknownChk = document.getElementById('hideBothUnknown');
                     const grid = document.querySelector('.grid');
                     const dOpts = new Map(); // key: yyyy-mm-dd (local), val: Label
                     const cards = Array.from(document.querySelectorAll('.grid .card'));
@@ -2137,6 +2140,57 @@ def index():
                         dOpts.set(key, label);
                         c.setAttribute('data-local-date', key);
                     });
+                    function recalcSummary(){
+                        try{
+                            const visCards = Array.from(document.querySelectorAll('.grid .card')).filter(c=>c.style.display !== 'none');
+                            // Count shown
+                            const shown = visCards.length;
+                            const put = (id, val)=>{ const el=document.getElementById(id); if(el) el.textContent = String(val); };
+                            put('sum-count-shown', shown);
+                            // Winners
+                            let wTot=0, wCor=0;
+                            // ATS
+                            let aTot=0, aCor=0, aPush=0;
+                            // OU
+                            let oTot=0, oCor=0, oPush=0;
+                            visCards.forEach(c=>{
+                                const w = c.getAttribute('data-winner-correct');
+                                if(w==="true" || w==="false"){ wTot += 1; if(w==="true") wCor += 1; }
+                                const aAct = (c.getAttribute('data-ats-actual')||'').trim();
+                                const aOK = c.getAttribute('data-ats-correct');
+                                if(aAct === 'Home' || aAct === 'Away'){ aTot += 1; if(aOK === 'true') aCor += 1; }
+                                else if(aAct === 'Push'){ aPush += 1; }
+                                const oAct = (c.getAttribute('data-ou-actual')||'').trim();
+                                const oOK = c.getAttribute('data-ou-correct');
+                                if(oAct === 'Over' || oAct === 'Under'){ oTot += 1; if(oOK === 'true') oCor += 1; }
+                                else if(oAct === 'Push'){ oPush += 1; }
+                            });
+                            // Update DOM
+                            put('sum-winners-correct', wCor); put('sum-winners-total', wTot);
+                            put('sum-ats-correct', aCor); put('sum-ats-total', aTot); put('sum-ats-push', aPush);
+                            put('sum-ou-correct', oCor); put('sum-ou-total', oTot); put('sum-ou-push', oPush);
+                            const pct = (c,t)=> (t>0? ((c/t*100).toFixed(1)+'%') : '—');
+                            put('sum-winners-pct', pct(wCor, wTot));
+                            put('sum-ats-pct', pct(aCor, aTot));
+                            put('sum-ou-pct', pct(oCor, oTot));
+                        }catch(e){ /* no-op */ }
+                    }
+
+                    function applyCombinedFilters(){
+                        const cardsAll = Array.from(document.querySelectorAll('.grid .card'));
+                        const dateVal = (dateSel && dateSel.value) ? dateSel.value : '';
+                        const hideUnknown = !!(hideUnknownChk && hideUnknownChk.checked);
+                        cardsAll.forEach(c=>{
+                            const k = c.getAttribute('data-local-date') || '';
+                            const hc = (c.getAttribute('data-home-conf')||'').trim();
+                            const ac = (c.getAttribute('data-away-conf')||'').trim();
+                            const dateOk = (!dateVal || dateVal===k);
+                            const confOk = (!hideUnknown || !(hc==='Unknown' && ac==='Unknown'));
+                            c.style.display = (dateOk && confOk) ? '' : 'none';
+                        });
+                        recalcSummary();
+                    }
+
                     if(dateSel && dOpts.size){
                         const keep = dateSel.value; // server-provided selection (UTC-based)
                         // Clear and rebuild options
@@ -2152,20 +2206,14 @@ def index():
                         // If a previous local key was stored, select it
                         const stored = sessionStorage.getItem('selectedLocalDate') || '';
                         if(stored && dOpts.has(stored)) dateSel.value = stored; else dateSel.value = '';
-                        // Apply initial filter if any
-                        const applyLocalDateFilter = () => {
-                            const val = dateSel.value || '';
-                            sessionStorage.setItem('selectedLocalDate', val);
-                            cards.forEach(c=>{
-                                const k = c.getAttribute('data-local-date') || '';
-                                c.style.display = (!val || val===k) ? '' : 'none';
-                            });
-                        };
+                        // Apply initial filters and bind events
                         dateSel.addEventListener('change', (ev)=>{
                             ev.preventDefault();
-                            applyLocalDateFilter();
+                            sessionStorage.setItem('selectedLocalDate', dateSel.value || '');
+                            applyCombinedFilters();
                         });
-                        applyLocalDateFilter();
+                        if(hideUnknownChk){ hideUnknownChk.addEventListener('change', (ev)=>{ ev.preventDefault(); applyCombinedFilters(); }); }
+                        applyCombinedFilters();
                     }
                 } catch(e) { /* no-op */ }
 
