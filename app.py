@@ -1294,18 +1294,10 @@ def index():
     selected_week = weeks[0] if weeks else None
     if request.method == 'GET':
         today = dt.datetime.now().date()
-        # Pick the first week that still has upcoming games for default week selection,
-        # but do NOT filter to only-upcoming so completed games (e.g., yesterday) are visible.
+        # Default to the earliest available week to show the broadest slate by default
         filter_type = 'all'
-        for w in weeks:
-            week_df = pred_df[pred_df['week'] == w]
-            upcoming = week_df[(week_df['actual_home_points'].isnull()) & (week_df['actual_away_points'].isnull())]
-            if not upcoming.empty:
-                selected_week = w
-                break
-        # If no upcoming games found (e.g., all completed), pick the max available week
-        if selected_week is None and weeks:
-            selected_week = max(weeks)
+        if weeks:
+            selected_week = min(weeks)
         week_games = pred_df[pred_df['week'] == int(selected_week)].copy() if selected_week else pred_df.copy()
         week_games['date_only'] = week_games['start_date'].str[:10]
         all_dates = sorted(week_games['date_only'].dropna().unique())
