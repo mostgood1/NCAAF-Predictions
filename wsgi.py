@@ -1,6 +1,13 @@
 import os
 import sys
 import importlib.util
+import traceback
+from typing import Optional
+try:
+    from flask import Flask, Response
+except Exception:  # Flask will be installed in Render
+    Flask = None  # type: ignore
+    Response = None  # type: ignore
 
 # Resolve base paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -38,14 +45,56 @@ def _load_subfolder_app():
                     return getattr(mod, "app")
     return None
 
-# Try root app first, then subfolder, then package import
-application = _load_root_app()
-if application is None:
-    application = _load_subfolder_app()
+startup_error: Optional[str] = None
+application = None
+
+# Try root app first, then subfolder, then package import, capturing errors
+try:
+    application = _load_root_app()
+except Exception:
+    startup_error = traceback.format_exc()
 
 if application is None:
-    # Final fallback to package import if available
-    from NCAFCompare.app import app as application  # type: ignore
+    try:
+        application = _load_subfolder_app()
+    except Exception:
+        if not startup_error:
+            startup_error = traceback.format_exc()
+
+if application is None:
+    try:
+        from NCAFCompare.app import app as application  # type: ignore
+    except Exception:
+        if not startup_error:
+            startup_error = traceback.format_exc()
+        application = None
+
+# If still not available or an error occurred, provide a minimal fallback app so we don't 502
+if application is None or startup_error is not None:
+    if Flask is None:
+        # Last-ditch placeholder WSGI callable
+        def application(environ, start_response):  # type: ignore
+            start_response('500 INTERNAL SERVER ERROR', [('Content-Type', 'text/plain')])
+            body = startup_error.encode('utf-8') if startup_error else b'Application failed to start.'
+            return [body]
+    else:
+        _fallback = Flask(__name__)
+
+        @_fallback.route('/')
+        def _root():
+            msg = 'Application failed to start. Visit /startup-error for details.' if startup_error else 'Application not found.'
+            return msg, 500
+
+        @_fallback.route('/startup-error')
+        def _err():
+            text = startup_error or 'No error captured.'
+            return Response(text, mimetype='text/plain')
+
+        @_fallback.route('/health')
+        def _health():
+            return {'status': 'error', 'message': 'startup_failed', 'has_trace': bool(startup_error)}, 500
+
+        application = _fallback
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5051))
