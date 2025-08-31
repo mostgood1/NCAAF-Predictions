@@ -380,10 +380,33 @@ conf_map = dict(zip(team_conf_df['school_norm'], team_conf_df['conference']))
 pred_df['home_conference'] = pred_df['home_team'].apply(lambda x: conf_map.get(norm(x), 'Unknown'))
 pred_df['away_conference'] = pred_df['away_team'].apply(lambda x: conf_map.get(norm(x), 'Unknown'))
 
-# Load win margin confidence intervals
+# Load win margin confidence intervals and build a fast lookup index
+WIN_MARGIN_CONF_INDEX = {}
 try:
     win_margin_conf_df = pd.read_csv(os.path.join(DATA_DIR, "win_margin_predictions_with_confidence.csv"))
     win_margin_conf_df.columns = win_margin_conf_df.columns.str.strip()
+    required = {'season','week','home_team','away_team','conf_interval_lower','conf_interval_upper','conf_std'}
+    if required.issubset(set(win_margin_conf_df.columns)):
+        # Normalize keys once
+        def _norm_simple(x):
+            return str(x).strip().lower().replace('&','and').replace('  ',' ')
+        try:
+            win_margin_conf_df['season'] = pd.to_numeric(win_margin_conf_df['season'], errors='coerce').astype('Int64')
+            win_margin_conf_df['week'] = pd.to_numeric(win_margin_conf_df['week'], errors='coerce').astype('Int64')
+        except Exception:
+            pass
+        for _, r in win_margin_conf_df.iterrows():
+            try:
+                key = (int(r['season']), int(r['week']), _norm_simple(r['home_team']), _norm_simple(r['away_team']))
+            except Exception:
+                continue
+            WIN_MARGIN_CONF_INDEX[key] = {
+                'lower': r.get('conf_interval_lower', None),
+                'upper': r.get('conf_interval_upper', None),
+                'std': r.get('conf_std', None)
+            }
+    else:
+        win_margin_conf_df = None
 except Exception:
     win_margin_conf_df = None
 
@@ -1115,21 +1138,17 @@ def index():
             except Exception:
                 pass
         conf_lower = conf_upper = conf_std = None
-        def normalize_team_name(name):
-            return str(name).strip().lower().replace('&', 'and').replace('  ', ' ')
-        if win_margin_conf_df is not None:
+        try:
             week_val = int(game_row.get('week', 0))
             season_val = int(game_row.get('season', 0))
-            home_team = normalize_team_name(game_row.get('home_team', ''))
-            away_team = normalize_team_name(game_row.get('away_team', ''))
-            conf_row = win_margin_conf_df[(win_margin_conf_df['week'] == week_val) &
-                                         (win_margin_conf_df['season'] == season_val) &
-                                         (win_margin_conf_df['home_team'].apply(normalize_team_name) == home_team) &
-                                         (win_margin_conf_df['away_team'].apply(normalize_team_name) == away_team)]
-            if not conf_row.empty:
-                conf_lower = r2(conf_row.iloc[0].get('conf_interval_lower', None))
-                conf_upper = r2(conf_row.iloc[0].get('conf_interval_upper', None))
-                conf_std = r2(conf_row.iloc[0].get('conf_std', None))
+            key = (season_val, week_val, norm(game_row.get('home_team','')), norm(game_row.get('away_team','')))
+            if key in WIN_MARGIN_CONF_INDEX:
+                ent = WIN_MARGIN_CONF_INDEX[key]
+                conf_lower = r2(ent.get('lower', None))
+                conf_upper = r2(ent.get('upper', None))
+                conf_std = r2(ent.get('std', None))
+        except Exception:
+            pass
         actual_home = _safe_float(game_row.get('actual_home_points', None))
         actual_away = _safe_float(game_row.get('actual_away_points', None))
         def _is_valid_num(x):
