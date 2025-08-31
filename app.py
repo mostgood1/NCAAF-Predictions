@@ -678,7 +678,7 @@ def _reload_predictions():
     new_df['away_conference'] = new_df['away_team'].apply(lambda x: conf_map.get(norm(x), 'Unknown'))
     pred_df = new_df
 
-def _update_scores_with_cfbd(week: int | None = None) -> dict:
+def _update_scores_with_cfbd(week: int | None = None, overwrite: bool = False) -> dict:
     """Update actual scores in the with_scores CSV using CFBD API.
     - Reads CFBD_API_KEY from environment; if missing, returns a skipped result.
     - If with_scores CSV doesn't exist but enhanced does, creates it by copying enhanced and adding actuals cols.
@@ -933,12 +933,12 @@ def _update_scores_with_cfbd(week: int | None = None) -> dict:
             pass
     # ESPN fetch already handled above in ESPN-first path
     if not games_map and not games_map_nowk:
-            return {'step': 'cfbd_update', 'skipped': 'no_games_from_api', 'notes': http_notes}
+        return {'step': 'cfbd_update', 'skipped': 'no_games_from_api', 'notes': http_notes}
 
     # Apply updates into our CSV
     try:
         changed_rows = 0
-    # games_map_nowk is already defined above
+        # Apply rows
         for i, r in df.iterrows():
             try:
                 if int(r.get('season', 0)) != 2025:
@@ -953,8 +953,9 @@ def _update_scores_with_cfbd(week: int | None = None) -> dict:
             if week is not None and rw is not None and rw != int(week):
                 continue
             # Skip if already has actuals
-            if pd.notna(r.get('actual_home_points')) and pd.notna(r.get('actual_away_points')):
-                continue
+            if not overwrite:
+                if pd.notna(r.get('actual_home_points')) and pd.notna(r.get('actual_away_points')):
+                    continue
             ht = _norm_team_cfbd(r.get('home_team'))
             at = _norm_team_cfbd(r.get('away_team'))
             # Try exact week key first, then try the other label (0<->1) for 2025 mismatch tolerance
@@ -981,10 +982,16 @@ def _update_scores_with_cfbd(week: int | None = None) -> dict:
             hp = hit['home_points']
             ap = hit['away_points']
             try:
-                if pd.isna(r.get('actual_home_points')) and hp is not None:
-                    df.at[i, 'actual_home_points'] = int(hp)
-                if pd.isna(r.get('actual_away_points')) and ap is not None:
-                    df.at[i, 'actual_away_points'] = int(ap)
+                if overwrite:
+                    if hp is not None:
+                        df.at[i, 'actual_home_points'] = int(hp)
+                    if ap is not None:
+                        df.at[i, 'actual_away_points'] = int(ap)
+                else:
+                    if pd.isna(r.get('actual_home_points')) and hp is not None:
+                        df.at[i, 'actual_home_points'] = int(hp)
+                    if pd.isna(r.get('actual_away_points')) and ap is not None:
+                        df.at[i, 'actual_away_points'] = int(ap)
                 changed_rows += 1
             except Exception:
                 continue
@@ -2910,7 +2917,12 @@ def _do_refresh(quick: bool):
             week_hint = int(w) if w != '' else None
         except Exception:
             week_hint = None
-        cfbd_res = _update_scores_with_cfbd(week_hint)
+        try:
+            from flask import request as _rq
+            ow = (_rq.args.get('overwrite', '0') == '1')
+        except Exception:
+            ow = False
+        cfbd_res = _update_scores_with_cfbd(week_hint, overwrite=ow)
         if isinstance(cfbd_res, dict):
             ran.append(cfbd_res)
     except Exception as _e_cfbd:
@@ -3063,11 +3075,12 @@ def _refresh_thread(quick: bool):
                 # Replace the running marker with final entry
                 REFRESH_STATE['details'][-1] = entry
                 REFRESH_STATE['seconds_total'] = round(time.time() - t0, 2)
-        # Update actual scores via CFBD if available (best-effort)
+        # Update actual scores via CFBD/ESPN (best-effort)
         try:
             with _REFRESH_LOCK:
                 wk = REFRESH_STATE.get('week')
-            res = _update_scores_with_cfbd(wk)
+                ow = bool(REFRESH_STATE.get('overwrite'))
+            res = _update_scores_with_cfbd(wk, overwrite=ow)
             with _REFRESH_LOCK:
                 REFRESH_STATE['details'].append(res if isinstance(res, dict) else {'step': 'cfbd_update', 'note': 'no_result'})
         except Exception as _e:
@@ -3144,6 +3157,7 @@ def refresh_start():
     # Start refresh in the background; immediate return for reliable UX
     mode = request.args.get('mode', '').lower()
     week = request.args.get('week', '').strip()
+    overwrite = request.args.get('overwrite', '0') == '1'
     try:
         week_int = int(week) if week != '' else None
     except Exception:
@@ -3157,6 +3171,7 @@ def refresh_start():
             'seconds_total': None, 'details': [], 'pred_source': None, 'rows': None, 'lines_rows': None,
             'unique_home_preds': None, 'unique_away_preds': None, 'unique_total_preds': None, 'error': None,
             'week': week_int,
+            'overwrite': overwrite,
         })
     th = threading.Thread(target=_refresh_thread, args=(quick,), daemon=True)
     th.start()
@@ -3194,6 +3209,7 @@ def refresh_status():
         <h2>Refresh Diagnostics (Live)</h2>
     <div class="actions">
             <label>Week: <input id="weekInp" type="number" min="0" max="20" style="width:80px"></label>
+            <label style="margin-left:12px"><input id="owInp" type="checkbox"> Overwrite finals</label>
             <button id="runFull">Run Full</button>
             <button id="runQuick">Run Quick</button>
             <span id="note" class="muted"></span>
@@ -3208,6 +3224,7 @@ def refresh_status():
             const wk = document.getElementById('weekInp').value.trim();
             let url = '/api/refresh-start' + (mode==='quick'?'?mode=quick':'');
             if(wk !== '') url += (url.includes('?')?'&':'?') + 'week=' + encodeURIComponent(wk);
+            if(document.getElementById('owInp').checked) url += (url.includes('?')?'&':'?') + 'overwrite=1';
             const res = await fetch(url, {method:'POST'});
             if(!res.ok){ document.getElementById('note').textContent = 'Start failed.'; return; }
             poll();
