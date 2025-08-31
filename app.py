@@ -366,8 +366,12 @@ try:
 except Exception:
     pass
 
-team_conf_df = pd.read_csv(os.path.join(DATA_DIR, "team_conferences.csv"))
-team_conf_df['school_norm'] = team_conf_df['school'].str.strip().str.lower().str.replace('&', 'and').str.replace('  ', ' ')
+try:
+    team_conf_df = pd.read_csv(os.path.join(DATA_DIR, "team_conferences.csv"))
+    team_conf_df['school_norm'] = team_conf_df['school'].str.strip().str.lower().str.replace('&', 'and').str.replace('  ', ' ')
+except Exception:
+    # Safe fallback: empty mapping so conferences default to Unknown
+    team_conf_df = pd.DataFrame(columns=['school', 'conference', 'school_norm'])
 
 # Add conference info to predictions
 def norm(name):
@@ -384,7 +388,11 @@ except Exception:
     win_margin_conf_df = None
 
 # Load team assets
-assets_df = pd.read_csv(os.path.join(DATA_DIR, "team_assets.csv"))
+try:
+    assets_df = pd.read_csv(os.path.join(DATA_DIR, "team_assets.csv"))
+except Exception:
+    # Safe fallback: empty assets to avoid startup crash
+    assets_df = pd.DataFrame(columns=['school', 'logo', 'color', 'alt_color'])
 def get_team_asset(team_name):
     row = assets_df[assets_df['school'] == team_name]
     if not row.empty:
