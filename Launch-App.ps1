@@ -5,8 +5,11 @@
 
 param(
     [int]$Port = 5051,
-    [switch]$OpenBrowser = $true
+    [switch]$OpenBrowser
 )
+
+# Default OpenBrowser to true if not supplied
+if(-not $PSBoundParameters.ContainsKey('OpenBrowser')){ $OpenBrowser = $true }
 
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
@@ -41,12 +44,12 @@ if(Test-Path $pidFile){
 if(-not $env:PORT){ $env:PORT = $Port }
 
 # Launch hidden (pythonw shows no console; python.exe is hidden via WindowStyle)
-$proc = Start-Process -FilePath $pythonw \
-    -ArgumentList "`"$app`"" \
-    -WorkingDirectory $root \
-    -WindowStyle Hidden \
-    -RedirectStandardOutput $stdout \
-    -RedirectStandardError $stderr \
+$proc = Start-Process -FilePath $pythonw `
+    -ArgumentList "`"$app`"" `
+    -WorkingDirectory $root `
+    -WindowStyle Hidden `
+    -RedirectStandardOutput $stdout `
+    -RedirectStandardError $stderr `
     -PassThru
 
 $proc.Id | Out-File -FilePath $pidFile -Encoding ascii -Force
