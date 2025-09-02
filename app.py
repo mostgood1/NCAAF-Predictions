@@ -493,12 +493,22 @@ def _build_lines_index(df):
                 key = (y, w, ht, at)
                 odds_str = row.get('lines','')
                 odds = []
-                try:
-                    odds = ast.literal_eval(odds_str) if isinstance(odds_str, str) else []
-                    if not isinstance(odds, list):
+                # Robustly parse odds stored as JSON or Python literal strings
+                if isinstance(odds_str, str):
+                    parsed = None
+                    try:
+                        parsed = json.loads(odds_str)
+                    except Exception:
+                        try:
+                            parsed = ast.literal_eval(odds_str)
+                        except Exception:
+                            parsed = None
+                    if isinstance(parsed, list):
+                        odds = parsed
+                    else:
                         odds = []
-                except Exception:
-                    odds = []
+                else:
+                    odds = odds_str if isinstance(odds_str, list) else []
                 idx[key] = odds
                 # normalized fallback keys (raw-normalized and canonical-normalized)
                 n_ht = _norm_team_for_odds(ht)
@@ -520,9 +530,121 @@ def _overlay_lines_2025_if_present():
     global lines_df, lines_index, lines_index_norm
     try:
         lines_2025_path = os.path.join(DATA_DIR, 'college_football_betting_lines_2025.csv')
+        # If a copy exists under NCAFCompare/src/data or src/data, consider merging it into DATA_DIR
+        nested = [
+            os.path.join(BASE_DIR, 'NCAFCompare', 'src', 'data', 'college_football_betting_lines_2025.csv'),
+            os.path.join(BASE_DIR, 'src', 'data', 'college_football_betting_lines_2025.csv'),
+        ]
+        def _read_df(path: str) -> pd.DataFrame:
+            try:
+                if os.path.exists(path):
+                    return pd.read_csv(path)
+            except Exception:
+                pass
+            return pd.DataFrame(columns=['year','week','homeTeam','awayTeam','lines'])
+
+        # Merge strategy:
+        # - If DATA_DIR file is missing: copy the largest available nested file.
+        # - If DATA_DIR file exists: union keys (year,week,homeTeam,awayTeam), prefer nested rows for
+        #   the weeks present in nested, but never drop other weeks. Back up DATA_DIR copy first.
+        if not os.path.exists(lines_2025_path):
+            # Choose the largest existing nested file
+            best = None
+            best_size = -1
+            for n in nested:
+                try:
+                    if os.path.exists(n):
+                        sz = os.path.getsize(n)
+                        if sz > best_size:
+                            best = n; best_size = sz
+                except Exception:
+                    continue
+            if best:
+                import shutil
+                os.makedirs(os.path.dirname(lines_2025_path), exist_ok=True)
+                shutil.copy2(best, lines_2025_path)
+        else:
+            # Attempt a safe merge with any newer nested files
+            main_df = _read_df(lines_2025_path)
+            merged = main_df.copy()
+            for n in nested:
+                try:
+                    if not os.path.exists(n):
+                        continue
+                    # Only consider merging if nested is newer OR we have zero rows for 2025 in memory
+                    do_merge = False
+                    try:
+                        do_merge = os.path.getmtime(n) > os.path.getmtime(lines_2025_path)
+                    except Exception:
+                        do_merge = True
+                    if not do_merge:
+                        continue
+                    other = _read_df(n)
+                    if other is None or other.empty:
+                        continue
+                    # Backup existing DATA_DIR file before merging
+                    try:
+                        bdir = os.path.join(os.path.dirname(lines_2025_path), 'backups', 'lines_2025')
+                        os.makedirs(bdir, exist_ok=True)
+                        ts = time.strftime('%Y%m%d_%H%M%S', time.gmtime())
+                        bpath = os.path.join(bdir, f"college_football_betting_lines_2025_{ts}.csv")
+                        main_df.to_csv(bpath, index=False)
+                    except Exception:
+                        pass
+                    # Merge by key, prefer 'other' for overlapping rows
+                    try:
+                        main_keys = set((int(r['year']), int(r['week']), str(r['homeTeam']), str(r['awayTeam'])) for _, r in merged.iterrows())
+                    except Exception:
+                        main_keys = set()
+                    rows = []
+                    for _, r in other.iterrows():
+                        try:
+                            k = (int(r['year']), int(r['week']), str(r['homeTeam']), str(r['awayTeam']))
+                        except Exception:
+                            continue
+                        # Remove any existing row with this key
+                        if k in main_keys:
+                            merged = merged[~((merged.get('year',0)==k[0]) & (merged.get('week',-1)==k[1]) & (merged.get('homeTeam','')==k[2]) & (merged.get('awayTeam','')==k[3]))]
+                        rows.append(r.to_dict())
+                    if rows:
+                        merged = pd.concat([merged, pd.DataFrame(rows)], ignore_index=True)
+                except Exception:
+                    # Skip problematic nested file and continue
+                    continue
+            # Write merged back
+            try:
+                if not merged.equals(main_df):
+                    merged.to_csv(lines_2025_path, index=False)
+            except Exception:
+                pass
         if not os.path.exists(lines_2025_path):
             return
-        new_lines = pd.read_csv(lines_2025_path)
+        new_lines = _read_df(lines_2025_path)
+        # If Week 1 odds exist in the historical file but are missing from new_lines, bring them forward
+        try:
+            hist_path = os.path.join(DATA_DIR, 'college_football_betting_lines_last_15_years.csv')
+            if os.path.exists(hist_path):
+                hist = pd.read_csv(hist_path)
+                if not hist.empty and 'year' in hist.columns and 'week' in hist.columns:
+                    w1_hist = hist[(hist.get('year',0)==2025) & (hist.get('week',-1)==1)]
+                    if not w1_hist.empty:
+                        # Build keys present in new_lines (avoid dupes)
+                        try:
+                            keys_new = set((int(r['year']), int(r['week']), str(r['homeTeam']), str(r['awayTeam'])) for _, r in new_lines.iterrows())
+                        except Exception:
+                            keys_new = set()
+                        add_rows = []
+                        for _, r in w1_hist.iterrows():
+                            try:
+                                k=(int(r['year']), int(r['week']), str(r['homeTeam']), str(r['awayTeam']))
+                            except Exception:
+                                continue
+                            if k not in keys_new:
+                                add_rows.append(r.to_dict())
+                        if add_rows:
+                            new_lines = pd.concat([new_lines, pd.DataFrame(add_rows)], ignore_index=True)
+        except Exception:
+            pass
         # Keep non-2025 from current df, replace 2025 rows with new file (preserving any non-overlapping entries)
         if not isinstance(lines_df, pd.DataFrame) or lines_df.empty:
             base_non_2025 = pd.DataFrame(columns=new_lines.columns)
@@ -546,8 +668,12 @@ def _overlay_lines_2025_if_present():
             if k not in new_keys:
                 to_keep.append(r)
         preserved = pd.DataFrame(to_keep) if to_keep else pd.DataFrame(columns=new_lines.columns)
-        lines_df = pd.concat([base_non_2025, preserved, new_lines], ignore_index=True)
-        lines_index, lines_index_norm = _build_lines_index(lines_df)
+        lines_df_local = pd.concat([base_non_2025, preserved, new_lines], ignore_index=True)
+        # Rebuild indexes from merged df
+        lines_idx, lines_idx_norm = _build_lines_index(lines_df_local)
+        # Commit globals only after successful build
+        lines_df = lines_df_local
+        lines_index, lines_index_norm = lines_idx, lines_idx_norm
     except Exception:
         # Do not crash app on overlay failure
         pass
@@ -1165,9 +1291,12 @@ def _update_scores_with_cfbd(week: int | None = None, overwrite: bool = False) -
                             unique_dates.add(d.date().isoformat())
             except Exception:
                 pass
-            if not unique_dates:
-                # Fallback coverage for Week 0/1 including Labor Day
-                unique_dates.update({'2025-08-28','2025-08-29','2025-08-30','2025-08-31','2025-09-01'})
+            # Always ensure broad Week 0/1 window (union), covers Labor Day Monday
+            try:
+                if week is None or int(week) in (0, 1):
+                    unique_dates.update({'2025-08-23','2025-08-28','2025-08-29','2025-08-30','2025-08-31','2025-09-01','2025-09-02'})
+            except Exception:
+                unique_dates.update({'2025-08-23','2025-08-28','2025-08-29','2025-08-30','2025-08-31','2025-09-01','2025-09-02'})
             def _norm_team_generic(s):
                 return _norm_team_base(s)
             for dstr in sorted(unique_dates):

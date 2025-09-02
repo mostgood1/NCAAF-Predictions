@@ -34,6 +34,9 @@ def _resolve_script(rel_path: str) -> str | None:
     cands = [
         os.path.join(base, 'src', 'data', rel_path),
         os.path.join(base, 'src', 'modeling', rel_path),
+    os.path.join(base, 'NCAFCompare', 'src', 'data', rel_path),
+    os.path.join(base, 'NCAFCompare', 'src', 'modeling', rel_path),
+    os.path.join(base, 'NCAFCompare', rel_path),
         os.path.join(base, rel_path),
     ]
     for p in cands:

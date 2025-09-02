@@ -4,3 +4,20 @@ NCAFCompare/
 .env
 .env.*
 *.env
+
+# Python cache/artifacts
+__pycache__/
+*.pyc
+
+# Virtual environments
+.venv/
+
+# Logs and runtime files
+logs/
+*.log
+*.pid
+.autolog_*.txt
+
+# Data backups and archives
+data/backups/
+data/archive/
