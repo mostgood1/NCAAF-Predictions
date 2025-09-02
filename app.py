@@ -937,6 +937,14 @@ def _build_game_card(game_row: pd.Series) -> dict:
                                     val = None
                     except Exception:
                         val = None
+                    # Fallback: if we couldn't infer team from formatted label (e.g., abbreviations),
+                    # use numeric spread directly when available.
+                    if val is None:
+                        try:
+                            if s_raw is not None and s_raw != '':
+                                val = float(s_raw)
+                        except Exception:
+                            val = None
                 else:
                     try:
                         if s_raw is not None and s_raw != '':
