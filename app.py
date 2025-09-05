@@ -1,4 +1,4 @@
-from flask import Flask, render_template_string, request, redirect, url_for
+from flask import Flask, render_template_string, request, redirect, url_for, jsonify
 import ast
 import unicodedata
 import pytz
@@ -1725,6 +1725,170 @@ def compute_recommendations(week=None, bankroll=1000.0, kelly_factor=0.5, ev_thr
                     recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'Total', 'side': 'Under', 'provider': provider, 'price_american': -110, 'model_prob': round(p_under,4), 'implied_prob': round(1/(dec_110),4), 'edge': round(ev_under,4), 'kelly_f': round(kf_under,4), 'stake': stake, 'line': ou_val})
     recs.sort(key=lambda x: x['edge'], reverse=True)
     return recs
+
+def _confidence_tier(edge: float | None, kelly_f: float | None, model_prob: float | None) -> tuple[str, int]:
+    try:
+        e = float(edge) if edge is not None else 0.0
+    except Exception:
+        e = 0.0
+    try:
+        k = float(kelly_f) if kelly_f is not None else 0.0
+    except Exception:
+        k = 0.0
+    try:
+        p = float(model_prob) if model_prob is not None else 0.0
+    except Exception:
+        p = 0.0
+    score = 0
+    # Edge thresholds
+    if e >= 0.05:
+        score += 2
+    elif e >= 0.03:
+        score += 1
+    # Kelly fraction thresholds (scaled stake sizing)
+    if k >= 0.03:
+        score += 2
+    elif k >= 0.015:
+        score += 1
+    # Model probability threshold
+    if p >= 0.60:
+        score += 1
+    tier = 'Low'
+    if score >= 3:
+        tier = 'High'
+    elif score >= 2:
+        tier = 'Medium'
+    return tier, score
+
+def _parse_start_ts(row: pd.Series) -> tuple[str, float | None, str]:
+    """Return (start_iso, sort_ts, display_time) from a predictions row."""
+    # Local helper matches logic in _build_game_card for robust parsing
+    def _is_bad_date_val(v):
+        try:
+            if v is None:
+                return True
+            if isinstance(v, float) and math.isnan(v):
+                return True
+            if isinstance(v, str):
+                s = v.strip().lower()
+                return s in ('', 'nan', 'nat', 'none', 'null')
+            return False
+        except Exception:
+            return True
+    raw_api = row.get('start_date_api', None)
+    raw_sd = row.get('start_date', None)
+    val_api = None if _is_bad_date_val(raw_api) else str(raw_api).strip()
+    val_sd = None if _is_bad_date_val(raw_sd) else str(raw_sd).strip()
+    display_time = val_sd or val_api or ''
+    start_iso = ''
+    sort_ts = None
+    candidates = [c for c in [val_api, val_sd] if c]
+    for c in candidates:
+        try:
+            s = c
+            if 'T' not in s and ' ' in s:
+                s = s.replace(' ', 'T')
+            dt_obj = None
+            try:
+                if s.endswith('Z'):
+                    dt_obj = datetime.fromisoformat(s.replace('Z', '+00:00'))
+                else:
+                    dt_obj = datetime.fromisoformat(s)
+            except Exception:
+                try:
+                    dt_obj = pd.to_datetime(c, errors='coerce').to_pydatetime() if c else None
+                except Exception:
+                    dt_obj = None
+            if not dt_obj:
+                continue
+            # Ensure timezone-aware UTC
+            if getattr(dt_obj, 'tzinfo', None) is None:
+                dt_utc = dt_obj.replace(tzinfo=pytz.UTC)
+            else:
+                dt_utc = dt_obj.astimezone(pytz.UTC)
+            sort_ts = dt_utc.timestamp()
+            start_iso = dt_utc.isoformat().replace('+00:00', 'Z')
+            try:
+                display_time = dt_utc.strftime('%a, %b %d, %Y, %I:%M %p UTC')
+            except Exception:
+                display_time = start_iso
+            break
+        except Exception:
+            continue
+    return start_iso, sort_ts, display_time
+
+@app.route('/api/recommendations', methods=['GET'])
+def recommendations_api():
+    """Return EV+ betting recommendations for a given week with confidence and sorting.
+    Query params:
+      - week: int (default: auto-upcoming from predictions)
+      - bankroll: float (default 1000)
+      - kelly: float scale factor (default 0.5)
+      - ev: float minimum EV threshold (default 0.02)
+      - market: optional filter in {ML, Spread, Total}
+      - sort: one of {time, confidence_desc, market, edge_desc, stake_desc, prob_desc} (default edge_desc)
+      - limit: int cap number of results
+    """
+    try:
+        week_q = request.args.get('week')
+        bankroll = float(request.args.get('bankroll', 1000.0))
+        kelly_factor = float(request.args.get('kelly', 0.5))
+        ev_threshold = float(request.args.get('ev', 0.02))
+        market_filter = request.args.get('market')
+        sort_key = request.args.get('sort', 'edge_desc')
+        limit = request.args.get('limit')
+        limit = int(limit) if (limit and str(limit).isdigit()) else None
+
+        week_val = int(week_q) if (week_q and str(week_q).isdigit()) else None
+        recs = compute_recommendations(week=week_val, bankroll=bankroll, kelly_factor=kelly_factor, ev_threshold=ev_threshold)
+        # Attach timing and confidence
+        out = []
+        # Build a quick index by (season,week,home,away) to get start time
+        try:
+            idx = {}
+            df2025 = pred_df[(pred_df.get('season', 0) == 2025)].copy()
+            for _, r in df2025.iterrows():
+                key = (int(r.get('season', 0)), int(r.get('week', -1)), str(r.get('home_team','')), str(r.get('away_team','')))
+                idx[key] = r
+        except Exception:
+            idx = {}
+        for rec in recs:
+            key = (int(rec['season']), int(rec['week']), rec['home_team'], rec['away_team'])
+            row = idx.get(key)
+            start_iso, sort_ts, display_time = _parse_start_ts(row) if row is not None else ('', None, '')
+            tier, score = _confidence_tier(rec.get('edge'), rec.get('kelly_f'), rec.get('model_prob'))
+            ent = {
+                **rec,
+                'confidence': tier,
+                'confidence_score': score,
+                'start_iso': start_iso,
+                'sort_ts': sort_ts,
+                'game_time': display_time,
+            }
+            if market_filter and ent.get('market') != market_filter:
+                continue
+            out.append(ent)
+        # Sorting
+        try:
+            if sort_key == 'time':
+                out.sort(key=lambda x: (x.get('sort_ts') is None, x.get('sort_ts') or 0.0))
+            elif sort_key == 'confidence_desc':
+                out.sort(key=lambda x: (x.get('confidence_score') or 0, x.get('edge') or 0.0), reverse=True)
+            elif sort_key == 'market':
+                out.sort(key=lambda x: (str(x.get('market','')), x.get('sort_ts') or 0.0))
+            elif sort_key == 'stake_desc':
+                out.sort(key=lambda x: (x.get('stake') or 0.0), reverse=True)
+            elif sort_key == 'prob_desc':
+                out.sort(key=lambda x: (x.get('model_prob') or 0.0), reverse=True)
+            else:  # edge_desc
+                out.sort(key=lambda x: (x.get('edge') or 0.0), reverse=True)
+        except Exception:
+            pass
+        if limit is not None and limit > 0:
+            out = out[:limit]
+        return jsonify({'count': len(out), 'week': week_val, 'sort': sort_key, 'results': out}), 200
+    except Exception as e:
+        return {'error': str(e)}, 500
 @app.route('/api/build-calibration', methods=['POST'])
 def build_calibration():
     """Generate isotonic LUT and conference sigma CSV from historical data."""
@@ -2957,8 +3121,8 @@ def analysis_page():
     ''', weeks=completed_weeks, selected_week=selected_week, metrics=metrics, rows=rows, classes=classes)
 
 
-@app.route('/api/recommendations', methods=['GET'])
-def recommendations():
+@app.route('/api/recommendations/simple', methods=['GET'])
+def recommendations_simple():
     # Recommend EV+ bets for upcoming games. Supports ?week=&bankroll=&kelly_factor=
     week = request.args.get('week')
     bankroll = _safe_float(request.args.get('bankroll', 1000), 1000)
