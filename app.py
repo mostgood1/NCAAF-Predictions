@@ -1857,6 +1857,15 @@ def recommendations_api():
             row = idx.get(key)
             start_iso, sort_ts, display_time = _parse_start_ts(row) if row is not None else ('', None, '')
             tier, score = _confidence_tier(rec.get('edge'), rec.get('kelly_f'), rec.get('model_prob'))
+            # Attach team assets for a richer UI
+            try:
+                ha = get_team_asset(rec['home_team'])
+            except Exception:
+                ha = {'logo': '', 'color': '', 'alt_color': ''}
+            try:
+                aa = get_team_asset(rec['away_team'])
+            except Exception:
+                aa = {'logo': '', 'color': '', 'alt_color': ''}
             ent = {
                 **rec,
                 'confidence': tier,
@@ -1864,6 +1873,10 @@ def recommendations_api():
                 'start_iso': start_iso,
                 'sort_ts': sort_ts,
                 'game_time': display_time,
+                'home_logo': ha.get('logo',''),
+                'away_logo': aa.get('logo',''),
+                'home_color': ha.get('color',''),
+                'away_color': aa.get('color',''),
             }
             if market_filter and ent.get('market') != market_filter:
                 continue
@@ -3269,31 +3282,47 @@ def recommendations_page():
         default_limit = 100
         return render_template_string('''
         <style>
-            body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6fa; }
-            .container { max-width: 1000px; margin: 30px auto; background:#fff; padding:24px; border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,.08); }
-            h2 { text-align:center; margin-bottom:18px; }
-            form { display:grid; grid-template-columns: repeat(6, minmax(140px,1fr)); gap:12px; align-items:end; margin-bottom:18px; }
-            label { font-weight: 500; color: #34495e; }
-            select,input,button { padding:8px 10px; border:1px solid #ccc; border-radius:6px; }
-            .rec-card { background:#f8f8f8; border-radius:10px; padding:14px; margin:10px 0; display:flex; justify-content:space-between; gap:12px; align-items:center; }
-            .lhs { display:flex; flex-direction:column; gap:4px; }
-            .meta { font-size:.95em; color:#444; }
-            .edge { font-weight:600; color:#2c3e50; }
+            body { font-family: 'Segoe UI', Arial, sans-serif; background: #f6f8fb; }
+            .container { max-width: 1080px; margin: 30px auto; background:#fff; padding:24px; border-radius:14px; box-shadow:0 8px 24px rgba(0,0,0,.08); }
+            h2 { text-align:center; margin-bottom:12px; }
+            .toolbar { display:grid; grid-template-columns: repeat(7, minmax(140px,1fr)); gap:12px; align-items:end; margin-bottom:10px; }
+            label { font-weight: 600; color: #34495e; font-size:.95em; }
+            select,input,button { padding:8px 10px; border:1px solid #d0d7de; border-radius:8px; }
+            .tabs { display:flex; gap:10px; margin: 8px 0 14px; }
+            .tab { padding:6px 10px; border:1px solid #d0d7de; border-radius:8px; cursor:pointer; color:#34495e; }
+            .tab.active { background:#eaf1fb; border-color:#bfd3f2; color:#1d4ed8; font-weight:600; }
+            .rec-card { background:#f8fafc; border:1px solid #edf2f7; border-radius:12px; padding:14px; margin:10px 0; display:flex; justify-content:space-between; gap:16px; align-items:center; }
+            .lhs { display:flex; flex-direction:column; gap:6px; }
+            .teams { display:flex; align-items:center; gap:10px; font-weight:600; }
+            .team { display:flex; align-items:center; gap:8px; }
+            .logo { width:24px; height:24px; border-radius:50%; background:#eee; display:inline-block; background-size:cover; background-position:center; border:1px solid #ddd; }
+            .meta { font-size:.92em; color:#46556a; }
+            .edge { font-weight:700; color:#0d3b66; font-size:1.05em; }
             .nav { text-align:right; margin-bottom:8px; }
-            .msg { color:#2c3e50; margin: 8px 0; }
-            .pill { padding:2px 8px; border-radius:999px; font-size:.85em; }
+            .pill { padding:2px 8px; border-radius:999px; font-size:.82em; }
             .pill.high { background:#eaf7ef; color:#1e8e3e; border:1px solid #bfe3c7; }
             .pill.medium { background:#fff7e6; color:#b26b00; border:1px solid #ffe0a3; }
             .pill.low { background:#fdecee; color:#b00020; border:1px solid #f4b4bd; }
             .row { display:flex; gap:10px; align-items:center; }
             .count { color:#555; margin: 6px 0 10px; }
+            .controls-row { display:flex; gap:10px; align-items:center; justify-content:space-between; }
+            .view-toggle { display:flex; gap:8px; align-items:center; }
+            table { width:100%; border-collapse:collapse; background:#fff; }
+            th,td { padding:8px 10px; border:1px solid #e0e0e0; text-align:center; }
+            th { background:#f1f5f9; }
         </style>
         <div class="container">
             <div class="nav">
                 <a href="/">Main</a> | <a href="/conference-records">Conference Records</a> | <a href="/recommendations/performance">Performance</a>
             </div>
             <h2>Betting Recommendations</h2>
-            <form id="controls">
+            <div class="tabs" id="marketTabs">
+                <div class="tab active" data-market="">All</div>
+                <div class="tab" data-market="ML">Moneyline</div>
+                <div class="tab" data-market="Spread">Spread</div>
+                <div class="tab" data-market="Total">Total</div>
+            </div>
+            <form id="controls" class="toolbar">
                 <div>
                     <label>Week</label>
                     <select name="week" id="week">
@@ -3301,15 +3330,6 @@ def recommendations_page():
                         {% for w in weeks %}
                             <option value="{{w}}">Week {{w}}</option>
                         {% endfor %}
-                    </select>
-                </div>
-                <div>
-                    <label>Market</label>
-                    <select name="market" id="market">
-                        <option value="">All</option>
-                        <option>ML</option>
-                        <option>Spread</option>
-                        <option>Total</option>
                     </select>
                 </div>
                 <div>
@@ -3339,9 +3359,26 @@ def recommendations_page():
                     <label>Limit</label>
                     <input type="number" step="1" id="limit" value="{{default_limit}}"/>
                 </div>
-                <div style="grid-column: 1 / -1; display:flex; gap:10px;">
-                    <button type="button" id="refreshBtn">Refresh</button>
-                    <button type="button" id="logBtn">Log Shown (via simple API)</button>
+                <div style="grid-column: 1 / -1;" class="controls-row">
+                    <div class="row">
+                        <label>Confidence</label>
+                        <select id="confFilter">
+                            <option value="">All</option>
+                            <option value="High">High</option>
+                            <option value="Medium">Medium</option>
+                            <option value="Low">Low</option>
+                        </select>
+                    </div>
+                    <div class="view-toggle">
+                        <button type="button" id="refreshBtn">Refresh</button>
+                        <button type="button" id="logBtn">Log Shown</button>
+                        <span>|</span>
+                        <label>View</label>
+                        <select id="viewMode">
+                            <option value="cards">Cards</option>
+                            <option value="table">Table</option>
+                        </select>
+                    </div>
                 </div>
             </form>
             <div class="count" id="count"></div>
@@ -3352,7 +3389,7 @@ def recommendations_page():
         function qs() {
             const p = new URLSearchParams();
             const week = el('week').value.trim();
-            const market = el('market').value.trim();
+            const market = document.querySelector('.tab.active')?.dataset.market || '';
             const sort = el('sort').value.trim();
             const bankroll = el('bankroll').value.trim();
             const kelly = el('kelly').value.trim();
@@ -3377,6 +3414,58 @@ def recommendations_page():
             if (n===null || n===undefined || Number.isNaN(n)) return '';
             try { return Number(n).toFixed(d); } catch { return n; }
         }
+        function toLocal(iso) {
+            try { return new Date(iso).toLocaleString(); } catch { return iso||''; }
+        }
+        function renderCards(list) {
+            const frag = document.createDocumentFragment();
+            list.forEach(r => {
+                const card = document.createElement('div');
+                card.className = 'rec-card';
+                const left = document.createElement('div');
+                left.className = 'lhs';
+                left.innerHTML = `
+                    <div class="row">
+                      <span class="pill ${pillClass(r.confidence)}">${r.confidence||''}</span>
+                      <span class="meta">${toLocal(r.start_iso)||r.game_time||''}</span>
+                    </div>
+                    <div class="teams">
+                      <span class="team"><span class="logo" style="background-image:url('${r.away_logo||''}')"></span>${r.away_team}</span>
+                      <span>@</span>
+                      <span class="team"><span class="logo" style="background-image:url('${r.home_logo||''}')"></span>${r.home_team}</span>
+                    </div>
+                    <div><b>${r.market}</b> — ${r.side}${r.line!==undefined && r.line!==null ? ' ' + r.line : ''} — Price ${r.price_american} — <span class="meta">${r.provider||''}</span></div>
+                    <div>Model p: ${fmt(r.model_prob,3)} | Implied: ${fmt(r.implied_prob,3)} | Kelly: ${fmt(r.kelly_f,3)} | Stake: $${fmt(r.stake,2)}</div>
+                `;
+                const right = document.createElement('div');
+                right.innerHTML = `<div class="edge">Edge: ${fmt(r.edge,3)}</div>`;
+                card.appendChild(left);
+                card.appendChild(right);
+                frag.appendChild(card);
+            });
+            el('results').appendChild(frag);
+        }
+        function renderTable(list) {
+            const cols = ['week','start_iso','market','side','line','price_american','home_team','away_team','provider','model_prob','implied_prob','edge','kelly_f','stake','confidence'];
+            const tbl = document.createElement('table');
+            const thead = document.createElement('thead');
+            thead.innerHTML = '<tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr>';
+            const tbody = document.createElement('tbody');
+            list.forEach(r => {
+                const tr = document.createElement('tr');
+                cols.forEach(c => {
+                    const td = document.createElement('td');
+                    let v = r[c];
+                    if (c==='start_iso') v = toLocal(r.start_iso||'');
+                    if (typeof v==='number') v = fmt(v, c==='stake'?2:3);
+                    td.textContent = v==null?'':v;
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+            tbl.appendChild(thead); tbl.appendChild(tbody);
+            el('results').appendChild(tbl);
+        }
         async function fetchRecs() {
             const url = '/api/recommendations?' + qs();
             el('count').textContent = 'Loading…';
@@ -3384,30 +3473,13 @@ def recommendations_page():
             try {
                 const res = await fetch(url);
                 const data = await res.json();
-                const list = data.results || [];
+                let list = data.results || [];
+                // Confidence filter
+                const cf = (el('confFilter').value||'').trim();
+                if (cf) list = list.filter(x => (x.confidence||'')===cf);
                 el('count').textContent = `Results: ${list.length}${data.week!==null?` (Week ${data.week})`:''}`;
-                const frag = document.createDocumentFragment();
-                list.forEach(r => {
-                    const card = document.createElement('div');
-                    card.className = 'rec-card';
-                    const left = document.createElement('div');
-                    left.className = 'lhs';
-                    left.innerHTML = `
-                        <div class="row">
-                          <span class="pill ${pillClass(r.confidence)}">${r.confidence||''}</span>
-                          <span class="meta">${r.game_time||''}</span>
-                        </div>
-                        <div class="meta">Wk ${r.week} — ${r.away_team} @ ${r.home_team} — ${r.provider||''}</div>
-                        <div><b>${r.market}</b> — ${r.side}${r.line!==undefined && r.line!==null ? ' ' + r.line : ''} — Price ${r.price_american}</div>
-                        <div>Model p: ${fmt(r.model_prob,3)} | Implied: ${fmt(r.implied_prob,3)} | Kelly: ${fmt(r.kelly_f,3)} | Stake: $${fmt(r.stake,2)}</div>
-                    `;
-                    const right = document.createElement('div');
-                    right.innerHTML = `<div class="edge">Edge: ${fmt(r.edge,3)}</div>`;
-                    card.appendChild(left);
-                    card.appendChild(right);
-                    frag.appendChild(card);
-                });
-                el('results').appendChild(frag);
+                const mode = el('viewMode').value;
+                if (mode==='table') renderTable(list); else renderCards(list);
             } catch (e) {
                 el('count').textContent = 'Error loading recommendations.';
             }
@@ -3432,6 +3504,14 @@ def recommendations_page():
         }
         el('refreshBtn').addEventListener('click', fetchRecs);
         el('logBtn').addEventListener('click', logShown);
+        // Tabs
+        document.querySelectorAll('#marketTabs .tab').forEach(t => t.addEventListener('click', () => {
+            document.querySelectorAll('#marketTabs .tab').forEach(x => x.classList.remove('active'));
+            t.classList.add('active');
+            fetchRecs();
+        }));
+        // View toggle
+        el('viewMode').addEventListener('change', fetchRecs);
         // Auto-load on page open
         fetchRecs();
         </script>
