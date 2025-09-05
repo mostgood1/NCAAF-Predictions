@@ -3261,94 +3261,181 @@ def recommendations_performance():
 
 @app.route('/recommendations', methods=['GET', 'POST'])
 def recommendations_page():
-        # Controls
-        week = request.values.get('week', '')
-        bankroll = _safe_float(request.values.get('bankroll', 1000), 1000)
-        kelly_factor = _safe_float(request.values.get('kelly_factor', 0.5), 0.5)
-        ev_threshold = _safe_float(request.values.get('ev_threshold', 0.02), 0.02)
-        action = request.values.get('action', '')
-
-        recs = compute_recommendations(week=week if week else None, bankroll=bankroll, kelly_factor=kelly_factor, ev_threshold=ev_threshold)
-        top = recs[:100]
-
-        message = ''
-        if action == 'log' and top:
-                _ensure_recs_file()
-                ts = datetime.now(timezone.utc).isoformat()
-                try:
-                        existing = pd.read_csv(RECS_PATH) if os.path.exists(RECS_PATH) else pd.DataFrame()
-                        new_df = pd.DataFrame([
-                                {
-                                        'timestamp': ts, 'season': r['season'], 'week': r['week'], 'home_team': r['home_team'], 'away_team': r['away_team'],
-                                'market': r['market'], 'side': r['side'], 'price_american': r['price_american'], 'provider': r.get('provider'), 'model_prob': r['model_prob'],
-                                'line': r.get('line', None), 'implied_prob': r['implied_prob'], 'edge': r['edge'], 'kelly_f': r['kelly_f'], 'bankroll': bankroll, 'stake': r['stake'],
-                                        'status': 'open', 'result': 'pending', 'pnl': 0.0
-                                } for r in top
-                        ])
-                        all_df = pd.concat([existing, new_df], ignore_index=True)
-                        all_df.to_csv(RECS_PATH, index=False)
-                        message = f"Logged {len(top)} recommendations."
-                except Exception as e:
-                        message = f"Log failed: {e}"
-
+        # Render a client-side UI that fetches from /api/recommendations with filters/sorting
         weeks = sorted(pred_df['week'].dropna().unique())
+        default_bankroll = 1000
+        default_kelly = 0.5
+        default_ev = 0.02
+        default_limit = 100
         return render_template_string('''
         <style>
             body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6fa; }
-            .container { max-width: 900px; margin: 30px auto; background:#fff; padding:24px; border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,.08); }
+            .container { max-width: 1000px; margin: 30px auto; background:#fff; padding:24px; border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,.08); }
             h2 { text-align:center; margin-bottom:18px; }
-            form { display:grid; grid-template-columns: repeat(4, minmax(160px,1fr)); gap:12px; align-items:end; margin-bottom:18px; }
+            form { display:grid; grid-template-columns: repeat(6, minmax(140px,1fr)); gap:12px; align-items:end; margin-bottom:18px; }
             label { font-weight: 500; color: #34495e; }
             select,input,button { padding:8px 10px; border:1px solid #ccc; border-radius:6px; }
-            .rec-card { background:#f8f8f8; border-radius:10px; padding:14px; margin:10px 0; }
+            .rec-card { background:#f8f8f8; border-radius:10px; padding:14px; margin:10px 0; display:flex; justify-content:space-between; gap:12px; align-items:center; }
+            .lhs { display:flex; flex-direction:column; gap:4px; }
             .meta { font-size:.95em; color:#444; }
-            .edge { font-weight:bold; color:#2c3e50; }
+            .edge { font-weight:600; color:#2c3e50; }
             .nav { text-align:right; margin-bottom:8px; }
             .msg { color:#2c3e50; margin: 8px 0; }
+            .pill { padding:2px 8px; border-radius:999px; font-size:.85em; }
+            .pill.high { background:#eaf7ef; color:#1e8e3e; border:1px solid #bfe3c7; }
+            .pill.medium { background:#fff7e6; color:#b26b00; border:1px solid #ffe0a3; }
+            .pill.low { background:#fdecee; color:#b00020; border:1px solid #f4b4bd; }
+            .row { display:flex; gap:10px; align-items:center; }
+            .count { color:#555; margin: 6px 0 10px; }
         </style>
         <div class="container">
             <div class="nav">
                 <a href="/">Main</a> | <a href="/conference-records">Conference Records</a> | <a href="/recommendations/performance">Performance</a>
             </div>
             <h2>Betting Recommendations</h2>
-            {% if message %}<div class="msg">{{message}}</div>{% endif %}
-            <form method="post">
+            <form id="controls">
                 <div>
                     <label>Week</label>
-                    <select name="week">
+                    <select name="week" id="week">
                         <option value="">All Upcoming</option>
                         {% for w in weeks %}
-                            <option value="{{w}}" {% if (week|int)==w %}selected{% endif %}>Week {{w}}</option>
+                            <option value="{{w}}">Week {{w}}</option>
                         {% endfor %}
                     </select>
                 </div>
                 <div>
+                    <label>Market</label>
+                    <select name="market" id="market">
+                        <option value="">All</option>
+                        <option>ML</option>
+                        <option>Spread</option>
+                        <option>Total</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Sort</label>
+                    <select name="sort" id="sort">
+                        <option value="edge_desc">Edge ↓</option>
+                        <option value="confidence_desc">Confidence ↓</option>
+                        <option value="stake_desc">Stake ↓</option>
+                        <option value="prob_desc">Model p ↓</option>
+                        <option value="time">Time ↑</option>
+                        <option value="market">Market A→Z</option>
+                    </select>
+                </div>
+                <div>
                     <label>Bankroll</label>
-                    <input type="number" step="1" name="bankroll" value="{{bankroll}}"/>
+                    <input type="number" step="1" id="bankroll" value="{{default_bankroll}}"/>
                 </div>
                 <div>
-                    <label>Kelly Factor</label>
-                    <input type="number" step="0.05" name="kelly_factor" value="{{kelly_factor}}"/>
+                    <label>Kelly</label>
+                    <input type="number" step="0.05" id="kelly" value="{{default_kelly}}"/>
                 </div>
                 <div>
-                    <label>EV Threshold</label>
-                    <input type="number" step="0.01" name="ev_threshold" value="{{ev_threshold}}"/>
+                    <label>EV ≥</label>
+                    <input type="number" step="0.01" id="ev" value="{{default_ev}}"/>
+                </div>
+                <div>
+                    <label>Limit</label>
+                    <input type="number" step="1" id="limit" value="{{default_limit}}"/>
                 </div>
                 <div style="grid-column: 1 / -1; display:flex; gap:10px;">
-                    <button type="submit">Refresh</button>
-                    <button type="submit" name="action" value="log">Log Top {{top|length}} Bets</button>
+                    <button type="button" id="refreshBtn">Refresh</button>
+                    <button type="button" id="logBtn">Log Shown (via simple API)</button>
                 </div>
             </form>
-            {% for r in top %}
-            <div class="rec-card">
-                <div class="meta">Wk {{r['week']}} — {{r['away_team']}} @ {{r['home_team']}} — {{r['provider']}}</div>
-                <div><b>{{r['market']}}</b> — {{r['side']}}{% if r.get('line') %} {{r['line']}}{% endif %} — Price {{r['price_american']}}</div>
-                <div>Model p: {{r['model_prob']}} | Implied: {{r['implied_prob']}} | Kelly: {{r['kelly_f']}} | Stake: ${{r['stake']}}</div>
-                <div class="edge">Edge: {{r['edge']}}</div>
-            </div>
-            {% endfor %}
+            <div class="count" id="count"></div>
+            <div id="results"></div>
         </div>
-    ''', top=top, weeks=weeks, week=week, bankroll=bankroll, kelly_factor=kelly_factor, ev_threshold=ev_threshold, message=message)
+        <script>
+        const el = id => document.getElementById(id);
+        function qs() {
+            const p = new URLSearchParams();
+            const week = el('week').value.trim();
+            const market = el('market').value.trim();
+            const sort = el('sort').value.trim();
+            const bankroll = el('bankroll').value.trim();
+            const kelly = el('kelly').value.trim();
+            const ev = el('ev').value.trim();
+            const limit = el('limit').value.trim();
+            if (week) p.set('week', week);
+            if (market) p.set('market', market);
+            if (sort) p.set('sort', sort);
+            if (bankroll) p.set('bankroll', bankroll);
+            if (kelly) p.set('kelly', kelly);
+            if (ev) p.set('ev', ev);
+            if (limit) p.set('limit', limit);
+            return p.toString();
+        }
+        function pillClass(t) {
+            const s = (t||'').toLowerCase();
+            if (s==='high') return 'pill high';
+            if (s==='medium') return 'pill medium';
+            return 'pill low';
+        }
+        function fmt(n, d=2) {
+            if (n===null || n===undefined || Number.isNaN(n)) return '';
+            try { return Number(n).toFixed(d); } catch { return n; }
+        }
+        async function fetchRecs() {
+            const url = '/api/recommendations?' + qs();
+            el('count').textContent = 'Loading…';
+            el('results').innerHTML = '';
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                const list = data.results || [];
+                el('count').textContent = `Results: ${list.length}${data.week!==null?` (Week ${data.week})`:''}`;
+                const frag = document.createDocumentFragment();
+                list.forEach(r => {
+                    const card = document.createElement('div');
+                    card.className = 'rec-card';
+                    const left = document.createElement('div');
+                    left.className = 'lhs';
+                    left.innerHTML = `
+                        <div class="row">
+                          <span class="pill ${pillClass(r.confidence)}">${r.confidence||''}</span>
+                          <span class="meta">${r.game_time||''}</span>
+                        </div>
+                        <div class="meta">Wk ${r.week} — ${r.away_team} @ ${r.home_team} — ${r.provider||''}</div>
+                        <div><b>${r.market}</b> — ${r.side}${r.line!==undefined && r.line!==null ? ' ' + r.line : ''} — Price ${r.price_american}</div>
+                        <div>Model p: ${fmt(r.model_prob,3)} | Implied: ${fmt(r.implied_prob,3)} | Kelly: ${fmt(r.kelly_f,3)} | Stake: $${fmt(r.stake,2)}</div>
+                    `;
+                    const right = document.createElement('div');
+                    right.innerHTML = `<div class="edge">Edge: ${fmt(r.edge,3)}</div>`;
+                    card.appendChild(left);
+                    card.appendChild(right);
+                    frag.appendChild(card);
+                });
+                el('results').appendChild(frag);
+            } catch (e) {
+                el('count').textContent = 'Error loading recommendations.';
+            }
+        }
+        async function logShown() {
+            // Use the simple API to log top N (best effort; may not match sort exactly)
+            const p = new URLSearchParams();
+            const week = el('week').value.trim();
+            if (week) p.set('week', week);
+            p.set('bankroll', el('bankroll').value.trim());
+            p.set('kelly_factor', el('kelly').value.trim());
+            p.set('ev_threshold', el('ev').value.trim());
+            p.set('log', 'true');
+            const url = '/api/recommendations/simple?' + p.toString();
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                alert(`Logged ${data.count||0} recommendations.`);
+            } catch (e) {
+                alert('Log failed.');
+            }
+        }
+        el('refreshBtn').addEventListener('click', fetchRecs);
+        el('logBtn').addEventListener('click', logShown);
+        // Auto-load on page open
+        fetchRecs();
+        </script>
+        ''', weeks=weeks, default_bankroll=default_bankroll, default_kelly=default_kelly, default_ev=default_ev, default_limit=default_limit)
 @app.route('/recommendations/performance')
 def recommendations_performance_page():
     # Read performance via the same CSV and simple aggregation
