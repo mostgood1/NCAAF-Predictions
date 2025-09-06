@@ -174,6 +174,27 @@ def weekly_update(prior_week: int | None, upcoming_week: int | None) -> dict:
     else:
         results['reload'] = {'status': 'ok', 'rows': int(len(webapp.pred_df))}
 
+    # Produce a recommendations snapshot (non-destructive) for visibility
+    try:
+        recs = webapp.compute_recommendations(week=upcoming_week, bankroll=1000.0, kelly_factor=0.5, ev_threshold=0.02)
+        snap_limit = 200
+        snap = recs[:snap_limit]
+        import json as _json
+        snap_path = os.path.join(webapp.DATA_DIR, 'recommendations_latest.json')
+        with open(snap_path, 'w', encoding='utf-8') as f:
+            _json.dump({
+                'generated_utc': dt.datetime.utcnow().isoformat() + 'Z',
+                'week': upcoming_week,
+                'count': len(snap),
+                'bankroll': 1000.0,
+                'kelly_factor': 0.5,
+                'ev_threshold': 0.02,
+                'results': snap,
+            }, f)
+        results['recommendations_snapshot'] = {'path': os.path.relpath(snap_path, base), 'count': len(snap)}
+    except Exception as e:
+        results['recommendations_snapshot'] = {'error': str(e)}
+
     return results
 
 
@@ -182,6 +203,7 @@ def main():
     ap.add_argument('--prior-week', type=int, default=None, help='Completed prior week (e.g., 1)')
     ap.add_argument('--upcoming-week', type=int, default=None, help='Upcoming week to prep (e.g., 2)')
     ap.add_argument('--print-json', action='store_true', help='Print JSON summary to stdout')
+    # Future: could expose rec parameters via CLI; for now snapshot uses defaults
     args = ap.parse_args()
 
     res = weekly_update(args.prior_week, args.upcoming_week)
@@ -207,6 +229,8 @@ def main():
         print(line('retune_models', res.get('retune_models', {})))
         print(line('generate_predictions', res.get('generate_predictions', {})))
         print(line('reload', res.get('reload', {})))
+        if 'recommendations_snapshot' in res:
+            print(line('recommendations_snapshot', res.get('recommendations_snapshot', {})))
 
 
 if __name__ == '__main__':

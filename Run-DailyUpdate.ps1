@@ -4,7 +4,12 @@
 #   .\Run-DailyUpdate.ps1 -PrintJson
 
 param(
-    [switch]$PrintJson
+    [switch]$PrintJson,
+    [switch]$LogRecommendations,
+    [int]$LogWeek,
+    [double]$Bankroll = 1000,
+    [double]$KellyFactor = 0.5,
+    [double]$EvThreshold = 0.02
 )
 
 $ErrorActionPreference = 'Stop'
@@ -40,6 +45,25 @@ try {
 
     Write-Host "Running: $py $($argsList -join ' ')" -ForegroundColor Cyan
     & $py @argsList *>&1 | Tee-Object -FilePath $log
+
+    if($LASTEXITCODE -ne 0){ Write-Host "weekly_update.py failed (exit $LASTEXITCODE). Skipping rec logging." -ForegroundColor Yellow }
+    elseif($LogRecommendations){
+        try {
+            $recUrl = "http://127.0.0.1:5051/api/recommendations/simple?log=true&bankroll=$Bankroll&kelly_factor=$KellyFactor&ev_threshold=$EvThreshold"
+            if($LogWeek){ $recUrl += "&week=$LogWeek" }
+            Write-Host "Attempting to log recommendations via $recUrl" -ForegroundColor Cyan
+            # Use curl if available; fallback to Invoke-WebRequest
+            if(Get-Command curl -ErrorAction SilentlyContinue){
+                curl -s $recUrl | Out-Null
+            } else {
+                Invoke-WebRequest -Uri $recUrl -UseBasicParsing | Out-Null
+            }
+            Write-Host "Recommendations logging request sent." -ForegroundColor Green
+        }
+        catch {
+            Write-Host "Failed to log recommendations: $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
     Write-Host "Log: $log" -ForegroundColor Green
 }
 finally {
