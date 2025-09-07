@@ -47,6 +47,11 @@ import time
 
 app = Flask(__name__)
 
+# --- Early trivial health route to test server wiring even if later code errors ---
+@app.route('/api/ping')
+def api_ping():  # pragma: no cover
+    return {'pong': True, 'commit': BUILD_COMMIT, 'build_time': BUILD_TIME}
+
 # Resolve paths relative to this file, so it works from any working directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
  
@@ -2193,9 +2198,21 @@ def index():
 
     # Prepare game cards for all filtered games (fixed loop)
     game_cards = []
+    try:
+        print('[index] building cards: week', selected_week, 'rows', len(filtered_games))
+        print('[index] sample rows:', [f"{r.away_team} at {r.home_team}" for r in filtered_games.head(3).itertuples()])
+    except Exception:
+        pass
     for _, game_row in filtered_games.iterrows():
         try:
-            game_cards.append(_build_game_card(game_row))
+            card = _build_game_card(game_row)
+            # TEMP DEBUG: log first few to inspect actual vs predicted vs is_final
+            if len(game_cards) < 5:
+                try:
+                    print('[debug-card]', card['away_team'], 'at', card['home_team'], 'ah=', card.get('actual_home_points'), 'aa=', card.get('actual_away_points'), 'is_final=', card.get('is_final'))
+                except Exception:
+                    pass
+            game_cards.append(card)
         except Exception:
             # Skip any problematic row but continue rendering others
             continue
@@ -2246,19 +2263,20 @@ def index():
 
     page_html = render_template_string('''
     <style>
-        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6fa; margin: 0; padding: 0; }
-        .container { max-width: 980px; margin: 40px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); padding: 24px; }
+        html, body { height:100%; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6fa; margin: 0; padding: 0 0 40px; }
+        .container { max-width: 1100px; margin: 16px auto 0; background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); padding: 20px 22px 28px; }
         h2 { text-align: center; color: #2c3e50; margin-bottom: 24px; }
         form { display: flex; flex-direction: column; gap: 16px; margin-bottom: 32px; }
         /* Centered filter bar */
-        .filterbar { position: static; z-index: 1; background: #fff; margin: 0 auto 16px; padding: 10px 12px; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); display: flex; flex-direction: row; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: center; max-width: 1024px; }
+        .filterbar { position: static; z-index: 1; background: #fff; margin: 4px auto 12px; padding: 8px 10px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; flex-direction: row; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: center; max-width: 1000px; }
         label { font-weight: 500; color: #34495e; }
         select, button { padding: 8px 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 1em; }
         button { background: #2980b9; color: #fff; border: none; cursor: pointer; transition: background 0.2s; }
         button:hover { background: #3498db; }
 
-    .banner { background:#eef6ff; border:1px solid #c9e2ff; padding:10px 14px; border-radius:8px; font-size:0.95em; color:#1d4567; margin-bottom:18px; }
-    .card { background: #f9fafb; border-radius: 12px; box-shadow: 0 1px 6px rgba(0,0,0,0.07); padding: 14px 16px 12px; margin-top: 12px; border-left: 6px solid #bdc3c7; }
+    .banner { background:#eef6ff; border:1px solid #c9e2ff; padding:8px 14px; border-radius:8px; font-size:0.93em; color:#1d4567; margin: 8px 0 14px; }
+    .card { background: #f9fafb; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); padding: 12px 14px 10px; margin: 8px 0 0; border-left: 6px solid #bdc3c7; }
         .card-header { display:flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
         .status { font-weight: 700; font-size: 0.85em; padding: 4px 8px; border-radius: 10px; }
         .status.final { background:#eafaf1; color:#1e8449; }
@@ -2275,7 +2293,7 @@ def index():
         .score { font-size: 1.6em; font-weight: 800; color: #2c3e50; }
         .pred { font-size: 0.95em; color: #7f8c8d; }
 
-        .rows { display:grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin-top: 10px; }
+    .rows { display:grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin-top: 8px; }
         .row { background:#fff; border:1px solid #eaecef; border-radius:8px; padding:8px 10px; font-size:0.95em; color:#2c3e50; }
         .row b { color:#2c3e50; }
         .badges { display:flex; flex-wrap:wrap; gap:6px; }
@@ -2299,9 +2317,9 @@ def index():
         .summary { display:flex; gap:16px; justify-content:center; color:#2c3e50; font-weight:600; margin:10px 0 16px; }
 
         /* Responsive grid for cards */
-        .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
-        @media (min-width: 900px) { .grid { grid-template-columns: 1fr 1fr; } }
-        @media (min-width: 1200px) { .container { max-width: 1100px; } .grid { grid-template-columns: 1fr 1fr 1fr; } }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    @media (min-width: 900px) { .grid { grid-template-columns: 1fr 1fr; } }
+    @media (min-width: 1300px) { .grid { grid-template-columns: 1fr 1fr 1fr; } }
 
         .filterbar .control { display: inline-flex; align-items: center; gap: 8px; }
         .filterbar .control label { font-size: 0.95em; margin: 0; color: #34495e; }
@@ -2333,11 +2351,10 @@ def index():
             </small>
         </div>
     {% endif %}
-            <div class="container">
-                <div class="banner">
-                    Week {{selected_week}}: <strong>{{finals_count_week}}</strong> finals / {{total_games_week}} games ({{finals_pct_week}} complete){% if unknown_pending and hide_both_unknown %} — {{unknown_pending}} Unknown vs Unknown pending (use toggle to show){% endif %}
-                </div>
-        </div>
+    </div> <!-- end topbar -->
+    <div class="banner">
+        Week {{selected_week}}: <strong>{{finals_count_week}}</strong> finals / {{total_games_week}} games ({{finals_pct_week}} complete){% if unknown_pending and hide_both_unknown %} — {{unknown_pending}} Unknown vs Unknown pending (use toggle to show){% endif %}
+    </div>
         <h2>2025 NCAA Football Predictions</h2>
         <div class="summary">
             <div class="muted" style="align-self:center;">This view</div>
@@ -3262,6 +3279,105 @@ def api_week_status():
         return jsonify({'week': week, 'games': int(len(sub)), 'finals': finals, 'pct_complete': round(pct,2), 'sample': sample})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/debug/game')
+def api_debug_game():
+    """Return raw prediction/actual fields for a specific game (diagnose FINAL vs UPCOMING)."""
+    home = request.args.get('home','')
+    away = request.args.get('away','')
+    week = request.args.get('week')
+    season = request.args.get('season','2025')
+    try:
+        week_i = int(week) if week is not None else None
+    except Exception:
+        week_i = None
+    try:
+        season_i = int(season)
+    except Exception:
+        season_i = 2025
+    df = pred_df
+    q = df[(df['season'] == season_i)]
+    if week_i is not None:
+        q = q[q['week'] == week_i]
+    if home:
+        q = q[q['home_team'].str.lower() == home.lower()]
+    if away:
+        q = q[q['away_team'].str.lower() == away.lower()]
+    out = []
+    for _, r in q.iterrows():
+        out.append({
+            'season': int(r.get('season',0)) if pd.notna(r.get('season',None)) else None,
+            'week': int(r.get('week',0)) if pd.notna(r.get('week',None)) else None,
+            'home_team': r.get('home_team'),
+            'away_team': r.get('away_team'),
+            'actual_home_points': r.get('actual_home_points'),
+            'actual_away_points': r.get('actual_away_points'),
+            'predicted_home_points': r.get('predicted_home_points'),
+            'predicted_away_points': r.get('predicted_away_points'),
+            'start_date': r.get('start_date'),
+            'is_final_calc': (pd.notna(r.get('actual_home_points')) and pd.notna(r.get('actual_away_points'))),
+        })
+    return jsonify({'count': len(out), 'games': out})
+
+@app.route('/api/_routes')
+def api_list_routes():  # simple debug list of routes
+    try:
+        from flask import url_for
+        routes = []
+        for rule in app.url_map.iter_rules():
+            methods = sorted([m for m in rule.methods if m not in ('HEAD','OPTIONS')])
+            routes.append({'rule': str(rule), 'endpoint': rule.endpoint, 'methods': methods})
+        routes = sorted(routes, key=lambda r: r['rule'])
+        return jsonify({'count': len(routes), 'routes': routes})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/env-info')
+def api_env_info():
+    try:
+        import platform, hashlib
+        pid = os.getpid()
+        cwd = os.getcwd()
+        app_file = __file__
+        data_file = pred_path_scores if os.path.exists(pred_path_scores) else pred_path_enh
+        df_stats = None
+        finals = 0
+        total = 0
+        week2_finals = None
+        if isinstance(pred_df, pd.DataFrame) and not pred_df.empty:
+            try:
+                total = int(len(pred_df))
+                if 'actual_home_points' in pred_df.columns:
+                    finals = int(((pred_df['actual_home_points'].notna()) & (pred_df['actual_away_points'].notna())).sum())
+                w2 = pred_df[pred_df.get('week') == 2]
+                if not w2.empty and 'actual_home_points' in w2.columns:
+                    week2_finals = int(((w2['actual_home_points'].notna()) & (w2['actual_away_points'].notna())).sum())
+            except Exception:
+                pass
+        file_hash = None
+        try:
+            if data_file and os.path.exists(data_file):
+                with open(data_file,'rb') as f:
+                    file_hash = hashlib.md5(f.read(8192)).hexdigest()
+        except Exception:
+            pass
+        return jsonify({
+            'pid': pid,
+            'platform': platform.platform(),
+            'cwd': cwd,
+            'app_file': app_file,
+            'prediction_source': PRED_SOURCE,
+            'data_file_used': data_file,
+            'data_file_hash_head': file_hash,
+            'rows_loaded': total,
+            'finals_total': finals,
+            'week2_finals': week2_finals,
+            'build_commit': BUILD_COMMIT,
+            'build_time': BUILD_TIME,
+            'route_count': len(list(app.url_map.iter_rules()))
+        })
+    except Exception as e:
+        return {'error': str(e)}, 500
 
 @app.route('/api/analysis-2025', methods=['GET'])
 def analysis_2025():
@@ -4526,4 +4642,11 @@ if __name__ == '__main__':
     import os
     port = int(os.environ.get('PORT', 5051))
     debug_flag = os.environ.get('DEBUG', '0') == '1'
+    try:
+        rules = list(app.url_map.iter_rules())
+        print(f"[app] Starting with {len(rules)} routes registered")
+        for r in sorted(rules, key=lambda x: x.rule)[:120]:
+            print('[route]', r.rule, 'methods=', ','.join(sorted(m for m in r.methods if m not in ('HEAD','OPTIONS'))))
+    except Exception as _e:
+        print('[app] Route dump failed', _e)
     app.run(host='0.0.0.0', port=port, debug=debug_flag)
