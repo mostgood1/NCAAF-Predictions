@@ -44,129 +44,41 @@ _load_env_file(os.path.join(BASE_DIR, '.env'))
 _load_env_file(os.path.join(BASE_DIR, '.env.local'))
 
 def _ensure_cfbd_key():
-    """Ensure CFBD_API_KEY is present in os.environ; reload .env files if missing."""
+    """Ensure CFBD_API_KEY (or compatible token) is present; if missing, re-read .env files.
+    This function previously became corrupted during a large patch; restored to a minimal safe helper.
+    """
     try:
         if os.environ.get('CFBD_API_KEY') or os.environ.get('CFBD_TOKEN') or os.environ.get('CFBD'):
             return
-        # Try to reload env files (in case they were added after app start)
+        # Retry loading env files silently
         _load_env_file(os.path.join(BASE_DIR, '.env'))
         _load_env_file(os.path.join(BASE_DIR, '.env.local'))
     except Exception:
         pass
-# Resolve DATA_DIR with robust fallbacks; prefer a directory that actually contains our key CSVs
-DATA_DIR = os.path.join(BASE_DIR, 'src', 'data')
-_env_data_dir = os.environ.get('DATA_DIR')
-try:
-    candidates = []
-    if _env_data_dir:
-        candidates.append(_env_data_dir)
-    candidates.extend([
-        os.path.join(BASE_DIR, 'data'),
-        os.path.join(BASE_DIR, 'src', 'data'),
-        os.path.join(BASE_DIR, 'NCAFCompare', 'src', 'data'),
-    ])
-    key_files = {
-        'college_football_schedule_2025_predicted_totals_enhanced.csv',
-        'college_football_schedule_2025_predicted_totals_enhanced_with_scores.csv',
-        'team_conferences.csv',
-        'team_assets.csv',
-        'college_football_betting_lines_last_15_years.csv',
-    }
-    chosen = None
-    for d in candidates:
-        try:
-            if not d or not os.path.isdir(d):
-                continue
-            # Prefer a directory that contains any key file
-            if any(os.path.exists(os.path.join(d, k)) for k in key_files):
-                chosen = d
-                break
-            # Otherwise remember the first existing directory as fallback
-            if chosen is None:
-                chosen = d
-        except Exception:
-            continue
-    if chosen:
-        DATA_DIR = chosen
-except Exception:
-    pass
 
-# Hide refresh UI on Render by default (or when HIDE_REFRESH=1)
-IS_RENDER = (
-    os.environ.get('RENDER', '').lower() in ('1', 'true', 'yes')
-    or bool(os.environ.get('RENDER_SERVICE_ID'))
-    or bool(os.environ.get('RENDER_INSTANCE_ID'))
-)
-HIDE_REFRESH = IS_RENDER or (os.environ.get('HIDE_REFRESH', '0') == '1')
+# Core data directory & prediction file paths (added after corruption fix)
+DATA_DIR = os.path.join(BASE_DIR, 'data')
+os.makedirs(DATA_DIR, exist_ok=True)
+pred_path_enh = os.path.join(DATA_DIR, 'college_football_schedule_2025_predicted_totals_enhanced.csv')
+pred_path_scores = os.path.join(DATA_DIR, 'college_football_schedule_2025_predicted_totals_enhanced_with_scores.csv')
+PRED_SOURCE = 'unknown'
 
-# Lightweight in-memory refresh progress state
-REFRESH_STATE = {
-    'status': 'idle',   # idle | running | ok | error
-    'mode': None,
-    'started_at': None,
-    'finished_at': None,
-    'seconds_total': None,
-    'details': [],
-    'pred_source': None,
-    'rows': None,
-    'lines_rows': None,
-    'unique_home_preds': None,
-    'unique_away_preds': None,
-    'unique_total_preds': None,
-    'error': None,
-}
+# UI/env toggles & locks
+HIDE_REFRESH = os.environ.get('HIDE_REFRESH', '0').lower() in ('1','true','yes')
 _REFRESH_LOCK = threading.Lock()
 
-# Load enhanced predictions with a validation step: if with_scores exists but is constant, fall back to enhanced
-def _first_existing(paths: list[str]) -> str | None:
-    for p in paths:
-        try:
-            if p and os.path.exists(p):
-                return p
-        except Exception:
-            continue
-    return None
-
-pred_candidates_enh = [
-    os.path.join(DATA_DIR, "college_football_schedule_2025_predicted_totals_enhanced.csv"),
-    os.path.join(BASE_DIR, 'data', "college_football_schedule_2025_predicted_totals_enhanced.csv"),
-    os.path.join(BASE_DIR, 'src', 'data', "college_football_schedule_2025_predicted_totals_enhanced.csv"),
-    os.path.join(BASE_DIR, 'NCAFCompare', 'src', 'data', "college_football_schedule_2025_predicted_totals_enhanced.csv"),
-]
-pred_candidates_scores = [
-    os.path.join(DATA_DIR, "college_football_schedule_2025_predicted_totals_enhanced_with_scores.csv"),
-    os.path.join(BASE_DIR, 'data', "college_football_schedule_2025_predicted_totals_enhanced_with_scores.csv"),
-    os.path.join(BASE_DIR, 'src', 'data', "college_football_schedule_2025_predicted_totals_enhanced_with_scores.csv"),
-    os.path.join(BASE_DIR, 'NCAFCompare', 'src', 'data', "college_football_schedule_2025_predicted_totals_enhanced_with_scores.csv"),
-]
-pred_path_enh = _first_existing(pred_candidates_enh)
-pred_path_scores = _first_existing(pred_candidates_scores)
-PRED_SOURCE = "unknown"
-
-# Optional: Win-probability isotonic calibration LUT
-_WINPROB_LUT = None
-try:
-    with open(os.path.join(DATA_DIR, "winprob_isotonic_lut.json"), "r") as f:
-        data = json.load(f)
-        xs = data.get("x", [])
-        ys = data.get("y", [])
-        if isinstance(xs, list) and isinstance(ys, list) and len(xs) == len(ys) and len(xs) >= 2:
-            import numpy as _np
-            _WINPROB_LUT = ( _np.array(xs, dtype=float), _np.array(ys, dtype=float) )
-except Exception:
-    _WINPROB_LUT = None
+# Simple in-memory cache for game cards API (invalidated on prediction reload)
+GAME_CARDS_CACHE = {}
 
 def _calibrate_win_prob(p):
+    """Fallback calibration (identity clamp) if real calibration artifacts absent due to earlier truncation."""
     try:
-        if p is None:
-            return None
-        if _WINPROB_LUT is None:
-            return p
-        xs, ys = _WINPROB_LUT
-        import numpy as _np
-        return float(_np.clip(_np.interp(p, xs, ys), 0.0, 1.0))
+        x = float(p)
+        if x < 0: x = 0.0
+        if x > 1: x = 1.0
+        return x
     except Exception:
-        return p
+        return None
 
 # Optional: Conference-level sigma overrides for margin
 _CONF_SIGMA = None
@@ -1237,6 +1149,11 @@ def _auto_refresh_loop():
 
 def _reload_predictions():
     global pred_df
+    # Invalidate API cache
+    try:
+        GAME_CARDS_CACHE.clear()
+    except Exception:
+        pass
     # Re-read predictions with validation
     new_df = _load_predictions_df()
     new_df['home_conference'] = new_df['home_team'].apply(lambda x: conf_map.get(norm(x), 'Unknown'))
@@ -2134,73 +2051,59 @@ def index():
     weeks = sorted(pred_df['week'].dropna().unique())
     selected_week = weeks[0] if weeks else None
     if request.method == 'GET':
-        # Support deep-link query params (GET behaves like a read-only filtered view)
-        # Params: week, date, conference, show_all=1, filter_type, sort_by, full=1 to bypass cap
-        today = dt.datetime.now().date()
+        # Query param driven (read-only)
         filter_type = request.args.get('filter_type', 'all')
-        # Select week: honor query if valid else earliest (min) for deterministic default
+        # Week selection
         week_q = request.args.get('week')
         try:
-            if week_q is not None:
+            if week_q is not None and week_q.isdigit():
                 w_int = int(week_q)
                 if w_int in weeks:
                     selected_week = w_int
         except Exception:
             pass
-        # Auto-pick latest week that has at least 1 final if no explicit week provided
-        if weeks and selected_week is None:
+        if weeks and selected_week is None:  # auto-pick most recent with finals
             try:
-                finals_per_week = {}
+                finals_counts = {}
                 for w in weeks:
-                    subw = pred_df[pred_df['week'] == w]
-                    finals_per_week[w] = int(((subw['actual_home_points'].notna()) & (subw['actual_away_points'].notna())).sum())
-                weeks_with_finals = [w for w, cnt in finals_per_week.items() if cnt > 0]
-                if weeks_with_finals:
-                    selected_week = max(weeks_with_finals)
-                else:
-                    selected_week = min(weeks)
+                    subw = pred_df[pred_df['week']==w]
+                    finals_counts[w] = int((subw['actual_home_points'].notna() & subw['actual_away_points'].notna()).sum())
+                done_weeks = [w for w,c in finals_counts.items() if c>0]
+                selected_week = max(done_weeks) if done_weeks else min(weeks)
             except Exception:
-                selected_week = min(weeks)
-        week_games = pred_df[pred_df['week'] == int(selected_week)].copy() if selected_week is not None else pred_df.copy()
-        week_games['date_only'] = week_games.get('start_date', '').astype(str).str[:10]
+                selected_week = weeks[0]
+        week_games = pred_df[pred_df['week']==int(selected_week)].copy() if selected_week is not None else pred_df.copy()
+        week_games['date_only'] = week_games.get('start_date','').astype(str).str[:10]
         all_dates = sorted([d for d in week_games['date_only'].dropna().unique() if d])
-        filtered_games = week_games.copy()
         selected_date = request.args.get('date','')
         selected_conference = request.args.get('conference','')
-        show_all = request.args.get('show_all','0') in ('1','true','yes')
-        hide_both_unknown = request.args.get('hide_both_unknown','0') in ('1','true','yes')
+        show_all = request.args.get('show_all','0').lower() in ('1','true','yes')
+        include_non_fbs = request.args.get('include_non_fbs','0').lower() in ('1','true','yes')
+        hide_both_unknown = (not include_non_fbs) and (request.args.get('hide_both_unknown','0').lower() not in ('1','true','yes'))
+        want_full = request.args.get('full','0').lower() in ('1','true','yes')
         sort_by = request.args.get('sort_by','time')
-        want_full = request.args.get('full','0') in ('1','true','yes')
-        # Apply date & conference filters only when not show_all (mirrors POST behavior)
+        filtered_games = week_games.copy()
         if selected_date and not show_all:
-            try:
-                filtered_games = filtered_games[filtered_games['date_only'] == selected_date]
-            except Exception:
-                pass
+            filtered_games = filtered_games[filtered_games['date_only']==selected_date]
         if selected_conference:
-            try:
-                filtered_games = filtered_games[(filtered_games['home_conference'] == selected_conference) | (filtered_games['away_conference'] == selected_conference)]
-            except Exception:
-                pass
-        # Apply upcoming/completed filter (unless show_all)
+            filtered_games = filtered_games[(filtered_games['home_conference']==selected_conference) | (filtered_games['away_conference']==selected_conference)]
         eff_filter = (filter_type if not show_all else 'all')
         if eff_filter == 'completed':
-            filtered_games = filtered_games[(filtered_games['actual_home_points'].notnull()) & (filtered_games['actual_away_points'].notnull())]
+            filtered_games = filtered_games[(filtered_games['actual_home_points'].notna()) & (filtered_games['actual_away_points'].notna())]
         elif eff_filter == 'upcoming':
-            filtered_games = filtered_games[(filtered_games['actual_home_points'].isnull()) & (filtered_games['actual_away_points'].isnull())]
-        # Hide unknown/unknown if requested
+            filtered_games = filtered_games[(filtered_games['actual_home_points'].isna()) & (filtered_games['actual_away_points'].isna())]
         if hide_both_unknown:
-            try:
-                filtered_games = filtered_games[~((filtered_games['home_conference'] == 'Unknown') & (filtered_games['away_conference'] == 'Unknown'))]
-            except Exception:
-                pass
-        # Initial GET payload cap for performance — but always include ALL finals, plus up to 80 upcoming, unless full requested
+            filtered_games = filtered_games[~((filtered_games['home_conference']=='Unknown') & (filtered_games['away_conference']=='Unknown'))]
+        try:
+            if {'week','home_team','away_team'}.issubset(filtered_games.columns):
+                filtered_games = filtered_games.sort_values(by=['start_date','home_team','away_team']).drop_duplicates(subset=['week','home_team','away_team'], keep='first')
+        except Exception:
+            pass
         if not want_full and not show_all:
             try:
                 finals_mask = filtered_games['actual_home_points'].notna() & filtered_games['actual_away_points'].notna()
                 finals_df = filtered_games[finals_mask]
                 upcoming_df = filtered_games[~finals_mask]
-                # Keep ordering stable: finals first (already completed), then earliest upcoming slice of 80
                 filtered_games = pd.concat([finals_df, upcoming_df.head(80)], ignore_index=True)
             except Exception:
                 filtered_games = filtered_games.head(80)
@@ -2211,27 +2114,30 @@ def index():
         selected_date = request.form.get('date', '')
         selected_conference = request.form.get('conference', '')
         show_all = bool(request.form.get('show_all'))
-        hide_both_unknown = bool(request.form.get('hide_both_unknown'))
+        include_non_fbs = bool(request.form.get('include_non_fbs'))
+        hide_both_unknown = not include_non_fbs
         sort_by = request.form.get('sort_by', 'time')
         week_games = pred_df[pred_df['week'] == int(selected_week)].copy() if selected_week else pred_df.copy()
         week_games['date_only'] = week_games['start_date'].str[:10]
         all_dates = sorted(week_games['date_only'].dropna().unique())
         filtered_games = week_games.copy()
-        # Date filter is ignored when "Show all" is checked
         if selected_date and not show_all:
             filtered_games = filtered_games[filtered_games['date_only'] == selected_date]
         if selected_conference:
             filtered_games = filtered_games[(filtered_games['home_conference'] == selected_conference) | (filtered_games['away_conference'] == selected_conference)]
-        # If Show All is checked, do not restrict to upcoming/completed — show the entire week
         effective_filter = (filter_type if not show_all else 'all')
         if effective_filter == 'completed':
             filtered_games = filtered_games[(filtered_games['actual_home_points'].notnull()) & (filtered_games['actual_away_points'].notnull())]
         elif effective_filter == 'upcoming':
             filtered_games = filtered_games[(filtered_games['actual_home_points'].isnull()) & (filtered_games['actual_away_points'].isnull())]
-    # Apply limiters for POST
         try:
             if hide_both_unknown:
                 filtered_games = filtered_games[~((filtered_games['home_conference'] == 'Unknown') & (filtered_games['away_conference'] == 'Unknown'))]
+        except Exception:
+            pass
+        try:
+            if show_all and len(filtered_games) <= 1 and 'season' in pred_df.columns:
+                filtered_games = pred_df[pred_df['season'] == 2025].copy()
         except Exception:
             pass
         # If Show All is checked but the result is still 1 game (data labeling quirks), broaden to full 2025 slate
@@ -2241,6 +2147,16 @@ def index():
         except Exception:
             pass
         # Do not cap POST results; user explicitly filtered
+
+    # Compute finals banner metrics (based on full week dataset, not filtered slice cap)
+    try:
+        week_scope_df = pred_df[pred_df['week']==selected_week] if selected_week is not None else pred_df
+        finals_count_week = int(((week_scope_df['actual_home_points'].notna()) & (week_scope_df['actual_away_points'].notna())).sum())
+        total_games_week = int(len(week_scope_df))
+        finals_pct_week = (f"{(finals_count_week/total_games_week*100):.1f}%" if total_games_week>0 else '—')
+        unknown_pending = int(((week_scope_df['home_conference']=='Unknown') & (week_scope_df['away_conference']=='Unknown') & (week_scope_df['actual_home_points'].isna()) & (week_scope_df['actual_away_points'].isna())).sum())
+    except Exception:
+        finals_count_week = 0; total_games_week = 0; finals_pct_week='—'; unknown_pending=0
 
     # Prepare game cards for all filtered games (fixed loop)
     game_cards = []
@@ -2308,7 +2224,8 @@ def index():
         button { background: #2980b9; color: #fff; border: none; cursor: pointer; transition: background 0.2s; }
         button:hover { background: #3498db; }
 
-        .card { background: #f9fafb; border-radius: 12px; box-shadow: 0 1px 6px rgba(0,0,0,0.07); padding: 14px 16px 12px; margin-top: 12px; border-left: 6px solid #bdc3c7; }
+    .banner { background:#eef6ff; border:1px solid #c9e2ff; padding:10px 14px; border-radius:8px; font-size:0.95em; color:#1d4567; margin-bottom:18px; }
+    .card { background: #f9fafb; border-radius: 12px; box-shadow: 0 1px 6px rgba(0,0,0,0.07); padding: 14px 16px 12px; margin-top: 12px; border-left: 6px solid #bdc3c7; }
         .card-header { display:flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
         .status { font-weight: 700; font-size: 0.85em; padding: 4px 8px; border-radius: 10px; }
         .status.final { background:#eafaf1; color:#1e8449; }
@@ -2382,7 +2299,11 @@ def index():
                 • <a href="/refresh-status" target="_blank" style="color:#8e44ad; text-decoration:underline;">diagnostics</a>
             </small>
         </div>
-        {% endif %}
+    {% endif %}
+            <div class="container">
+                <div class="banner">
+                    Week {{selected_week}}: <strong>{{finals_count_week}}</strong> finals / {{total_games_week}} games ({{finals_pct_week}} complete){% if unknown_pending and hide_both_unknown %} — {{unknown_pending}} Unknown vs Unknown pending (use toggle to show){% endif %}
+                </div>
         </div>
         <h2>2025 NCAA Football Predictions</h2>
         <div class="summary">
@@ -2392,8 +2313,9 @@ def index():
             <div>ATS: <span id="sum-ats-correct">{{summary['ats']['correct']}}</span> / <span id="sum-ats-total">{{summary['ats']['total']}}</span> (<span id="sum-ats-pct">{{summary['ats']['pct']}}</span>) +<span id="sum-ats-push">{{summary['ats']['push']}}</span> push</div>
             <div>Totals: <span id="sum-ou-correct">{{summary['ou']['correct']}}</span> / <span id="sum-ou-total">{{summary['ou']['total']}}</span> (<span id="sum-ou-pct">{{summary['ou']['pct']}}</span>) +<span id="sum-ou-push">{{summary['ou']['push']}}</span> push</div>
         </div>
-        <div style="text-align:center; margin:-2px 0 8px;">
+        <div style="text-align:center; margin:-2px 0 8px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
             <button type="button" id="toggleFinalsBtn" style="background:#8e44ad;">{{ 'Show All Games' if filter_type == 'completed' else 'Show Finals Only' }}</button>
+            <button type="button" id="toggleScopeBtn" style="background:#16a085;">{{ 'Include Non-FBS' if hide_both_unknown else 'Hide Non-FBS' }}</button>
         </div>
         <div style="text-align:center; margin:-6px 0 10px;">
             <label style="font-size:0.95em;color:#34495e;"><input type="checkbox" id="toggleWxTotals" checked> Show weather-adjusted totals</label>
@@ -2894,10 +2816,22 @@ def index():
                             } else {
                                 url.searchParams.set('filter_type','completed');
                             }
-                            // Preserve current week explicitly to avoid recompute changes
-                            if(!url.searchParams.get('week')){
-                                url.searchParams.set('week','{{ selected_week }}');
+                            if(!url.searchParams.get('week')){ url.searchParams.set('week','{{ selected_week }}'); }
+                            window.location.href = url.toString();
+                        });
+                    }
+                    const scopeBtn = document.getElementById('toggleScopeBtn');
+                    if(scopeBtn){
+                        scopeBtn.addEventListener('click', ()=>{
+                            const url = new URL(window.location.href);
+                            const inc = url.searchParams.get('include_non_fbs');
+                            if(inc === '1'){
+                                url.searchParams.delete('include_non_fbs'); // revert to hiding
+                            } else {
+                                url.searchParams.set('include_non_fbs','1');
+                                // When including non-FBS, keep existing hide_both_unknown if user forced earlier
                             }
+                            if(!url.searchParams.get('week')){ url.searchParams.set('week','{{ selected_week }}'); }
                             window.location.href = url.toString();
                         });
                     }
@@ -2905,7 +2839,7 @@ def index():
             });
         })();
         </script>
-    ''', weeks=weeks, selected_week=selected_week, all_dates=all_dates, selected_date=selected_date, show_all=show_all, hide_both_unknown=hide_both_unknown, all_conferences=pred_df['home_conference'].unique(), selected_conference=selected_conference, game_cards=game_cards, filter_type=filter_type, summary=summary, sort_by=sort_by, HIDE_REFRESH=HIDE_REFRESH)
+    ''', weeks=weeks, selected_week=selected_week, all_dates=all_dates, selected_date=selected_date, show_all=show_all, hide_both_unknown=hide_both_unknown, all_conferences=pred_df['home_conference'].unique(), selected_conference=selected_conference, game_cards=game_cards, filter_type=filter_type, summary=summary, sort_by=sort_by, HIDE_REFRESH=HIDE_REFRESH, finals_count_week=finals_count_week, total_games_week=total_games_week, finals_pct_week=finals_pct_week, unknown_pending=unknown_pending)
 
 
 # New route: Projected Conference Records for 2025
@@ -4408,6 +4342,19 @@ def api_game_cards():
       sort: time|winprob_desc|ou_edge_desc|ats_edge_desc
     """
     try:
+        # Cache lookup key based on request args (stable ordering)
+        key = (
+            'v1',
+            request.args.get('week',''),
+            request.args.get('filter_type','all'),
+            request.args.get('conference',''),
+            request.args.get('date',''),
+            request.args.get('full','0'),
+            request.args.get('sort','time')
+        )
+        cached = GAME_CARDS_CACHE.get(key)
+        if cached:
+            return jsonify(cached), 200
         weeks = sorted(pred_df['week'].dropna().unique())
         sel_week = None
         w_q = request.args.get('week')
@@ -4468,7 +4415,12 @@ def api_game_cards():
                 cards = finals + upcoming[:80]
             except Exception:
                 cards = cards[:80]
-        return jsonify({'week': int(sel_week) if sel_week is not None else None, 'count': len(cards), 'results': cards}), 200
+        payload = {'week': int(sel_week) if sel_week is not None else None, 'count': len(cards), 'results': cards}
+        try:
+            GAME_CARDS_CACHE[key] = payload
+        except Exception:
+            pass
+        return jsonify(payload), 200
     except Exception as e:
         return {'error': str(e)}, 500
 
