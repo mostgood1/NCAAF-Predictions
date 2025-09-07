@@ -28,7 +28,36 @@ def detect_weeks():
         return None, None, None
 
 
-def run_updates(prior_week, upcoming_week):
+def _weeks_for_dates(dates):
+    """Return set of week numbers in pred_df whose start_date date component is in dates."""
+    weeks = set()
+    try:
+        import app
+        df = app.pred_df
+        if 'start_date' not in df.columns or 'week' not in df.columns:
+            return weeks
+        sub = df[df['start_date'].notna()]
+        for _, r in sub.iterrows():
+            try:
+                d = r['start_date']
+                import pandas as pd
+                dts = pd.to_datetime(d, errors='coerce')
+                if pd.isna(dts):
+                    continue
+                if dts.date() in dates:
+                    try:
+                        wk = int(r['week'])
+                        weeks.add(wk)
+                    except Exception:
+                        continue
+            except Exception:
+                continue
+    except Exception:
+        return weeks
+    return weeks
+
+
+def run_updates(prior_week, upcoming_week, extra_weeks=None):
     import app  # noqa: F401
     results = {}
     try:
@@ -46,17 +75,37 @@ def run_updates(prior_week, upcoming_week):
             results['upcoming_week'] = {'skipped': 'no_upcoming_week'}
     except Exception as e:
         results['upcoming_week'] = {'error': str(e)}
+
+    if extra_weeks:
+        ew_res = {}
+        for wk in sorted(extra_weeks):
+            # Avoid re-running duplicate weeks already covered
+            if wk in (prior_week, upcoming_week):
+                continue
+            try:
+                import app as _app
+                ew_res[wk] = _app._update_scores_with_cfbd(wk)
+            except Exception as e:
+                ew_res[wk] = {'error': str(e)}
+        results['extra_weeks'] = ew_res
     return results
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--print-json', action='store_true')
+    ap.add_argument('--scan-today-yesterday', action='store_true', help='Also update weeks containing games starting today or yesterday (by date)')
     args = ap.parse_args()
 
     prior, upcoming, _ = detect_weeks()
-    res = run_updates(prior, upcoming)
-    res['detected'] = {'prior': prior, 'upcoming': upcoming}
+    extra = None
+    if args.scan_today_yesterday:
+        from datetime import datetime, timedelta
+        today = datetime.utcnow().date()
+        yesterday = today - timedelta(days=1)
+        extra = _weeks_for_dates({today, yesterday})
+    res = run_updates(prior, upcoming, extra_weeks=extra)
+    res['detected'] = {'prior': prior, 'upcoming': upcoming, 'extra_weeks': sorted(extra) if extra else []}
 
     if args.print_json:
         print(json.dumps(res, indent=2))
@@ -72,9 +121,12 @@ def main():
                 return f"- {label}: updated={d.get('updated')}"  # fallback
         return f"- {label}: ok"
 
-    print(f"Daily scores check (prior={prior}, upcoming={upcoming})")
+    print(f"Daily scores check (prior={prior}, upcoming={upcoming}, extra={res['detected'].get('extra_weeks')})")
     print(line('prior_week', res.get('prior_week', {})))
     print(line('upcoming_week', res.get('upcoming_week', {})))
+    if 'extra_weeks' in res:
+        for wk, det in res['extra_weeks'].items():
+            print(line(f'extra_week_{wk}', det))
 
 
 if __name__ == '__main__':
