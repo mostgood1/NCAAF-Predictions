@@ -1121,6 +1121,119 @@ def _ensure_recs_file():
         ]
         pd.DataFrame(columns=cols).to_csv(RECS_PATH, index=False)
 
+# -------------------- Auto Refresh Infrastructure --------------------
+_AUTO_REFRESH_LAST_MTIME = None
+_AUTO_REFRESH_LOCK = threading.Lock()
+
+def _current_scores_mtime():
+    global pred_path_scores
+    try:
+        p = pred_path_scores
+        if p and os.path.exists(p):
+            return os.path.getmtime(p)
+    except Exception:
+        return None
+    return None
+
+def _settle_recommendations() -> dict:
+    """Settle any open recommendations whose games are now final. Returns summary similar to performance endpoint but light."""
+    try:
+        if not os.path.exists(RECS_PATH):
+            return {'skipped': 'no_recs_file'}
+        recs_df = pd.read_csv(RECS_PATH)
+        if recs_df.empty:
+            return {'skipped': 'empty'}
+    except Exception as e:
+        return {'error': f'load_failed: {e}'}
+
+    merged = recs_df.merge(
+        pred_df[['season','week','home_team','away_team','actual_home_points','actual_away_points']],
+        on=['season','week','home_team','away_team'], how='left'
+    )
+    pnl_updates = []
+    wins = losses = pushes = 0
+    for idx, r in merged.iterrows():
+        if r.get('status','open') != 'open':
+            continue
+        ah = r.get('actual_home_points'); aa = r.get('actual_away_points')
+        if pd.isna(ah) or pd.isna(aa):
+            continue
+        market = r['market']
+        side = r['side']
+        price = _safe_float(r.get('price_american', -110), -110)
+        stake = _safe_float(r.get('stake', 0), 0)
+        dec, _ = american_to_decimal(price)
+        result = 'pending'; pnl = 0.0; push = False; win = False
+        if market == 'ML':
+            winner = 'Home' if ah > aa else ('Away' if aa > ah else 'Tie')
+            push = (winner == 'Tie')
+            win = (winner == side)
+        elif market == 'Spread':
+            line = _safe_float(r.get('line', None))
+            if line is None:
+                push = True
+            else:
+                margin = ah - aa
+                if side == 'Home':
+                    win = margin > line; push = abs(margin - line) < 1e-9
+                else:
+                    win = margin < line; push = abs(margin - line) < 1e-9
+        elif market == 'Total':
+            line = _safe_float(r.get('line', None))
+            tot = ah + aa
+            if line is None:
+                push = True
+            else:
+                if side == 'Over':
+                    win = tot > line; push = abs(tot - line) < 1e-9
+                else:
+                    win = tot < line; push = abs(tot - line) < 1e-9
+        if push:
+            result = 'push'; pnl = 0.0; pushes += 1
+        elif win:
+            result = 'win'; pnl = stake * (dec - 1); wins += 1
+        else:
+            result = 'loss'; pnl = -stake; losses += 1
+        pnl_updates.append((idx, result, pnl))
+    if pnl_updates:
+        # apply to original dataframe (recs_df) using index alignment
+        for idx, result, pnl in pnl_updates:
+            recs_df.loc[idx, 'status'] = 'closed'
+            recs_df.loc[idx, 'result'] = result
+            recs_df.loc[idx, 'pnl'] = round(pnl, 2)
+        try:
+            recs_df.to_csv(RECS_PATH, index=False)
+        except Exception:
+            pass
+    return {
+        'settled': len(pnl_updates),
+        'wins': wins, 'losses': losses, 'pushes': pushes,
+        'open_remaining': int((recs_df['status'] == 'open').sum()) if 'status' in recs_df.columns else 0
+    }
+
+def _auto_refresh_loop():
+    global _AUTO_REFRESH_LAST_MTIME
+    interval = float(os.environ.get('AUTO_REFRESH_INTERVAL_SEC', '60'))
+    while True:
+        try:
+            m = _current_scores_mtime()
+            if m and (_AUTO_REFRESH_LAST_MTIME is None or m > _AUTO_REFRESH_LAST_MTIME):
+                with _AUTO_REFRESH_LOCK:
+                    _reload_predictions()
+                    try:
+                        _overlay_lines_2025_if_present()
+                    except Exception:
+                        pass
+                    settle = _settle_recommendations()
+                    _AUTO_REFRESH_LAST_MTIME = m
+                    print(f"[auto-refresh] Reloaded predictions & settled recs: {settle}")
+        except Exception as e:
+            try:
+                print(f"[auto-refresh] error: {e}")
+            except Exception:
+                pass
+        time.sleep(interval)
+
 
 def _reload_predictions():
     global pred_df
@@ -4183,6 +4296,35 @@ def win_totals_page():
         </table>
     </div>
     ''', rows=data)
+
+@app.route('/api/admin/reload', methods=['POST','GET'])
+def admin_reload():
+    auth_token = os.environ.get('ADMIN_TOKEN')
+    supplied = request.args.get('token') or request.headers.get('X-Admin-Token')
+    if auth_token and auth_token != supplied:
+        return {'error': 'unauthorized'}, 401
+    with _AUTO_REFRESH_LOCK:
+        try:
+            _reload_predictions()
+            try:
+                _overlay_lines_2025_if_present()
+            except Exception:
+                pass
+            settle = _settle_recommendations()
+            return {'reloaded': True, 'rows': int(len(pred_df)), 'settled': settle}, 200
+        except Exception as e:
+            return {'error': str(e)}, 500
+
+# Launch auto-refresh thread if enabled and not already started
+if os.environ.get('DISABLE_AUTO_REFRESH','0') != '1':
+    try:
+        if not any(th.name == 'auto-refresh' for th in threading.enumerate()):
+            threading.Thread(target=_auto_refresh_loop, name='auto-refresh', daemon=True).start()
+    except Exception as _e:
+        try:
+            print(f"[auto-refresh] failed to ensure thread: {_e}")
+        except Exception:
+            pass
 
 if __name__ == '__main__':
     import os
