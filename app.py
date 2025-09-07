@@ -2134,29 +2134,64 @@ def index():
     weeks = sorted(pred_df['week'].dropna().unique())
     selected_week = weeks[0] if weeks else None
     if request.method == 'GET':
+        # Support deep-link query params (GET behaves like a read-only filtered view)
+        # Params: week, date, conference, show_all=1, filter_type, sort_by, full=1 to bypass cap
         today = dt.datetime.now().date()
-        # Default to the earliest available week to show the broadest slate by default
-        filter_type = 'all'
-        if weeks:
-            selected_week = min(weeks)
-        week_games = pred_df[pred_df['week'] == int(selected_week)].copy() if selected_week else pred_df.copy()
-        week_games['date_only'] = week_games['start_date'].str[:10]
-        all_dates = sorted(week_games['date_only'].dropna().unique())
-        filtered_games = week_games.copy()
-        selected_date = ''
-        selected_conference = ''
-        show_all = False
-        # removed hide_unknown control
-        hide_both_unknown = False
-        sort_by = 'time'
-        # Cap results for speed on cold starts
+        filter_type = request.args.get('filter_type', 'all')
+        # Select week: honor query if valid else earliest (min) for deterministic default
+        week_q = request.args.get('week')
         try:
-            if hide_both_unknown:
-                filtered_games = filtered_games[~((filtered_games['home_conference'] == 'Unknown') & (filtered_games['away_conference'] == 'Unknown'))]
+            if week_q is not None:
+                w_int = int(week_q)
+                if w_int in weeks:
+                    selected_week = w_int
         except Exception:
             pass
-        # Cap initial payload to keep first render fast; users can Show All to expand
-        filtered_games = filtered_games.head(80)
+        if weeks and selected_week is None:
+            selected_week = min(weeks)
+        week_games = pred_df[pred_df['week'] == int(selected_week)].copy() if selected_week is not None else pred_df.copy()
+        week_games['date_only'] = week_games.get('start_date', '').astype(str).str[:10]
+        all_dates = sorted([d for d in week_games['date_only'].dropna().unique() if d])
+        filtered_games = week_games.copy()
+        selected_date = request.args.get('date','')
+        selected_conference = request.args.get('conference','')
+        show_all = request.args.get('show_all','0') in ('1','true','yes')
+        hide_both_unknown = request.args.get('hide_both_unknown','0') in ('1','true','yes')
+        sort_by = request.args.get('sort_by','time')
+        want_full = request.args.get('full','0') in ('1','true','yes')
+        # Apply date & conference filters only when not show_all (mirrors POST behavior)
+        if selected_date and not show_all:
+            try:
+                filtered_games = filtered_games[filtered_games['date_only'] == selected_date]
+            except Exception:
+                pass
+        if selected_conference:
+            try:
+                filtered_games = filtered_games[(filtered_games['home_conference'] == selected_conference) | (filtered_games['away_conference'] == selected_conference)]
+            except Exception:
+                pass
+        # Apply upcoming/completed filter (unless show_all)
+        eff_filter = (filter_type if not show_all else 'all')
+        if eff_filter == 'completed':
+            filtered_games = filtered_games[(filtered_games['actual_home_points'].notnull()) & (filtered_games['actual_away_points'].notnull())]
+        elif eff_filter == 'upcoming':
+            filtered_games = filtered_games[(filtered_games['actual_home_points'].isnull()) & (filtered_games['actual_away_points'].isnull())]
+        # Hide unknown/unknown if requested
+        if hide_both_unknown:
+            try:
+                filtered_games = filtered_games[~((filtered_games['home_conference'] == 'Unknown') & (filtered_games['away_conference'] == 'Unknown'))]
+            except Exception:
+                pass
+        # Initial GET payload cap for performance — but always include ALL finals, plus up to 80 upcoming, unless full requested
+        if not want_full and not show_all:
+            try:
+                finals_mask = filtered_games['actual_home_points'].notna() & filtered_games['actual_away_points'].notna()
+                finals_df = filtered_games[finals_mask]
+                upcoming_df = filtered_games[~finals_mask]
+                # Keep ordering stable: finals first (already completed), then earliest upcoming slice of 80
+                filtered_games = pd.concat([finals_df, upcoming_df.head(80)], ignore_index=True)
+            except Exception:
+                filtered_games = filtered_games.head(80)
     else:
         # POST: Use form data to filter games
         filter_type = request.form.get('filter_type', 'all')
