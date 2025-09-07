@@ -914,6 +914,8 @@ def _build_game_card(game_row: pd.Series) -> dict:
         'predicted_away_points': r2(predicted_away),
         'actual_home_points': r2(actual_home) if _is_valid_num(actual_home) else None,
         'actual_away_points': r2(actual_away) if _is_valid_num(actual_away) else None,
+    # Convenience boolean for template/API so status display isn't dependent on inline set logic
+    'is_final': (_is_valid_num(actual_home) and _is_valid_num(actual_away)),
         'predicted_win_margin': r2(game_row.get('predicted_win_margin', '')),
         'home_win_prob_pct': f"{p_home_win*100:.1f}%" if p_home_win is not None else None,
         'away_win_prob_pct': f"{(1-p_home_win)*100:.1f}%" if p_home_win is not None else None,
@@ -2371,18 +2373,17 @@ def index():
         </form>
     <div class="grid">
     {% for game_info in game_cards %}
-    {% set is_final = (game_info['actual_home_points'] is not none) and (game_info['actual_away_points'] is not none) %}
-    <div class="card" data-sort-ts="{{game_info['sort_ts'] or 0}}" data-home-win-prob="{{game_info['home_win_prob'] or 0}}" data-ou-edge="{{game_info['ou_edge_num'] or 0}}" data-ats-edge="{{game_info['ats_edge_num'] or 0}}" data-home-conf="{{game_info['home_conference']}}" data-away-conf="{{game_info['away_conference']}}" data-ats-actual="{{game_info['ats_actual_result'] or ''}}" data-ats-correct="{% if game_info['ats_correct'] is not none %}{{ 'true' if game_info['ats_correct'] else 'false' }}{% else %}{% endif %}" data-ou-actual="{{game_info['ou_actual_result'] or ''}}" data-ou-correct="{% if game_info['ou_correct'] is not none %}{{ 'true' if game_info['ou_correct'] else 'false' }}{% else %}{% endif %}" data-winner-correct="{% if game_info['correct_prediction'] is not none %}{{ 'true' if game_info['correct_prediction'] else 'false' }}{% else %}{% endif %}" style="border-left-color: {% if is_final %}{% if game_info['correct_prediction'] is not none %}{% if game_info['correct_prediction'] %}#2ecc71{% else %}#e74c3c{% endif %}{% else %}#95a5a6{% endif %}{% else %}#bdc3c7{% endif %};">
+    <div class="card" data-sort-ts="{{game_info['sort_ts'] or 0}}" data-home-win-prob="{{game_info['home_win_prob'] or 0}}" data-ou-edge="{{game_info['ou_edge_num'] or 0}}" data-ats-edge="{{game_info['ats_edge_num'] or 0}}" data-home-conf="{{game_info['home_conference']}}" data-away-conf="{{game_info['away_conference']}}" data-ats-actual="{{game_info['ats_actual_result'] or ''}}" data-ats-correct="{% if game_info['ats_correct'] is not none %}{{ 'true' if game_info['ats_correct'] else 'false' }}{% else %}{% endif %}" data-ou-actual="{{game_info['ou_actual_result'] or ''}}" data-ou-correct="{% if game_info['ou_correct'] is not none %}{{ 'true' if game_info['ou_correct'] else 'false' }}{% else %}{% endif %}" data-winner-correct="{% if game_info['correct_prediction'] is not none %}{{ 'true' if game_info['correct_prediction'] else 'false' }}{% else %}{% endif %}" style="border-left-color: {% if game_info['is_final'] %}{% if game_info['correct_prediction'] is not none %}{% if game_info['correct_prediction'] %}#2ecc71{% else %}#e74c3c{% endif %}{% else %}#95a5a6{% endif %}{% else %}#bdc3c7{% endif %};">
         <div class="card-header">
             <div class="when">Venue: {{game_info['venue']}} • <span class="local-time" data-iso="{{game_info['start_iso']}}">{{game_info['game_time']}}</span></div>
-            <div class="status {% if is_final %}final{% else %}upcoming{% endif %}">{% if is_final %}FINAL{% else %}UPCOMING{% endif %}</div>
+        <div class="status {% if game_info['is_final'] %}final{% else %}upcoming{% endif %}">{% if game_info['is_final'] %}FINAL{% else %}UPCOMING{% endif %}</div>
         </div>
         <div class="teams">
             <div class="team">
                 <img src="{{game_info['away_logo']}}" alt="{{game_info['away_team']}} logo" class="team-logo" onerror="this.onerror=null;this.src='';"><br>
                 <span class="team-name" style="background:{{game_info['away_alt_color']}};color:{% if game_info['away_alt_color'] in ['#000','#111','#222','#333','#444','#1a1a1a','#232323','#2c3e50','#34495e'] %}#fff{% else %}#222{% endif %};">{{game_info['away_team']}}</span>
                 <div class="score-block">
-                    {% if is_final %}
+            {% if game_info['is_final'] %}
                         <div class="score">{{game_info['actual_away_points']}}</div>
                         <div class="pred">Model: {{game_info['predicted_away_points']}}</div>
                     {% else %}
@@ -2396,7 +2397,7 @@ def index():
                 <img src="{{game_info['home_logo']}}" alt="{{game_info['home_team']}} logo" class="team-logo" onerror="this.onerror=null;this.src='';"><br>
                 <span class="team-name" style="background:{{game_info['home_alt_color']}};color:{% if game_info['home_alt_color'] in ['#000','#111','#222','#333','#444','#1a1a1a','#232323','#2c3e50','#34495e'] %}#fff{% else %}#222{% endif %};">{{game_info['home_team']}}</span>
                 <div class="score-block">
-                    {% if is_final %}
+                    {% if game_info['is_final'] %}
                         <div class="score">{{game_info['actual_home_points']}}</div>
                         <div class="pred">Model: {{game_info['predicted_home_points']}}</div>
                     {% else %}
@@ -2412,7 +2413,7 @@ def index():
                 <b>Total (model):</b>
                 <span class="total-adj"> {{game_info['pred_total_adj'] or game_info['predicted_total_points']}} </span>
                 <span class="total-pre" style="display:none;"> {{game_info['pred_total_pre'] or game_info['predicted_total_points']}} </span>
-                {% if is_final %}
+                {% if game_info['is_final'] %}
                     {% if game_info['actual_total_points'] is not none %}
                         <br><b>Total (actual):</b> {{game_info['actual_total_points']}}
                         {% if game_info['total_points_diff'] is not none %}
@@ -2427,7 +2428,7 @@ def index():
                 {% else %}
                     <span class="muted">Win Prob: —</span>
                 {% endif %}
-                {% if is_final and game_info['correct_prediction'] is not none %}
+                {% if game_info['is_final'] and game_info['correct_prediction'] is not none %}
                     <div class="badges" style="margin-top:6px;">
                         <span class="badge {% if game_info['correct_prediction'] %}ok{% else %}err{% endif %}">Winner {% if game_info['correct_prediction'] %}Correct{% else %}Wrong{% endif %}</span>
                     </div>
@@ -2437,7 +2438,7 @@ def index():
                 {% if game_info['ats_line'] %}
                     <b>Spread:</b> {{game_info['ats_line']}} • <b>Model:</b> {{game_info['ats_model_lean'] or '—'}}
                     {% if game_info['ats_edge'] %}<span class="muted"> (Edge {{game_info['ats_edge']}})</span>{% endif %}
-                    {% if is_final and game_info['ats_actual_result'] %}
+                    {% if game_info['is_final'] and game_info['ats_actual_result'] %}
                         <br><b>ATS:</b> {{game_info['ats_actual_result']}}
                         {% if game_info['ats_correct'] is not none %}
                             <span class="badge {% if game_info['ats_correct'] %}ok{% else %}err{% endif %}" style="margin-left:6px;">{% if game_info['ats_correct'] %}Correct{% else %}Wrong{% endif %}</span>
@@ -2453,7 +2454,7 @@ def index():
                 {% if game_info['ou_line'] %}
                     <b>O/U:</b> {{game_info['ou_line']}} • <b>Model:</b> {{game_info['ou_model_lean'] or '—'}}
                     {% if game_info['ou_edge'] %}<span class="muted"> (Edge {{game_info['ou_edge']}})</span>{% endif %}
-                    {% if is_final and game_info['ou_actual_result'] %}
+                    {% if game_info['is_final'] and game_info['ou_actual_result'] %}
                         <br><b>Totals:</b> {{game_info['ou_actual_result']}}
                         {% if game_info['ou_correct'] is not none %}
                             <span class="badge {% if game_info['ou_correct'] %}ok{% else %}err{% endif %}" style="margin-left:6px;">{% if game_info['ou_correct'] %}Correct{% else %}Wrong{% endif %}</span>
