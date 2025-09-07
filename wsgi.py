@@ -56,7 +56,16 @@ try:
     application = _load_root_app()
     if application and hasattr(application, '__class__'):
         try:
-            print(f"[wsgi] Loaded root app: {getattr(application, '__module__', '?')}")
+            mod_name = getattr(application, '__module__', '?')
+            print(f"[wsgi] Loaded root app module={mod_name}")
+            # Attempt to surface build commit from root app module
+            try:
+                import app as _root_mod  # type: ignore
+                commit = getattr(_root_mod, 'BUILD_COMMIT', 'unknown')
+                build_time = getattr(_root_mod, 'BUILD_TIME', 'unknown')
+                print(f"[wsgi] Build commit={commit} build_time={build_time}")
+            except Exception as _cmte:
+                print(f"[wsgi] Could not retrieve build commit: {_cmte}")
         except Exception:
             pass
 except Exception:
@@ -119,6 +128,27 @@ else:
             existing = [r.rule for r in getattr(application, 'url_map').iter_rules()]  # type: ignore[attr-defined]
             if '/which-app' not in existing:
                 application.add_url_rule('/which-app', 'which_app', _which)  # type: ignore[arg-type]
+            # Additional deploy diagnostics
+            def _deploy_info():
+                commit = 'unknown'
+                build_time = 'unknown'
+                try:
+                    import app as _root_mod  # type: ignore
+                    commit = getattr(_root_mod, 'BUILD_COMMIT', commit)
+                    build_time = getattr(_root_mod, 'BUILD_TIME', build_time)
+                except Exception:
+                    pass
+                return {
+                    'commit': commit,
+                    'build_time': build_time,
+                    'force_root_only': FORCE_ROOT_ONLY,
+                    'cwd': os.getcwd(),
+                    'base_dir': BASE_DIR,
+                    'module': getattr(application, '__module__', 'unknown'),
+                    'startup_error': bool(startup_error)
+                }
+            if '/deploy-info' not in existing:
+                application.add_url_rule('/deploy-info', 'deploy_info', _deploy_info)  # type: ignore[arg-type]
     except Exception:
         pass
 
