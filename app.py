@@ -2147,8 +2147,20 @@ def index():
                     selected_week = w_int
         except Exception:
             pass
+        # Auto-pick latest week that has at least 1 final if no explicit week provided
         if weeks and selected_week is None:
-            selected_week = min(weeks)
+            try:
+                finals_per_week = {}
+                for w in weeks:
+                    subw = pred_df[pred_df['week'] == w]
+                    finals_per_week[w] = int(((subw['actual_home_points'].notna()) & (subw['actual_away_points'].notna())).sum())
+                weeks_with_finals = [w for w, cnt in finals_per_week.items() if cnt > 0]
+                if weeks_with_finals:
+                    selected_week = max(weeks_with_finals)
+                else:
+                    selected_week = min(weeks)
+            except Exception:
+                selected_week = min(weeks)
         week_games = pred_df[pred_df['week'] == int(selected_week)].copy() if selected_week is not None else pred_df.copy()
         week_games['date_only'] = week_games.get('start_date', '').astype(str).str[:10]
         all_dates = sorted([d for d in week_games['date_only'].dropna().unique() if d])
@@ -2379,6 +2391,9 @@ def index():
             <div>Winners: <span id="sum-winners-correct">{{summary['winners']['correct']}}</span> / <span id="sum-winners-total">{{summary['winners']['total']}}</span> (<span id="sum-winners-pct">{{summary['winners']['pct']}}</span>)</div>
             <div>ATS: <span id="sum-ats-correct">{{summary['ats']['correct']}}</span> / <span id="sum-ats-total">{{summary['ats']['total']}}</span> (<span id="sum-ats-pct">{{summary['ats']['pct']}}</span>) +<span id="sum-ats-push">{{summary['ats']['push']}}</span> push</div>
             <div>Totals: <span id="sum-ou-correct">{{summary['ou']['correct']}}</span> / <span id="sum-ou-total">{{summary['ou']['total']}}</span> (<span id="sum-ou-pct">{{summary['ou']['pct']}}</span>) +<span id="sum-ou-push">{{summary['ou']['push']}}</span> push</div>
+        </div>
+        <div style="text-align:center; margin:-2px 0 8px;">
+            <button type="button" id="toggleFinalsBtn" style="background:#8e44ad;">{{ 'Show All Games' if filter_type == 'completed' else 'Show Finals Only' }}</button>
         </div>
         <div style="text-align:center; margin:-6px 0 10px;">
             <label style="font-size:0.95em;color:#34495e;"><input type="checkbox" id="toggleWxTotals" checked> Show weather-adjusted totals</label>
@@ -2867,6 +2882,26 @@ def index():
                 window.addEventListener('scroll', toggleTop);
                 toggleTop();
                 topBtn.addEventListener('click', function(){ window.scrollTo({ top: 0, behavior: 'smooth' }); });
+
+                // Finals-only toggle (round-trips with query params)
+                try {
+                    const finalsBtn = document.getElementById('toggleFinalsBtn');
+                    if(finalsBtn){
+                        finalsBtn.addEventListener('click', ()=>{
+                            const url = new URL(window.location.href);
+                            if(url.searchParams.get('filter_type') === 'completed'){
+                                url.searchParams.delete('filter_type');
+                            } else {
+                                url.searchParams.set('filter_type','completed');
+                            }
+                            // Preserve current week explicitly to avoid recompute changes
+                            if(!url.searchParams.get('week')){
+                                url.searchParams.set('week','{{ selected_week }}');
+                            }
+                            window.location.href = url.toString();
+                        });
+                    }
+                } catch(e) { /* no-op */ }
             });
         })();
         </script>
@@ -4360,6 +4395,82 @@ if os.environ.get('DISABLE_AUTO_REFRESH','0') != '1':
             print(f"[auto-refresh] failed to ensure thread: {_e}")
         except Exception:
             pass
+
+@app.route('/api/game-cards')
+def api_game_cards():
+    """Return game card data (predictions + actuals + odds) as JSON.
+    Query params:
+      week: int, defaults to latest week with any finals (or earliest if none)
+      filter_type: all|completed|upcoming
+      conference: filter if team conf matches
+      date: YYYY-MM-DD (start_date prefix) when available
+      full=1 : bypass initial cap (otherwise finals + 80 upcoming)
+      sort: time|winprob_desc|ou_edge_desc|ats_edge_desc
+    """
+    try:
+        weeks = sorted(pred_df['week'].dropna().unique())
+        sel_week = None
+        w_q = request.args.get('week')
+        if w_q and w_q.isdigit():
+            wi = int(w_q)
+            if wi in weeks:
+                sel_week = wi
+        if sel_week is None and weeks:
+            try:
+                finals_per = {}
+                for w in weeks:
+                    subw = pred_df[pred_df['week']==w]
+                    finals_per[w] = int(((subw['actual_home_points'].notna()) & (subw['actual_away_points'].notna())).sum())
+                with_finals = [w for w,c in finals_per.items() if c>0]
+                sel_week = max(with_finals) if with_finals else min(weeks)
+            except Exception:
+                sel_week = min(weeks)
+        dfw = pred_df[pred_df['week']==sel_week].copy() if sel_week is not None else pred_df.copy()
+        dfw['date_only'] = dfw.get('start_date','').astype(str).str[:10]
+        # Filters
+        filt_type = request.args.get('filter_type','all')
+        conf_q = request.args.get('conference','')
+        date_q = request.args.get('date','')
+        show_full = request.args.get('full','0') in ('1','true','yes')
+        if date_q:
+            dfw = dfw[dfw['date_only']==date_q]
+        if conf_q:
+            dfw = dfw[(dfw['home_conference']==conf_q) | (dfw['away_conference']==conf_q)]
+        if filt_type == 'completed':
+            dfw = dfw[(dfw['actual_home_points'].notna()) & (dfw['actual_away_points'].notna())]
+        elif filt_type == 'upcoming':
+            dfw = dfw[(dfw['actual_home_points'].isna()) & (dfw['actual_away_points'].isna())]
+        # Build game cards
+        cards = []
+        for _, r in dfw.iterrows():
+            try:
+                cards.append(_build_game_card(r))
+            except Exception:
+                continue
+        # Sort
+        sort_by = request.args.get('sort','time')
+        try:
+            if sort_by == 'winprob_desc':
+                cards.sort(key=lambda g: (g.get('home_win_prob') or 0.0), reverse=True)
+            elif sort_by == 'ou_edge_desc':
+                cards.sort(key=lambda g: abs(g.get('ou_edge_num') or 0.0), reverse=True)
+            elif sort_by == 'ats_edge_desc':
+                cards.sort(key=lambda g: abs(g.get('ats_edge_num') or 0.0), reverse=True)
+            else:
+                cards.sort(key=lambda g: (g.get('sort_ts') is None, g.get('sort_ts') or 0.0))
+        except Exception:
+            pass
+        # Apply cap unless full
+        if not show_full:
+            try:
+                finals = [c for c in cards if c.get('actual_home_points') is not None and c.get('actual_away_points') is not None]
+                upcoming = [c for c in cards if c not in finals]
+                cards = finals + upcoming[:80]
+            except Exception:
+                cards = cards[:80]
+        return jsonify({'week': int(sel_week) if sel_week is not None else None, 'count': len(cards), 'results': cards}), 200
+    except Exception as e:
+        return {'error': str(e)}, 500
 
 if __name__ == '__main__':
     import os
