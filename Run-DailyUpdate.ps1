@@ -9,7 +9,8 @@ param(
     [int]$LogWeek,
     [double]$Bankroll = 1000,
     [double]$KellyFactor = 0.5,
-    [double]$EvThreshold = 0.02
+    [double]$EvThreshold = 0.02,
+    [switch]$SkipScoreCheck
 )
 
 $ErrorActionPreference = 'Stop'
@@ -45,6 +46,16 @@ try {
 
     Write-Host "Running: $py $($argsList -join ' ')" -ForegroundColor Cyan
     & $py @argsList *>&1 | Tee-Object -FilePath $log
+
+    # Lightweight daily scores finalization pass (prior + current week) unless skipped
+    if(-not $SkipScoreCheck){
+        try {
+            Write-Host "Running daily_scores_check.py" -ForegroundColor Cyan
+            & $py (Join-Path $root 'daily_scores_check.py') *>&1 | Tee-Object -FilePath $log -Append
+        } catch {
+            Write-Host "daily_scores_check.py failed: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
 
     if($LASTEXITCODE -ne 0){ Write-Host "weekly_update.py failed (exit $LASTEXITCODE). Skipping rec logging." -ForegroundColor Yellow }
     elseif($LogRecommendations){
