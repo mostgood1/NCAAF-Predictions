@@ -229,6 +229,20 @@ def _load_predictions_df() -> pd.DataFrame:
     # Preferred path: have enhanced; merge in actuals if available
     if df_enh is not None and isinstance(df_enh, pd.DataFrame) and not df_enh.empty:
         df = df_enh.copy()
+        # Early: drop exact duplicate prediction rows (identical season/week/teams/start_date) to avoid later double cards
+        try:
+            if {'season','week','home_team','away_team','start_date'}.issubset(df.columns):
+                before_ct = len(df)
+                df = df.sort_values(by=['season','week','start_date','home_team','away_team']).drop_duplicates(subset=['season','week','home_team','away_team','start_date'], keep='first')
+                if len(df) != before_ct:
+                    print(f"[load] Dropped {before_ct-len(df)} duplicate base rows")
+            elif {'season','week','home_team','away_team'}.issubset(df.columns):
+                before_ct = len(df)
+                df = df.sort_values(by=['season','week','home_team','away_team']).drop_duplicates(subset=['season','week','home_team','away_team'], keep='first')
+                if len(df) != before_ct:
+                    print(f"[load] Dropped {before_ct-len(df)} duplicate base rows (no start_date)")
+        except Exception:
+            pass
         # Ensure required columns exist when enhanced does not have actuals
         for col in ['actual_home_points', 'actual_away_points', 'start_date_api']:
             if col not in df.columns:
@@ -292,6 +306,22 @@ def _load_predictions_df() -> pd.DataFrame:
                 df_scores[col] = pd.NA
         # Coerce and apply Week 0 relabeling as well
         for col in ['actual_home_points','actual_away_points']:
+
+    # Final duplicate cull (post-merge) using most discriminative columns present
+    try:
+        dup_keys = [c for c in ['season','week','start_date','home_team','away_team'] if c in df.columns]
+        if len(dup_keys) >= 4:  # require enough keys
+            before = len(df)
+            df = df.sort_values(by=dup_keys).drop_duplicates(subset=dup_keys, keep='first')
+            if len(df) != before:
+                print(f"[load] Post-merge duplicate removal: {before-len(df)} rows dropped")
+        elif {'season','week','home_team','away_team'}.issubset(df.columns):
+            before = len(df)
+            df = df.sort_values(by=['season','week','home_team','away_team']).drop_duplicates(subset=['season','week','home_team','away_team'], keep='first')
+            if len(df) != before:
+                print(f"[load] Post-merge duplicate removal (no start_date): {before-len(df)} rows dropped")
+    except Exception:
+        pass
             try:
                 df_scores[col] = pd.to_numeric(df_scores[col], errors='coerce')
             except Exception:
