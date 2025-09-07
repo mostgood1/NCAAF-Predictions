@@ -1,3 +1,34 @@
+import os
+
+# -------------------- Build / Version Introspection --------------------
+import time as _time
+def _get_git_commit() -> str:
+    try:
+        base = os.path.dirname(os.path.abspath(__file__))
+        for _ in range(5):
+            cand = os.path.join(base, '.git')
+            if os.path.isdir(cand):
+                head_path = os.path.join(cand, 'HEAD')
+                if os.path.exists(head_path):
+                    with open(head_path, 'r', encoding='utf-8') as f:
+                        ref = f.read().strip()
+                    if ref.startswith('ref:'):
+                        ref_rel = ref.split(' ', 1)[1].strip()
+                        ref_file = os.path.join(cand, *ref_rel.split('/'))
+                        if os.path.exists(ref_file):
+                            with open(ref_file, 'r', encoding='utf-8') as rf:
+                                return rf.read().strip()[:40]
+                    return ref[:40]
+            new_base = os.path.dirname(base)
+            if new_base == base:
+                break
+            base = new_base
+    except Exception:
+        pass
+    return 'unknown'
+
+BUILD_TIME = _time.strftime('%Y-%m-%dT%H:%M:%SZ', _time.gmtime())
+BUILD_COMMIT = _get_git_commit()
 from flask import Flask, render_template_string, request, redirect, url_for, jsonify, make_response
 import ast
 import unicodedata
@@ -2840,7 +2871,11 @@ def index():
             });
         })();
         </script>
-    ''', weeks=weeks, selected_week=selected_week, all_dates=all_dates, selected_date=selected_date, show_all=show_all, hide_both_unknown=hide_both_unknown, all_conferences=pred_df['home_conference'].unique(), selected_conference=selected_conference, game_cards=game_cards, filter_type=filter_type, summary=summary, sort_by=sort_by, HIDE_REFRESH=HIDE_REFRESH, finals_count_week=finals_count_week, total_games_week=total_games_week, finals_pct_week=finals_pct_week, unknown_pending=unknown_pending)
+    <div style="margin-top:30px; text-align:center; font-size:0.75em; color:#7f8c8d;">
+        Build {{ BUILD_TIME }} • Commit {{ BUILD_COMMIT[:8] if BUILD_COMMIT else 'unknown' }} • Source {{ PRED_SOURCE }}
+        • <a href="/version" style="color:#2980b9;">version JSON</a>
+    </div>
+    ''', weeks=weeks, selected_week=selected_week, all_dates=all_dates, selected_date=selected_date, show_all=show_all, hide_both_unknown=hide_both_unknown, all_conferences=pred_df['home_conference'].unique(), selected_conference=selected_conference, game_cards=game_cards, filter_type=filter_type, summary=summary, sort_by=sort_by, HIDE_REFRESH=HIDE_REFRESH, finals_count_week=finals_count_week, total_games_week=total_games_week, finals_pct_week=finals_pct_week, unknown_pending=unknown_pending, BUILD_TIME=BUILD_TIME, BUILD_COMMIT=BUILD_COMMIT, PRED_SOURCE=PRED_SOURCE)
     resp = make_response(page_html)
     resp.headers['Cache-Control'] = 'no-store, max-age=0'
     resp.headers['Pragma'] = 'no-cache'
@@ -3170,6 +3205,63 @@ def team_schedules():
         {% endif %}
     </div>
     ''', all_conferences=all_conferences, selected_conference=selected_conference, available_teams=available_teams, selected_team=selected_team, team_schedule=team_schedule, team_info=team_info)
+
+# -------------------- Lightweight Diagnostics --------------------
+@app.route('/version')
+def version_info():
+    try:
+        wk = None
+        finals = None
+        total = None
+        if 'week' in pred_df.columns:
+            try:
+                wk = int(pd.to_numeric(pred_df['week'], errors='coerce').dropna().max())
+            except Exception:
+                wk = None
+        if wk is not None:
+            sub = pred_df[pred_df['week'] == wk]
+            if not sub.empty and 'actual_home_points' in sub.columns:
+                finals = int(((~sub['actual_home_points'].isna()) & (~sub['actual_away_points'].isna())).sum())
+                total = int(len(sub))
+        return jsonify({
+            'build_time': BUILD_TIME,
+            'commit': BUILD_COMMIT,
+            'prediction_source': PRED_SOURCE,
+            'latest_week': wk,
+            'latest_week_finals': finals,
+            'latest_week_total': total
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/week-status')
+def api_week_status():
+    try:
+        week_arg = request.args.get('week')
+        if week_arg is None:
+            week = int(pd.to_numeric(pred_df['week'], errors='coerce').dropna().max()) if 'week' in pred_df.columns else None
+        else:
+            week = int(week_arg)
+        if week is None:
+            return jsonify({'error': 'no week data'}), 400
+        sub = pred_df[pred_df['week'] == week]
+        if sub.empty:
+            return jsonify({'week': week, 'games': 0, 'finals': 0, 'pct_complete': 0.0})
+        finals = 0
+        if 'actual_home_points' in sub.columns:
+            finals = int(((~sub['actual_home_points'].isna()) & (~sub['actual_away_points'].isna())).sum())
+        pct = (float(finals)/float(len(sub))*100.0) if len(sub) else 0.0
+        sample = []
+        for _, r in sub.head(5).iterrows():
+            sample.append({
+                'home': r.get('home_team'),
+                'away': r.get('away_team'),
+                'ah': r.get('actual_home_points'),
+                'aa': r.get('actual_away_points')
+            })
+        return jsonify({'week': week, 'games': int(len(sub)), 'finals': finals, 'pct_complete': round(pct,2), 'sample': sample})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/analysis-2025', methods=['GET'])
 def analysis_2025():
