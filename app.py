@@ -1145,6 +1145,7 @@ def _update_scores_with_cfbd(week: int | None = None, overwrite: bool = False) -
     api_key = os.environ.get('CFBD_API_KEY') or os.environ.get('CFBD_TOKEN') or os.environ.get('CFBD')
     use_espn_only = (os.environ.get('USE_ESPN_ONLY', '0') == '1') or (not api_key)
     use_espn_first = os.environ.get('USE_ESPN_FIRST', '1') != '0'
+    cfbd_primary = os.environ.get('USE_CFBD_PRIMARY', '0') == '1'
 
     # Ensure we have a target CSV path to update
     global pred_path_scores, pred_path_enh
@@ -1372,11 +1373,99 @@ def _update_scores_with_cfbd(week: int | None = None, overwrite: bool = False) -
         except Exception:
             pass
 
-    if use_espn_first or use_espn_only:
-        _fetch_espn_nowk()
+    def _fetch_ncaa_nowk():
+        """Lightweight NCAA.com scoreboard scrape (JSON) as alternative final score source.
+        Controlled by env USE_NCAA_ALT=1. Fills games_map_nowk similar to ESPN fetch.
+        URL pattern: https://data.ncaa.com/casablanca/scoreboard/football/fbs/YYYY/MM/DD/scoreboard.json
+        Only records games with non-null scores and a final/completed status marker.
+        """
+        if os.environ.get('USE_NCAA_ALT','0') != '1':
+            return
+        nonlocal games_map_nowk
+        try:
+            unique_dates = set()
+            try:
+                if 'start_date' in df.columns:
+                    for _, r in df.iterrows():
+                        try:
+                            if int(r.get('season',0)) != 2025:
+                                continue
+                            rw = int(r.get('week')) if pd.notna(r.get('week')) else None
+                        except Exception:
+                            rw = None
+                        if week is not None and rw is not None and rw != int(week):
+                            continue
+                        d = pd.to_datetime(r.get('start_date'), errors='coerce')
+                        if pd.notna(d):
+                            unique_dates.add(d.date())
+            except Exception:
+                pass
+            for d in sorted(unique_dates):
+                try:
+                    y = d.year; m = f"{d.month:02d}"; dd = f"{d.day:02d}"
+                    url = f"https://data.ncaa.com/casablanca/scoreboard/football/fbs/{y}/{m}/{dd}/scoreboard.json"
+                    r = requests.get(url, timeout=15, headers={'User-Agent':'Mozilla/5.0','Accept':'application/json'})
+                    http_notes.append({'ncaa': True, 'date': d.isoformat(), 'status': getattr(r,'status_code',None)})
+                    if r.status_code != 200:
+                        continue
+                    j = r.json() or {}
+                    games = j.get('scoreboard') or j.get('games') or j.get('events') or []
+                    if isinstance(games, dict):
+                        # sometimes nested key
+                        games = games.get('games') or []
+                    for g in games:
+                        try:
+                            home = g.get('home') or {}
+                            away = g.get('away') or {}
+                            hp = home.get('score') or home.get('homeScore') or home.get('runs')
+                            ap = away.get('score') or away.get('awayScore') or away.get('runs')
+                            status_txt = (g.get('status') or g.get('finalMessage') or '').lower()
+                            if hp in (None,'') or ap in (None,''):
+                                continue
+                            try:
+                                hp_i = int(hp); ap_i = int(ap)
+                                if hp_i == 0 and ap_i == 0:
+                                    # Avoid 0-0 placeholders
+                                    continue
+                            except Exception:
+                                pass
+                            is_final = any(s in status_txt for s in ('final','completed'))
+                            if not is_final:
+                                continue
+                            def _cand_names(obj):
+                                return [
+                                    _norm_team_base(obj.get('names',{}).get('short')), _norm_team_base(obj.get('names',{}).get('display')),
+                                    _norm_team_base(obj.get('shortname')), _norm_team_base(obj.get('name')),
+                                    _norm_team_base(obj.get('abbrev'))
+                                ]
+                            hcands = [c for c in _cand_names(home) if c]
+                            acands = [c for c in _cand_names(away) if c]
+                            for ht in hcands:
+                                for at in acands:
+                                    games_map_nowk[(ht, at)] = {'home_points': hp, 'away_points': ap, 'completed': True}
+                                    games_map_nowk[(at, ht)] = {'home_points': ap, 'away_points': hp, 'completed': True}
+                        except Exception:
+                            continue
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+    # Fetch order control: allow choosing CFBD as primary when USE_CFBD_PRIMARY=1
+    if use_espn_only:
+        _fetch_espn_nowk(); _fetch_ncaa_nowk()
+    else:
+        if cfbd_primary:
+            # Defer ESPN until after CFBD attempt to favor CFBD data where both exist
+            pass
+        else:
+            if use_espn_first:
+                _fetch_espn_nowk(); _fetch_ncaa_nowk()
 
     # CFBD fetch only if not ESPN-only and if we still need more
-    if not use_espn_only and not games_map_nowk:
+    # CFBD fetch: when CFBD is primary we always attempt it (even if ESPN returned);
+    # otherwise mimic original behavior (only if ESPN did not produce any finals yet)
+    if not use_espn_only and (cfbd_primary or not games_map_nowk):
         try:
             for wk in weeks:
                 for pr in _variants(wk):
@@ -1451,8 +1540,16 @@ def _update_scores_with_cfbd(week: int | None = None, overwrite: bool = False) -
         except Exception:
             pass
     # ESPN fetch already handled above in ESPN-first path
+    # If CFBD was primary and ESPN not yet fetched, try ESPN now to fill gaps
+    if (cfbd_primary and not use_espn_only):
+        try:
+            if not games_map_nowk:
+                _fetch_espn_nowk(); _fetch_ncaa_nowk()
+        except Exception:
+            pass
+
     if not games_map and not games_map_nowk:
-        return {'step': 'cfbd_update', 'skipped': 'no_games_from_api', 'notes': http_notes}
+        return {'step': 'cfbd_update', 'skipped': 'no_games_from_api', 'notes': http_notes, 'cfbd_primary': cfbd_primary}
 
     # Apply updates into our CSV
     try:
