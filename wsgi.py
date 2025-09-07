@@ -12,6 +12,7 @@ except Exception:  # Flask will be installed in Render
 # Resolve base paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SUBDIR = os.path.join(BASE_DIR, "NCAFCompare")
+FORCE_ROOT_ONLY = True  # prevent falling back to stale sub-app
 
 def _load_root_app():
     """Prefer loading the robust root-level app.py (app: Flask)."""
@@ -31,7 +32,9 @@ def _load_root_app():
         return None
 
 def _load_subfolder_app():
-    """Fallback: load Flask app from the NCAFCompare subfolder without requiring package import."""
+    if FORCE_ROOT_ONLY:
+        return None
+    # legacy path retained for reference if FORCE_ROOT_ONLY is False
     if os.path.isdir(SUBDIR):
         if SUBDIR not in sys.path:
             sys.path.insert(0, SUBDIR)
@@ -39,7 +42,7 @@ def _load_subfolder_app():
         if os.path.exists(app_path):
             spec = importlib.util.spec_from_file_location("ncaaf_app_sub", app_path)
             if spec and spec.loader:
-                mod = importlib.util.module_from_spec(spec)
+                mod = importlib.module_from_spec(spec)
                 spec.loader.exec_module(mod)  # type: ignore[attr-defined]
                 if hasattr(mod, "app"):
                     return getattr(mod, "app")
@@ -51,17 +54,22 @@ application = None
 # Try root app first, then subfolder, then package import, capturing errors
 try:
     application = _load_root_app()
+    if application and hasattr(application, '__class__'):
+        try:
+            print(f"[wsgi] Loaded root app: {getattr(application, '__module__', '?')}")
+        except Exception:
+            pass
 except Exception:
     startup_error = traceback.format_exc()
 
-if application is None:
+if application is None and not FORCE_ROOT_ONLY:
     try:
         application = _load_subfolder_app()
     except Exception:
         if not startup_error:
             startup_error = traceback.format_exc()
 
-if application is None:
+if application is None and not FORCE_ROOT_ONLY:
     try:
         from NCAFCompare.app import app as application  # type: ignore
     except Exception:
@@ -95,6 +103,24 @@ if application is None or startup_error is not None:
             return {'status': 'error', 'message': 'startup_failed', 'has_trace': bool(startup_error)}, 500
 
         application = _fallback
+else:
+    # Inject a small diagnostics route into the loaded Flask app if possible
+    try:
+        if hasattr(application, 'add_url_rule'):
+            def _which():
+                return {
+                    'loaded_from_root': True,
+                    'force_root_only': FORCE_ROOT_ONLY,
+                    'base_dir': BASE_DIR,
+                    'has_startup_error': bool(startup_error),
+                    'module': getattr(application, '__module__', 'unknown')
+                }
+            # avoid duplicate rule errors
+            existing = [r.rule for r in getattr(application, 'url_map').iter_rules()]  # type: ignore[attr-defined]
+            if '/which-app' not in existing:
+                application.add_url_rule('/which-app', 'which_app', _which)  # type: ignore[arg-type]
+    except Exception:
+        pass
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5051))
