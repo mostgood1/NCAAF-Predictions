@@ -229,7 +229,7 @@ def _load_predictions_df() -> pd.DataFrame:
     # Preferred path: have enhanced; merge in actuals if available
     if df_enh is not None and isinstance(df_enh, pd.DataFrame) and not df_enh.empty:
         df = df_enh.copy()
-        # Early: drop exact duplicate prediction rows (identical season/week/teams/start_date) to avoid later double cards
+        # Early duplicate removal
         try:
             if {'season','week','home_team','away_team','start_date'}.issubset(df.columns):
                 before_ct = len(df)
@@ -243,32 +243,29 @@ def _load_predictions_df() -> pd.DataFrame:
                     print(f"[load] Dropped {before_ct-len(df)} duplicate base rows (no start_date)")
         except Exception:
             pass
-        # Ensure required columns exist when enhanced does not have actuals
-        for col in ['actual_home_points', 'actual_away_points', 'start_date_api']:
+        # Ensure required columns exist
+        for col in ['actual_home_points','actual_away_points','start_date_api']:
             if col not in df.columns:
                 df[col] = pd.NA
-        if actuals_df is not None and isinstance(actuals_df, pd.DataFrame) and not actuals_df.empty:
+        if actuals_df is not None and not actuals_df.empty:
             try:
-                # Primary merge on season+week+teams
                 df = df.merge(actuals_df, on=['season','week','home_team','away_team'], how='left', suffixes=('', '_from_scores'))
                 for col in ['actual_home_points','actual_away_points','start_date_api']:
                     alt = f"{col}_from_scores"
                     if alt in df.columns:
                         df[col] = df[col].where(df[col].notna(), df[alt])
                 df = df.drop(columns=[c for c in df.columns if c.endswith('_from_scores')])
-                # Ensure numeric types for actuals
                 for col in ['actual_home_points','actual_away_points']:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
-                # Fallback: for any remaining missing actuals in 2025, try a merge without week
+                # Missing actuals fallback merge without week
                 try:
-                    missing_mask = (df.get('season', 0) == 2025) & (df['actual_home_points'].isna() | df['actual_away_points'].isna())
+                    missing_mask = (df.get('season',0)==2025) & (df['actual_home_points'].isna() | df['actual_away_points'].isna())
                 except Exception:
-                    missing_mask = pd.Series([False] * len(df))
+                    missing_mask = pd.Series([False]*len(df))
                 if missing_mask.any():
                     try:
                         no_wk_cols = ['season','home_team','away_team','actual_home_points','actual_away_points']
                         actuals_nowk = actuals_df[[c for c in no_wk_cols if c in actuals_df.columns]].copy()
-                        # Deduplicate on season+teams keeping any non-null actuals
                         actuals_nowk = actuals_nowk.sort_values(by=[c for c in ['actual_home_points','actual_away_points'] if c in actuals_nowk.columns], ascending=False)
                         actuals_nowk = actuals_nowk.drop_duplicates(subset=['season','home_team','away_team'], keep='first')
                         left = df[missing_mask].merge(actuals_nowk, on=['season','home_team','away_team'], how='left', suffixes=('', '_nw'))
@@ -276,11 +273,9 @@ def _load_predictions_df() -> pd.DataFrame:
                             alt = f"{col}_nw"
                             if alt in left.columns:
                                 left[col] = left[col].where(left[col].notna(), left[alt])
-                        # Write back
-                        df.loc[missing_mask, ['actual_home_points','actual_away_points']] = left[['actual_home_points','actual_away_points']].values
+                        df.loc[missing_mask,['actual_home_points','actual_away_points']] = left[['actual_home_points','actual_away_points']].values
                     except Exception:
                         pass
-                # Apply Week 0 relabeling after all merges (idempotent if already aligned)
                 try:
                     df = _apply_week0_label(df)
                 except Exception:
@@ -290,27 +285,33 @@ def _load_predictions_df() -> pd.DataFrame:
                 print(f"[app] Merge actuals into enhanced failed: {_merge_e}")
                 PRED_SOURCE = 'enhanced'
         else:
-            # Still apply Week 0 relabeling for clarity
             try:
                 df = _apply_week0_label(df)
             except Exception:
                 pass
             PRED_SOURCE = 'enhanced'
-        return df
-
-    # Fallback: no enhanced, try with_scores alone
-    if df_scores is not None and isinstance(df_scores, pd.DataFrame) and not df_scores.empty:
-        # Ensure columns present
-        for col in ['actual_home_points', 'actual_away_points']:
-            if col not in df_scores.columns:
-                df_scores[col] = pd.NA
-        # Coerce and apply Week 0 relabeling as well
+    elif df_scores is not None and isinstance(df_scores, pd.DataFrame) and not df_scores.empty:
+        df = df_scores.copy()
         for col in ['actual_home_points','actual_away_points']:
+            if col not in df.columns:
+                df[col] = pd.NA
+            try:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+            except Exception:
+                pass
+        try:
+            df = _apply_week0_label(df)
+        except Exception:
+            pass
+        PRED_SOURCE = 'scores_only'
+    else:
+        df = pd.DataFrame(columns=['season','week','home_team','away_team'])
+        PRED_SOURCE = 'none'
 
-    # Final duplicate cull (post-merge) using most discriminative columns present
+    # Final duplicate cull
     try:
         dup_keys = [c for c in ['season','week','start_date','home_team','away_team'] if c in df.columns]
-        if len(dup_keys) >= 4:  # require enough keys
+        if len(dup_keys) >= 4:
             before = len(df)
             df = df.sort_values(by=dup_keys).drop_duplicates(subset=dup_keys, keep='first')
             if len(df) != before:
@@ -322,17 +323,7 @@ def _load_predictions_df() -> pd.DataFrame:
                 print(f"[load] Post-merge duplicate removal (no start_date): {before-len(df)} rows dropped")
     except Exception:
         pass
-            try:
-                df_scores[col] = pd.to_numeric(df_scores[col], errors='coerce')
-            except Exception:
-                pass
-        df_scores = _apply_week0_label(df_scores)
-        PRED_SOURCE = 'with_scores_only'
-        return df_scores
-
-    # If here, nothing could be loaded
-    PRED_SOURCE = 'none'
-    return pd.DataFrame(columns=['season','week','home_team','away_team'])
+    return df
 
 pred_df = _load_predictions_df()
 
