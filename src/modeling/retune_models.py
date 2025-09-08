@@ -34,7 +34,7 @@ MODELS_DIR.mkdir(exist_ok=True)
 RAW_PRED_FILE = DATA_DIR / 'college_football_schedule_2025_predicted_totals_enhanced_with_scores.csv'
 FALLBACK_PRED_FILE = DATA_DIR / 'college_football_schedule_2025_predicted_totals_enhanced.csv'
 
-OUT_PREFIX = 'rf_v1'
+OUT_PREFIX = 'rf_v1'  # default; can be overridden via --out-prefix
 
 MIN_FINAL_GAMES = 80  # Require enough signal before overwriting models
 RANDOM_STATE = 42
@@ -167,9 +167,19 @@ def _calibrate_home_win_prob(train: pd.DataFrame, val: pd.DataFrame) -> dict:
 
 
 def main():
+    import argparse
+    global OUT_PREFIX
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--out-prefix', help='Versioned model prefix to use when saving artifacts (e.g., rf_v2).')
+    ap.add_argument('--min-final-games', type=int, default=MIN_FINAL_GAMES, help='Minimum finalized games required to retrain.')
+    args = ap.parse_args()
+    if args.out_prefix:
+        OUT_PREFIX = args.out_prefix
+    # Allow dynamic threshold
+    min_required = args.min_final_games
     df = _prepare(_load_df())
-    if len(df) < MIN_FINAL_GAMES:
-        print(json.dumps({'status': 'skipped', 'reason': 'insufficient_final_games', 'count': len(df)}))
+    if len(df) < min_required:
+        print(json.dumps({'status': 'skipped', 'reason': 'insufficient_final_games', 'count': len(df), 'min_required': min_required, 'model_prefix': OUT_PREFIX}))
         return
     train, val = _train_val_split(df)
     results = {'generated_at_utc': datetime.utcnow().isoformat()+'Z', 'counts': {'train': len(train), 'val': len(val)}}
@@ -197,7 +207,7 @@ def main():
     metrics_path = MODELS_DIR / f'{OUT_PREFIX}_metrics.json'
     with open(metrics_path, 'w', encoding='utf-8') as f:
         json.dump(results, f, indent=2)
-    print(json.dumps({'status': 'ok', 'metrics_file': metrics_path.name, **results}))
+    print(json.dumps({'status': 'ok', 'metrics_file': metrics_path.name, 'model_prefix': OUT_PREFIX, **results}))
 
 if __name__ == '__main__':
     main()

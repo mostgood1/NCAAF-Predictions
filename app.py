@@ -772,8 +772,16 @@ def _build_game_card(game_row: pd.Series) -> dict:
             return x is not None and not (isinstance(x, float) and math.isnan(x))
         except Exception:
             return x is not None
+    # Base (legacy) predictions
     predicted_home = _safe_float(game_row.get('predicted_home_points', None))
     predicted_away = _safe_float(game_row.get('predicted_away_points', None))
+    # Prefer model predictions if present
+    model_home = _safe_float(game_row.get('model_home_points', None))
+    model_away = _safe_float(game_row.get('model_away_points', None))
+    if model_home is not None:
+        predicted_home = model_home
+    if model_away is not None:
+        predicted_away = model_away
     predicted_winner = None
     actual_winner = None
     correct_prediction = None
@@ -782,14 +790,18 @@ def _build_game_card(game_row: pd.Series) -> dict:
             predicted_winner = game_row['home_team']
         elif predicted_home < predicted_away:
             predicted_winner = game_row['away_team']
-    p_home_win = None
-    try:
-        if predicted_home is not None and predicted_away is not None:
-            pred_margin_tmp = _safe_float(game_row.get('predicted_win_margin'), predicted_home - predicted_away)
-            sigma_tmp = _get_conf_std_for_game(game_row)
-            p_home_win = _phi(pred_margin_tmp / sigma_tmp)
-    except Exception:
-        p_home_win = None
+    # Win probability: prefer calibrated model probability if available
+    p_home_win = _safe_float(game_row.get('model_home_win_prob'))
+    if p_home_win is None:
+        try:
+            if predicted_home is not None and predicted_away is not None:
+                pred_margin_tmp = _safe_float(game_row.get('model_margin'))
+                if pred_margin_tmp is None:
+                    pred_margin_tmp = _safe_float(game_row.get('predicted_win_margin'), predicted_home - predicted_away)
+                sigma_tmp = _get_conf_std_for_game(game_row)
+                p_home_win = _phi(pred_margin_tmp / sigma_tmp)
+        except Exception:
+            p_home_win = None
     if _is_valid_num(actual_home) and _is_valid_num(actual_away):
         if actual_home > actual_away:
             actual_winner = game_row['home_team']
@@ -975,7 +987,7 @@ def _build_game_card(game_row: pd.Series) -> dict:
         'actual_away_points': r2(actual_away) if _is_valid_num(actual_away) else None,
     # Convenience boolean for template/API so status display isn't dependent on inline set logic
     'is_final': (_is_valid_num(actual_home) and _is_valid_num(actual_away)),
-        'predicted_win_margin': r2(game_row.get('predicted_win_margin', '')),
+    'predicted_win_margin': r2(_safe_float(game_row.get('model_margin'), game_row.get('predicted_win_margin', ''))),
         'home_win_prob_pct': f"{p_home_win*100:.1f}%" if p_home_win is not None else None,
         'away_win_prob_pct': f"{(1-p_home_win)*100:.1f}%" if p_home_win is not None else None,
         'home_win_prob': p_home_win,
@@ -1842,12 +1854,21 @@ def compute_recommendations(week=None, bankroll=1000.0, kelly_factor=0.5, ev_thr
         odds_list = get_betting_lines(int(row['season']), int(row['week']), row['home_team'], row['away_team'])
         if not odds_list:
             continue
-        pred_home = _safe_float(row.get('predicted_home_points'))
-        pred_away = _safe_float(row.get('predicted_away_points'))
+        # Prefer model-based point predictions
+        pred_home = _safe_float(row.get('model_home_points'))
+        if pred_home is None:
+            pred_home = _safe_float(row.get('predicted_home_points'))
+        pred_away = _safe_float(row.get('model_away_points'))
+        if pred_away is None:
+            pred_away = _safe_float(row.get('predicted_away_points'))
         if pred_home is None or pred_away is None:
             continue
         pred_total = pred_home + pred_away
-        pred_margin = _safe_float(row.get('predicted_win_margin'), pred_home - pred_away)
+        pred_margin = _safe_float(row.get('model_margin'))
+        if pred_margin is None:
+            pred_margin = _safe_float(row.get('predicted_win_margin'))
+        if pred_margin is None:
+            pred_margin = pred_home - pred_away
         sigma_m = _get_conf_std_for_game(row)
         sigma_t = 12.0
         for odds in odds_list:
@@ -1856,7 +1877,9 @@ def compute_recommendations(week=None, bankroll=1000.0, kelly_factor=0.5, ev_thr
             home_ml = _safe_float(odds.get('homeMoneyline'))
             away_ml = _safe_float(odds.get('awayMoneyline'))
             if home_ml is not None:
-                p_home = _phi(pred_margin / sigma_m)
+                p_home = _safe_float(row.get('model_home_win_prob'))
+                if p_home is None:
+                    p_home = _phi(pred_margin / sigma_m)
                 dec, _ = american_to_decimal(home_ml)
                 if dec:
                     kf = None
@@ -1872,7 +1895,10 @@ def compute_recommendations(week=None, bankroll=1000.0, kelly_factor=0.5, ev_thr
                         stake = round(bankroll * kf * kelly_factor, 2)
                         recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'ML', 'side': 'Home', 'provider': provider, 'price_american': int(home_ml), 'model_prob': round(p_home,4), 'implied_prob': round(1/(dec),4), 'edge': round(ev,4), 'kelly_f': round(kf,4), 'stake': stake})
             if away_ml is not None:
-                p_away = 1 - _phi(pred_margin / sigma_m)
+                p_home_tmp = _safe_float(row.get('model_home_win_prob'))
+                if p_home_tmp is None:
+                    p_home_tmp = _phi(pred_margin / sigma_m)
+                p_away = max(0.0, 1.0 - p_home_tmp)
                 dec, _ = american_to_decimal(away_ml)
                 if dec:
                     kf = None
@@ -2040,20 +2066,19 @@ def recommendations_api():
         # Attach timing and confidence
         out = []
         # Build a quick index by (season,week,home,away) to get start time
+        idx = {}
         try:
-            idx = {}
             df2025 = pred_df[(pred_df.get('season', 0) == 2025)].copy()
             for _, r in df2025.iterrows():
-                key = (int(r.get('season', 0)), int(r.get('week', -1)), str(r.get('home_team','')), str(r.get('away_team','')))
+                key = (int(r['season']), int(r['week']), str(r['home_team']), str(r['away_team']))
                 idx[key] = r
         except Exception:
             idx = {}
         for rec in recs:
-            key = (int(rec['season']), int(rec['week']), rec['home_team'], rec['away_team'])
+            tier, score = _confidence_tier(rec.get('edge'), rec.get('kelly_f'), rec.get('model_prob'))
+            key = (rec['season'], rec['week'], rec['home_team'], rec['away_team'])
             row = idx.get(key)
             start_iso, sort_ts, display_time = _parse_start_ts(row) if row is not None else ('', None, '')
-            tier, score = _confidence_tier(rec.get('edge'), rec.get('kelly_f'), rec.get('model_prob'))
-            # Attach team assets for a richer UI
             try:
                 ha = get_team_asset(rec['home_team'])
             except Exception:
@@ -2148,7 +2173,7 @@ def index():
         selected_conference = request.args.get('conference','')
         show_all = request.args.get('show_all','0').lower() in ('1','true','yes')
         include_non_fbs = request.args.get('include_non_fbs','0').lower() in ('1','true','yes')
-        hide_both_unknown = (not include_non_fbs) and (request.args.get('hide_both_unknown','0').lower() not in ('1','true','yes'))
+        hide_both_unknown = not include_non_fbs  # deprecated flag retained for minimal downstream condition usage
         want_full = request.args.get('full','0').lower() in ('1','true','yes')
         sort_by = request.args.get('sort_by','time')
         filtered_games = week_games.copy()
@@ -2187,8 +2212,8 @@ def index():
         hide_both_unknown = not include_non_fbs
         sort_by = request.form.get('sort_by', 'time')
         week_games = pred_df[pred_df['week'] == int(selected_week)].copy() if selected_week else pred_df.copy()
-        week_games['date_only'] = week_games['start_date'].str[:10]
-        all_dates = sorted(week_games['date_only'].dropna().unique())
+        week_games['date_only'] = week_games.get('start_date','').astype(str).str[:10]
+        all_dates = sorted([d for d in week_games['date_only'].dropna().unique() if d])
         filtered_games = week_games.copy()
         if selected_date and not show_all:
             filtered_games = filtered_games[filtered_games['date_only'] == selected_date]
@@ -2199,22 +2224,16 @@ def index():
             filtered_games = filtered_games[(filtered_games['actual_home_points'].notnull()) & (filtered_games['actual_away_points'].notnull())]
         elif effective_filter == 'upcoming':
             filtered_games = filtered_games[(filtered_games['actual_home_points'].isnull()) & (filtered_games['actual_away_points'].isnull())]
-        try:
-            if hide_both_unknown:
+        if hide_both_unknown:
+            try:
                 filtered_games = filtered_games[~((filtered_games['home_conference'] == 'Unknown') & (filtered_games['away_conference'] == 'Unknown'))]
-        except Exception:
-            pass
-        try:
-            if show_all and len(filtered_games) <= 1 and 'season' in pred_df.columns:
+            except Exception:
+                pass
+        if show_all and len(filtered_games) <= 1 and 'season' in pred_df.columns:
+            try:
                 filtered_games = pred_df[pred_df['season'] == 2025].copy()
-        except Exception:
-            pass
-        # If Show All is checked but the result is still 1 game (data labeling quirks), broaden to full 2025 slate
-        try:
-            if show_all and len(filtered_games) <= 1 and 'season' in pred_df.columns:
-                filtered_games = pred_df[pred_df['season'] == 2025].copy()
-        except Exception:
-            pass
+            except Exception:
+                pass
         # Do not cap POST results; user explicitly filtered
 
     # Compute finals banner metrics (based on full week dataset, not filtered slice cap)
@@ -2384,7 +2403,7 @@ def index():
     {% endif %}
     </div> <!-- end topbar -->
     <div class="banner">
-        Week {{selected_week}}: <strong>{{finals_count_week}}</strong> finals / {{total_games_week}} games ({{finals_pct_week}} complete){% if unknown_pending and hide_both_unknown %} — {{unknown_pending}} Unknown vs Unknown pending (use toggle to show){% endif %}
+        Week {{selected_week}}: <strong>{{finals_count_week}}</strong> finals / {{total_games_week}} games ({{finals_pct_week}} complete)
     </div>
         <h2>2025 NCAA Football Predictions</h2>
         <div class="summary">
@@ -2447,7 +2466,7 @@ def index():
             </div>
             <label class="control"><input type="checkbox" name="show_all" {% if show_all %}checked{% endif %} onchange="document.getElementById('mainForm').submit();"> Show all games for week</label>
 
-            <label class="control"><input type="checkbox" id="hideBothUnknown" name="hide_both_unknown" {% if hide_both_unknown %}checked{% endif %}> Hide games where both conferences are Unknown</label>
+            <!-- Removed obsolete hide-both-unknown checkbox (superseded by Non-FBS toggle) -->
             <button type="submit">Submit</button>
         </form>
     <div class="grid">
