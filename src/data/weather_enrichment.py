@@ -138,7 +138,7 @@ def fetch_weather(lat: float, lon: float, game_dt: datetime) -> Optional[dict]:
                 return None
             d = r.json()
             return {'temp_f': d.get('main',{}).get('temp'), 'wind_mph': d.get('wind',{}).get('speed')}
-        else:  # future => forecast slots
+        elif delta_hours <= 120:  # future within 5 day forecast window => use forecast slots
             r = requests.get(FORECAST_URL, params={'lat': lat, 'lon': lon, 'units': 'imperial', 'appid': API_KEY}, timeout=10)
             if r.status_code != 200:
                 return None
@@ -160,6 +160,12 @@ def fetch_weather(lat: float, lon: float, game_dt: datetime) -> Optional[dict]:
                     best = ent
             if best:
                 return {'temp_f': best.get('main',{}).get('temp'), 'wind_mph': best.get('wind',{}).get('speed')}
+        else:  # >5 days out: fallback to current real weather (coverage priority)
+            r = requests.get(CURRENT_URL, params={'lat': lat, 'lon': lon, 'units': 'imperial', 'appid': API_KEY}, timeout=10)
+            if r.status_code != 200:
+                return None
+            d = r.json()
+            return {'temp_f': d.get('main',{}).get('temp'), 'wind_mph': d.get('wind',{}).get('speed')}
         return None
     except Exception as e:
         _log(f'fetch error {e}')
@@ -224,43 +230,28 @@ def enrich_dataframe(df: pd.DataFrame, limit: int = 150) -> pd.DataFrame:
         df.at[idx,'weather_adjustment'] = compute_weather_adjustment(temp_f, wind_mph, indoor)
     return df
 
-def enrich_fbs_games(df: pd.DataFrame, horizon_days: int = 6, batch: int = 150, max_loops: int = 8) -> pd.DataFrame:
-    """Attempt to fully enrich FBS games whose start_date is within forecast horizon.
+def enrich_fbs_games(df: pd.DataFrame, batch: int = 150, max_loops: int = 20, persist_every: int = 50, output_path: Optional[str] = None) -> pd.DataFrame:
+    """Iteratively enrich ALL FBS games (ignores horizon) for weather.
 
-    Does multiple passes (loops) because new geocodes are appended progressively.
-    Ignores Non-FBS games when they would block completion metrics.
+    - Fallback to current weather for games beyond forecast window (>5 days ahead).
+    - Persists partial successes every 'persist_every' enriched rows if output_path provided.
     """
     if df.empty:
         return df
-    # Ensure requisite columns present
     for c in ['weather_temp','weather_wind','weather_adjustment']:
         if c not in df.columns:
             df[c] = pd.NA
     if 'enrichment_failed' not in df.columns:
         df['enrichment_failed'] = False
-    now = datetime.now(timezone.utc)
-    horizon_sec = horizon_days * 86400
-    def _parse(dt_str):
-        try:
-            return pd.to_datetime(dt_str, errors='coerce')
-        except Exception:
-            return pd.NaT
-    # Build candidate mask
-    if 'start_date' in df.columns:
-        sdt = df['start_date'].apply(_parse)
-    else:
-        sdt = pd.Series([pd.NaT]*len(df), index=df.index)
-    within = (sdt.notna()) & ((sdt.dt.tz_localize('UTC', nonexistent='NaT', ambiguous='NaT') - now).dt.total_seconds() <= horizon_sec)
-    # FBS by home team conference mapping
     fbs_mask = df['home_team'].apply(_is_fbs_team)
-    need_weather = df['weather_temp'].isna() & df['weather_wind'].isna() & within & fbs_mask
+    need_weather = df['weather_temp'].isna() & df['weather_wind'].isna() & fbs_mask
     loops = 0
+    enriched_count = 0
     while need_weather.any() and loops < max_loops:
         loops += 1
         target_idx = need_weather[need_weather].head(batch).index
         if not len(target_idx):
             break
-        # Reuse enrich logic row-by-row for these indices
         for idx in target_idx:
             row = df.loc[idx]
             start_dt = _parse_start(row.get('start_date') or row.get('start_date_api'))
@@ -280,8 +271,19 @@ def enrich_fbs_games(df: pd.DataFrame, horizon_days: int = 6, batch: int = 150, 
             df.at[idx,'weather_temp'] = temp_f
             df.at[idx,'weather_wind'] = wind_mph
             df.at[idx,'weather_adjustment'] = compute_weather_adjustment(temp_f, wind_mph, indoor)
-        # Recompute remaining need
-        need_weather = df['weather_temp'].isna() & df['weather_wind'].isna() & within & fbs_mask
+            enriched_count += 1
+            if output_path and enriched_count % persist_every == 0:
+                try:
+                    df.to_csv(output_path, index=False)
+                    _log(f'progress persist: {enriched_count} rows enriched (file updated)')
+                except Exception as e:
+                    _log(f'persist error: {e}')
+        need_weather = df['weather_temp'].isna() & df['weather_wind'].isna() & fbs_mask
+    if output_path:
+        try:
+            df.to_csv(output_path, index=False)
+        except Exception as e:
+            _log(f'final persist error: {e}')
     return df
 
 __all__ = [

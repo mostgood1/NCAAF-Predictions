@@ -92,7 +92,7 @@ def main():
             pre_rows = len(_df_base)
             before_missing = int((_df_base['weather_temp'].isna() & _df_base['weather_wind'].isna()).sum()) if {'weather_temp','weather_wind'}.issubset(_df_base.columns) else None
             _df_base = enrich_dataframe(_df_base)
-            _df_base = enrich_fbs_games(_df_base, horizon_days=6, batch=250, max_loops=6)
+            _df_base = enrich_fbs_games(_df_base, batch=300, max_loops=30, persist_every=100, output_path=str(enh_file))
             after_missing = int((_df_base['weather_temp'].isna() & _df_base['weather_wind'].isna()).sum()) if {'weather_temp','weather_wind'}.issubset(_df_base.columns) else None
             _df_base.to_csv(enh_file, index=False)
             results['pre_enrichment_rows'] = pre_rows
