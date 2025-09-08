@@ -12,6 +12,7 @@ import os, math, argparse, json
 from datetime import datetime, timezone
 from pathlib import Path
 import pandas as pd
+from src.data.weather_enrichment import enrich_dataframe
 
 BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = BASE_DIR / 'data'
@@ -102,6 +103,11 @@ def main():
         print(json.dumps({'status':'error','reason':'missing_enhanced_file','path': str(ENHANCED_FILE)}))
         return
     df = pd.read_csv(ENHANCED_FILE)
+    # Weather enrichment (fills weather_temp / weather_wind / weather_adjustment where missing)
+    try:
+        df = enrich_dataframe(df)
+    except Exception as e:
+        print(json.dumps({'status':'warn','phase':'enrichment','error':str(e)}))
     arts = _load_models(args.model_prefix)
     df = overlay(df, arts)
     if args.replace_predicted:
