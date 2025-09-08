@@ -19,6 +19,9 @@ import os, json, subprocess, sys, time
 from pathlib import Path
 from datetime import datetime, timezone
 import re
+import pandas as pd
+
+from src.data.weather_enrichment import enrich_dataframe
 
 BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
 RETUNE = BASE_DIR / 'src' / 'modeling' / 'retune_models.py'
@@ -81,7 +84,22 @@ def main():
         results['retune_status'] = 'unparsed'
 
     # If retrain skipped, reuse previous prefix (if it existed) and still regenerate predictions with whatever models exist
-    # 2. Regenerate predictions
+    # 2a. Pre-enrich base enhanced file with weather before regeneration to maximize feature completeness
+    try:
+        enh_file = DATA_DIR / 'college_football_schedule_2025_predicted_totals_enhanced.csv'
+        if enh_file.exists():
+            _df_base = pd.read_csv(enh_file)
+            pre_rows = len(_df_base)
+            _df_base = enrich_dataframe(_df_base)
+            _df_base.to_csv(enh_file, index=False)
+            results['pre_enrichment_rows'] = pre_rows
+            results['post_enrichment_rows'] = len(_df_base)
+            miss_weather = int((_df_base['weather_temp'].isna() | _df_base['weather_wind'].isna()).sum()) if {'weather_temp','weather_wind'}.issubset(_df_base.columns) else None
+            results['post_enrichment_missing_weather'] = miss_weather
+    except Exception as e:
+        results['pre_enrichment_error'] = str(e)
+
+    # 2b. Regenerate predictions
     gen_cmd = [sys.executable, str(GEN), '--model-prefix', prefix]
     if args.replace_predicted:
         gen_cmd.append('--replace-predicted')

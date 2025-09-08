@@ -3307,31 +3307,46 @@ def version_info():
 _MODEL_ARTIFACTS = {}
 _MODEL_META = {}
 MODELS_DIR = Path(os.path.join(BASE_DIR, 'models'))
+_MODEL_MANIFEST_PATH = MODELS_DIR / 'model_manifest.json'
+_MODEL_PREFIX = 'rf_v1'  # default until manifest loaded
 
 def _load_model_artifacts():
     global _MODEL_ARTIFACTS, _MODEL_META
     if not MODELS_DIR.exists():
         return
-    # Metrics JSON defines version & metrics
-    metrics_files = sorted(MODELS_DIR.glob('rf_v1_metrics.json'))
-    if metrics_files:
-        try:
+    # Resolve model prefix from manifest if present
+    global _MODEL_PREFIX
+    try:
+        if _MODEL_MANIFEST_PATH.exists():
             import json as _json
-            with open(metrics_files[-1], 'r', encoding='utf-8') as f:
+            manifest = _json.loads(_MODEL_MANIFEST_PATH.read_text(encoding='utf-8'))
+            mp = manifest.get('model_prefix')
+            if isinstance(mp, str) and mp:
+                _MODEL_PREFIX = mp
+    except Exception as e:
+        print(f"[model-load] manifest read error: {e}")
+    # Metrics JSON defines version & metrics for chosen prefix
+    try:
+        import json as _json
+        metrics_file = MODELS_DIR / f'{_MODEL_PREFIX}_metrics.json'
+        if metrics_file.exists():
+            with open(metrics_file, 'r', encoding='utf-8') as f:
                 _MODEL_META = _json.load(f)
-                _MODEL_META['model_version'] = 'rf_v1'
-        except Exception:
-            _MODEL_META = {'model_version': 'rf_v1'}
-    # Load joblib models
+        else:
+            _MODEL_META = {}
+        _MODEL_META['model_version'] = _MODEL_PREFIX
+    except Exception as e:
+        _MODEL_META = {'model_version': _MODEL_PREFIX, 'load_error': str(e)}
+    # Load joblib models for dynamic prefix
     for tgt in ['margin','home_pts','away_pts']:
-        jf = MODELS_DIR / f'rf_v1_{tgt}.joblib'
+        jf = MODELS_DIR / f'{_MODEL_PREFIX}_{tgt}.joblib'
         if jf.exists():
             try:
                 _MODEL_ARTIFACTS[tgt] = joblib.load(jf)
             except Exception as e:
                 print(f"[model-load] failed {tgt}: {e}")
-    # Load calibration table if present
-    calib = MODELS_DIR / 'rf_v1_home_win_calibration.csv'
+    # Load calibration table if present (prefix-specific)
+    calib = MODELS_DIR / f'{_MODEL_PREFIX}_home_win_calibration.csv'
     if calib.exists():
         try:
             import pandas as _pd
@@ -3394,6 +3409,88 @@ def _overlay_model_predictions(df):
             df['model_home_win_prob'] = df['model_margin'].apply(_predict_proba_from_calibration)
     except Exception:
         pass
+    # Derive edge/confidence style metrics from model outputs (non-destructive: write to new columns)
+    try:
+        if 'model_home_points' in df.columns and 'model_away_points' in df.columns:
+            df['model_edge'] = (df['model_home_points'] - df['model_away_points']).abs()
+        if 'model_home_win_prob' in df.columns:
+            # Confidence score centered around coin flip
+            df['model_confidence_score'] = (df['model_home_win_prob'] - 0.5).abs() * 2.0
+            def _tier(sc):
+                try:
+                    if sc is None or math.isnan(sc):
+                        return None
+                    if sc >= 0.40: return 'High'
+                    if sc >= 0.25: return 'Medium'
+                    if sc >= 0.15: return 'Low'
+                    return 'Lean'
+                except Exception:
+                    return None
+            df['model_confidence_tier'] = df['model_confidence_score'].apply(_tier)
+            # Backfill legacy columns if missing or null (do not overwrite existing populated values)
+            if 'edge' in df.columns:
+                try:
+                    mask = df['edge'].isna()
+                    if mask.any() and 'model_edge' in df.columns:
+                        df.loc[mask, 'edge'] = df.loc[mask, 'model_edge']
+                except Exception:
+                    pass
+            else:
+                if 'model_edge' in df.columns:
+                    df['edge'] = df['model_edge']
+            if 'confidence' in df.columns:
+                try:
+                    mask = df['confidence'].isna()
+                    if mask.any():
+                        df.loc[mask, 'confidence'] = df.loc[mask, 'model_confidence_tier']
+                except Exception:
+                    pass
+            else:
+                df['confidence'] = df.get('model_confidence_tier')
+    except Exception as e:
+        print(f"[model-overlay] edge/confidence derivation failed: {e}")
+
+@app.route('/api/data-health')
+def api_data_health():
+    """Report completeness of required feature & model columns."""
+    try:
+        required_feats = ['predicted_home_points','predicted_away_points','predicted_total_points','weather_temp','weather_wind','weather_adjustment','edge','confidence']
+        model_cols = ['model_home_points','model_away_points','model_total_points','model_margin','model_home_win_prob']
+        summary = {}
+        total_rows = int(len(pred_df))
+        for col in required_feats:
+            if col in pred_df.columns:
+                missing = int(pred_df[col].isna().sum())
+                summary[col] = {'present': True, 'missing': missing, 'pct_missing': round((missing/total_rows*100.0) if total_rows else 0.0, 2)}
+            else:
+                summary[col] = {'present': False, 'missing': total_rows, 'pct_missing': 100.0}
+        for col in model_cols:
+            if col in pred_df.columns:
+                missing = int(pred_df[col].isna().sum())
+                summary[col] = {'present': True, 'missing': missing, 'pct_missing': round((missing/total_rows*100.0) if total_rows else 0.0, 2)}
+            else:
+                summary[col] = {'present': False, 'missing': total_rows, 'pct_missing': 100.0}
+        # Sample problematic rows (limit 10)
+        prob_mask = None
+        for col in ['weather_temp','weather_wind','edge','confidence']:
+            if col in pred_df.columns:
+                m = pred_df[col].isna()
+                prob_mask = m if prob_mask is None else (prob_mask | m)
+        sample_rows = []
+        if prob_mask is not None:
+            for _, r in pred_df[prob_mask].head(10).iterrows():
+                sample_rows.append({
+                    'home_team': r.get('home_team'),
+                    'away_team': r.get('away_team'),
+                    'week': r.get('week'),
+                    'weather_temp': r.get('weather_temp'),
+                    'weather_wind': r.get('weather_wind'),
+                    'edge': r.get('edge'),
+                    'confidence': r.get('confidence')
+                })
+        return jsonify({'rows': total_rows, 'columns': summary, 'sample_incomplete': sample_rows})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/model-metrics')
 def api_model_metrics():

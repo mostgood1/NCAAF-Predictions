@@ -89,6 +89,38 @@ def overlay(df: pd.DataFrame, arts: dict):
     calib = arts.get('calibration')
     if 'model_margin' in df.columns and calib is not None:
         df['model_home_win_prob'] = df['model_margin'].apply(lambda v: _interp_calib(calib, v))
+    # Derive model_edge & model_confidence
+    try:
+        if 'model_home_points' in df.columns and 'model_away_points' in df.columns:
+            df['model_edge'] = (df['model_home_points'] - df['model_away_points']).abs()
+        if 'model_home_win_prob' in df.columns:
+            df['model_confidence_score'] = (df['model_home_win_prob'] - 0.5).abs() * 2.0
+            def _tier(sc):
+                try:
+                    if sc is None or math.isnan(sc):
+                        return None
+                    if sc >= 0.40: return 'High'
+                    if sc >= 0.25: return 'Medium'
+                    if sc >= 0.15: return 'Low'
+                    return 'Lean'
+                except Exception:
+                    return None
+            df['model_confidence_tier'] = df['model_confidence_score'].apply(_tier)
+            # Backfill legacy columns if missing or null
+            if 'edge' in df.columns:
+                mask = df['edge'].isna()
+                if mask.any() and 'model_edge' in df.columns:
+                    df.loc[mask, 'edge'] = df.loc[mask, 'model_edge']
+            elif 'model_edge' in df.columns:
+                df['edge'] = df['model_edge']
+            if 'confidence' in df.columns:
+                mask = df['confidence'].isna()
+                if mask.any():
+                    df.loc[mask, 'confidence'] = df.loc[mask, 'model_confidence_tier']
+            else:
+                df['confidence'] = df.get('model_confidence_tier')
+    except Exception as e:
+        print(f"[warn] model edge/confidence derivation failed: {e}")
     return df
 
 
@@ -132,6 +164,9 @@ def main():
         'output_file': out_path.name,
         'model_prefix': args.model_prefix,
         'replace_predicted': bool(args.replace_predicted),
+    'missing_weather_rows': int((df['weather_temp'].isna() | df['weather_wind'].isna()).sum()) if {'weather_temp','weather_wind'}.issubset(df.columns) else None,
+    'missing_edge_rows': int(df['edge'].isna().sum()) if 'edge' in df.columns else None,
+    'missing_confidence_rows': int(df['confidence'].isna().sum()) if 'confidence' in df.columns else None,
     }
     print(json.dumps(meta))
 
