@@ -3387,10 +3387,22 @@ def _overlay_model_predictions(df):
         return
     # Feature columns used during training
     feat_cols = ['predicted_home_points','predicted_away_points','predicted_total_points','weather_temp','weather_wind','weather_adjustment','edge','confidence']
-    available = [c for c in feat_cols if c in df.columns]
-    if not available:
-        return
-    baseX = df[available].fillna(0.0)
+    # Ensure prerequisite prediction-derived cols
+    try:
+        if 'predicted_total_points' not in df.columns and {'predicted_home_points','predicted_away_points'}.issubset(df.columns):
+            df['predicted_total_points'] = df['predicted_home_points'] + df['predicted_away_points']
+        if 'edge' not in df.columns and {'predicted_home_points','predicted_away_points'}.issubset(df.columns):
+            df['edge'] = (df['predicted_home_points'] - df['predicted_away_points']).abs()
+        if 'confidence' not in df.columns:
+            # Default neutral value used during training bootstrap
+            df['confidence'] = 0.5
+        for wcol in ['weather_temp','weather_wind','weather_adjustment']:
+            if wcol not in df.columns:
+                df[wcol] = 0.0
+    except Exception:
+        pass
+    # Now all required features should exist
+    baseX = df[feat_cols].fillna(0.0) if all(c in df.columns for c in feat_cols) else df[[c for c in feat_cols if c in df.columns]].fillna(0.0)
     # Predict new points if per-target models exist
     home_model = _MODEL_ARTIFACTS.get('home_pts')
     away_model = _MODEL_ARTIFACTS.get('away_pts')

@@ -140,6 +140,17 @@ def main():
         df = enrich_dataframe(df)
     except Exception as e:
         print(json.dumps({'status':'warn','phase':'enrichment','error':str(e)}))
+    # Ensure minimal feature set (edge, confidence, predicted_total_points) before model overlay
+    try:
+        if 'predicted_total_points' not in df.columns and {'predicted_home_points','predicted_away_points'}.issubset(df.columns):
+            df['predicted_total_points'] = df['predicted_home_points'] + df['predicted_away_points']
+        if 'edge' not in df.columns and {'predicted_home_points','predicted_away_points'}.issubset(df.columns):
+            df['edge'] = (df['predicted_home_points'] - df['predicted_away_points']).abs()
+        if 'confidence' not in df.columns:
+            # Neutral placeholder used in initial model training baseline
+            df['confidence'] = 0.5
+    except Exception as _prep_e:
+        print(f"[warn] feature prep issue: {_prep_e}")
     arts = _load_models(args.model_prefix)
     df = overlay(df, arts)
     if args.replace_predicted:
