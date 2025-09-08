@@ -40,6 +40,10 @@ ALIASES = {
     'ole miss': 'mississippi', 'miss st': 'mississippi state', 'la lafayette': 'louisiana', 'louisiana lafayette': 'louisiana',
     'la monroe': 'louisiana monroe', 'umass': 'massachusetts', 'uconn': 'connecticut',
     'byu cougars': 'byu', 'utsa roadrunners': 'texas san antonio',
+    'san jose state': 'san josé state', 'san josé state': 'san josé state',
+    'sjsu': 'san josé state',
+    'texas a&m': 'texas am', 'texas a and m': 'texas am',
+    'penn st': 'penn state', 'mich st': 'michigan state', 'florida st': 'florida state', 'boise st': 'boise state',
 }
 
 def norm_team(name: str) -> str:
@@ -178,6 +182,7 @@ def build_lines_rows(week: int, odds_events: List[Dict[str, Any]]) -> List[Dict[
         ht = str(r['home_team']); at = str(r['away_team'])
         schedule_index[(norm_team(ht), norm_team(at))] = (ht, at)
     rows = []
+    unmatched = []
     for ev in odds_events:
         home = ev.get('home_team'); away = ev.get('away_team')
         if not home or not away:
@@ -190,6 +195,7 @@ def build_lines_rows(week: int, odds_events: List[Dict[str, Any]]) -> List[Dict[
                 home, away = away, home
                 key = key_rev
             else:
+                unmatched.append({'home': home, 'away': away})
                 continue
         (sched_home, sched_away) = schedule_index[key]
         provs = []
@@ -207,6 +213,8 @@ def build_lines_rows(week: int, odds_events: List[Dict[str, Any]]) -> List[Dict[
             'awayTeam': sched_away,
             'lines': json.dumps(provs, separators=(',',':')),
         })
+    if unmatched:
+        print(f"[warn] Unmatched odds events: {len(unmatched)}", file=sys.stderr)
     return rows
 
 # ---------------------------------------------------------------------------

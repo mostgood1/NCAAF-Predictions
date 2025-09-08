@@ -4889,6 +4889,43 @@ def admin_reload():
         except Exception as e:
             return {'error': str(e)}, 500
 
+@app.route('/api/admin/fetch-odds', methods=['POST','GET'])
+def admin_fetch_odds():
+    auth_token = os.environ.get('ADMIN_TOKEN')
+    supplied = request.args.get('token') or request.headers.get('X-Admin-Token')
+    if auth_token and auth_token != supplied:
+        return {'error': 'unauthorized'}, 401
+    week_arg = request.args.get('week', '').strip()
+    wk = None
+    try:
+        if week_arg != '':
+            wk = int(week_arg)
+    except Exception:
+        wk = None
+    api_key = os.environ.get('ODDS_API_KEY')
+    if not api_key:
+        return {'error': 'ODDS_API_KEY not set'}, 400
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fetch_2025_lines.py')
+    if not os.path.exists(script):
+        return {'error': 'fetch_2025_lines.py not found'}, 404
+    cmd = [sys.executable or 'python', script]
+    if wk is not None:
+        cmd += ['--week', str(wk)]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=150)
+        try:
+            _overlay_lines_2025_if_present()
+        except Exception:
+            pass
+        return {
+            'returncode': out.returncode,
+            'stdout_tail': (out.stdout or '')[-4000:],
+            'stderr_tail': (out.stderr or '')[-2000:],
+            'lines_rows': int(len(lines_df)) if isinstance(lines_df, pd.DataFrame) else None,
+        }, 200 if out.returncode == 0 else 500
+    except Exception as e:
+        return {'error': str(e)}, 500
+
 # Launch auto-refresh thread if enabled and not already started
 if os.environ.get('DISABLE_AUTO_REFRESH','0') != '1':
     try:

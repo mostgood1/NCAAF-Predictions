@@ -13,7 +13,9 @@ param(
     [switch]$SkipScoreCheck,
     [string]$OpenWeatherApiKey,
     [string]$OpenWeatherKeyFile,
-    [string]$EnvFile
+    [string]$EnvFile,
+    [string]$OddsApiKey,
+    [string]$OddsApiKeyFile
 )
 
 $ErrorActionPreference = 'Stop'
@@ -54,6 +56,32 @@ if(-not $env:OPENWEATHER_API_KEY){
     Write-Host "[warn] OPENWEATHER_API_KEY not set; weather enrichment will be skipped." -ForegroundColor Yellow
 } else {
     Write-Host "[info] OPENWEATHER_API_KEY present (length=$($env:OPENWEATHER_API_KEY.Length))" -ForegroundColor Cyan
+}
+
+# --- Ensure Odds API key present ---
+if($OddsApiKey){
+    $env:ODDS_API_KEY = $OddsApiKey
+} elseif(-not $env:ODDS_API_KEY) {
+    if($OddsApiKeyFile -and (Test-Path $OddsApiKeyFile)){
+        try { $env:ODDS_API_KEY = (Get-Content $OddsApiKeyFile -Raw).Trim() } catch {}
+    }
+    if(-not $env:ODDS_API_KEY -and $EnvFile -and (Test-Path $EnvFile)){
+        try {
+            Get-Content $EnvFile | ForEach-Object {
+                $line = $_.Trim(); if($line -and -not $line.StartsWith('#') -and $line -match '='){
+                    $k,$v = $line.Split('=',2)
+                    if($k -eq 'ODDS_API_KEY' -and -not [string]::IsNullOrWhiteSpace($v)){
+                        $env:ODDS_API_KEY = $v.Trim().Trim('"').Trim("'")
+                    }
+                }
+            }
+        } catch {}
+    }
+}
+if(-not $env:ODDS_API_KEY){
+    Write-Host "[warn] ODDS_API_KEY not set; real bookmaker odds fetch will be skipped." -ForegroundColor Yellow
+} else {
+    Write-Host "[info] ODDS_API_KEY present (len=$($env:ODDS_API_KEY.Length))" -ForegroundColor Cyan
 }
 
 # Ensure logs directory exists
