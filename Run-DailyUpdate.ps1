@@ -10,11 +10,51 @@ param(
     [double]$Bankroll = 1000,
     [double]$KellyFactor = 0.5,
     [double]$EvThreshold = 0.02,
-    [switch]$SkipScoreCheck
+    [switch]$SkipScoreCheck,
+    [string]$OpenWeatherApiKey,
+    [string]$OpenWeatherKeyFile,
+    [string]$EnvFile
 )
 
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
+
+# --- Ensure OpenWeather API key is available for downstream Python processes ---
+if($OpenWeatherApiKey){
+    $env:OPENWEATHER_API_KEY = $OpenWeatherApiKey
+} elseif(-not $env:OPENWEATHER_API_KEY) {
+    # 1) explicit key file
+    if($OpenWeatherKeyFile -and (Test-Path $OpenWeatherKeyFile)){
+        try { $env:OPENWEATHER_API_KEY = (Get-Content $OpenWeatherKeyFile -Raw).Trim() } catch {}
+    }
+    # 2) .env style file (parse key=value)
+    if(-not $env:OPENWEATHER_API_KEY){
+        $candidateEnv = @()
+        if($EnvFile){ $candidateEnv += $EnvFile }
+        $candidateEnv += (Join-Path $root '.env')
+        foreach($ef in $candidateEnv){
+            if(Test-Path $ef){
+                try {
+                    Get-Content $ef | ForEach-Object {
+                        $line = $_.Trim()
+                        if($line -and -not $line.StartsWith('#') -and $line -match '='){
+                            $k,$v = $line.Split('=',2)
+                            if($k -eq 'OPENWEATHER_API_KEY' -and -not [string]::IsNullOrWhiteSpace($v)){
+                                $env:OPENWEATHER_API_KEY = $v.Trim().Trim('"').Trim("'")
+                            }
+                        }
+                    }
+                } catch {}
+            }
+            if($env:OPENWEATHER_API_KEY){ break }
+        }
+    }
+}
+if(-not $env:OPENWEATHER_API_KEY){
+    Write-Host "[warn] OPENWEATHER_API_KEY not set; weather enrichment will be skipped." -ForegroundColor Yellow
+} else {
+    Write-Host "[info] OPENWEATHER_API_KEY present (length=$($env:OPENWEATHER_API_KEY.Length))" -ForegroundColor Cyan
+}
 
 # Ensure logs directory exists
 $logDir = Join-Path $root 'logs'

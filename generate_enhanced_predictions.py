@@ -129,6 +129,9 @@ def main():
     ap.add_argument('--model-prefix', default='rf_v1')
     ap.add_argument('--replace-predicted', action='store_true', help='Overwrite predicted_* columns with model_* values for front-end simplicity.')
     ap.add_argument('--out-suffix', default=None, help='Optional manual suffix for output filename (default uses timestamp).')
+    ap.add_argument('--weather-verbose', action='store_true', help='Verbose weather enrichment progress logs.')
+    ap.add_argument('--enrich-week', type=int, default=None, help='If set, only perform weather enrichment for this week (subset) before full overlay.')
+    ap.add_argument('--enrich-fbs-only', action='store_true', help='When used with --enrich-week, restrict enrichment subset to FBS games only.')
     args = ap.parse_args()
 
     if not ENHANCED_FILE.exists():
@@ -140,13 +143,31 @@ def main():
         df = enrich_dataframe(df)
     except Exception as e:
         print(json.dumps({'status':'warn','phase':'enrichment','error':str(e)}))
-    # Additional focused enrichment for FBS games within forecast horizon
+    # Additional focused enrichment (optionally restricted to a specific week to speed up)
     try:
-        before_missing = int((df['weather_temp'].isna() & df['weather_wind'].isna()).sum()) if {'weather_temp','weather_wind'}.issubset(df.columns) else None
-        df = enrich_fbs_games(df, batch=250, max_loops=25, persist_every=75, output_path=str(ENHANCED_FILE))
-        after_missing = int((df['weather_temp'].isna() & df['weather_wind'].isna()).sum()) if {'weather_temp','weather_wind'}.issubset(df.columns) else None
-        if before_missing is not None and after_missing is not None:
-            print(f"[weather] FBS enrichment missing rows {before_missing} -> {after_missing}")
+        if args.enrich_week is not None and 'week' in df.columns:
+            sub_mask = df['week'] == args.enrich_week
+            if args.enrich_fbs_only and 'home_team' in df.columns:
+                # Build simple FBS mask (reuse logic by calling enrich_fbs_games on subset only)
+                sub_df = df[sub_mask].copy()
+            else:
+                sub_df = df[sub_mask].copy()
+            if not sub_df.empty:
+                before_missing_sub = int((sub_df['weather_temp'].isna() & sub_df['weather_wind'].isna()).sum()) if {'weather_temp','weather_wind'}.issubset(sub_df.columns) else None
+                sub_df = enrich_fbs_games(sub_df, batch=100, max_loops=10, persist_every=50, output_path=None, verbose=args.weather_verbose)
+                after_missing_sub = int((sub_df['weather_temp'].isna() & sub_df['weather_wind'].isna()).sum()) if {'weather_temp','weather_wind'}.issubset(sub_df.columns) else None
+                # Write back enriched columns
+                for col in [c for c in ['weather_temp','weather_wind','weather_adjustment','enrichment_failed'] if c in sub_df.columns]:
+                    df.loc[sub_df.index, col] = sub_df[col]
+                print(f"[weather] week {args.enrich_week} subset enrichment missing rows {before_missing_sub} -> {after_missing_sub}")
+            else:
+                print(f"[weather] enrich-week={args.enrich_week} produced empty subset; skipping subset enrichment")
+        else:
+            before_missing = int((df['weather_temp'].isna() & df['weather_wind'].isna()).sum()) if {'weather_temp','weather_wind'}.issubset(df.columns) else None
+            df = enrich_fbs_games(df, batch=250, max_loops=25, persist_every=75, output_path=str(ENHANCED_FILE), verbose=args.weather_verbose)
+            after_missing = int((df['weather_temp'].isna() & df['weather_wind'].isna()).sum()) if {'weather_temp','weather_wind'}.issubset(df.columns) else None
+            if before_missing is not None and after_missing is not None:
+                print(f"[weather] FBS enrichment missing rows {before_missing} -> {after_missing}")
     except Exception as e:
         print(f"[warn] fbs enrichment error: {e}")
     # Ensure minimal feature set (edge, confidence, predicted_total_points) before model overlay

@@ -46,6 +46,7 @@ import threading
 import time
 import joblib
 from pathlib import Path
+import glob
 
 app = Flask(__name__)
 
@@ -200,6 +201,27 @@ def _load_predictions_df() -> pd.DataFrame:
                 df_enh = _apply_week0_label(df_enh)
             except Exception:
                 pass
+            # If base enhanced file lacks model / odds columns, attempt to auto-upgrade
+            try:
+                have_model = any(c.startswith('model_') for c in df_enh.columns)
+                if not have_model:
+                    pattern = os.path.join(DATA_DIR, 'college_football_schedule_2025_predicted_totals_enhanced_*.csv')
+                    cand_files = sorted(glob.glob(pattern), key=lambda p: os.path.getmtime(p), reverse=True)
+                    for cf in cand_files:
+                        # Skip with scores (handled separately) and the base file itself
+                        base_name = os.path.basename(cf)
+                        if base_name.endswith('with_scores.csv') or base_name == os.path.basename(pred_path_enh):
+                            continue
+                        try:
+                            tmp_df = pd.read_csv(cf)
+                        except Exception:
+                            continue
+                        if any(c.startswith('model_') for c in tmp_df.columns):
+                            df_enh = tmp_df
+                            print(f"[load] Upgraded predictions source to latest model overlay file: {base_name}")
+                            break
+            except Exception as _upgrade_e:
+                print(f"[load] upgrade scan failed: {_upgrade_e}")
     except Exception as e:
         print(f"[app] Failed to read enhanced: {e}")
     try:
