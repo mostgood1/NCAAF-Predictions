@@ -44,6 +44,8 @@ import sys
 import re
 import threading
 import time
+import joblib
+from pathlib import Path
 
 app = Flask(__name__)
 
@@ -1217,6 +1219,14 @@ def _reload_predictions():
     new_df = _load_predictions_df()
     new_df['home_conference'] = new_df['home_team'].apply(lambda x: conf_map.get(norm(x), 'Unknown'))
     new_df['away_conference'] = new_df['away_team'].apply(lambda x: conf_map.get(norm(x), 'Unknown'))
+    # Attempt to overlay model-based point predictions if model artifacts exist
+    try:
+        _overlay_model_predictions(new_df)
+    except Exception as e:
+        try:
+            print(f"[model-overlay] failed: {e}")
+        except Exception:
+            pass
     pred_df = new_df
 
 def _update_scores_with_cfbd(week: int | None = None, overwrite: bool = False) -> dict:
@@ -3267,10 +3277,113 @@ def version_info():
             'prediction_source': PRED_SOURCE,
             'latest_week': wk,
             'latest_week_finals': finals,
-            'latest_week_total': total
+            'latest_week_total': total,
+            'model_version': _MODEL_META.get('model_version'),
+            'model_counts': _MODEL_META.get('counts')
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# -------------------- Model Artifacts Loading & Inference --------------------
+_MODEL_ARTIFACTS = {}
+_MODEL_META = {}
+MODELS_DIR = Path(os.path.join(BASE_DIR, 'models'))
+
+def _load_model_artifacts():
+    global _MODEL_ARTIFACTS, _MODEL_META
+    if not MODELS_DIR.exists():
+        return
+    # Metrics JSON defines version & metrics
+    metrics_files = sorted(MODELS_DIR.glob('rf_v1_metrics.json'))
+    if metrics_files:
+        try:
+            import json as _json
+            with open(metrics_files[-1], 'r', encoding='utf-8') as f:
+                _MODEL_META = _json.load(f)
+                _MODEL_META['model_version'] = 'rf_v1'
+        except Exception:
+            _MODEL_META = {'model_version': 'rf_v1'}
+    # Load joblib models
+    for tgt in ['margin','home_pts','away_pts']:
+        jf = MODELS_DIR / f'rf_v1_{tgt}.joblib'
+        if jf.exists():
+            try:
+                _MODEL_ARTIFACTS[tgt] = joblib.load(jf)
+            except Exception as e:
+                print(f"[model-load] failed {tgt}: {e}")
+    # Load calibration table if present
+    calib = MODELS_DIR / 'rf_v1_home_win_calibration.csv'
+    if calib.exists():
+        try:
+            import pandas as _pd
+            _MODEL_ARTIFACTS['calibration'] = _pd.read_csv(calib)
+        except Exception as e:
+            print(f"[model-load] calib read error: {e}")
+
+def _predict_proba_from_calibration(margin_pred: float):
+    try:
+        calib = _MODEL_ARTIFACTS.get('calibration')
+        if calib is None or calib.empty:
+            return None
+        # Simple linear interpolation between nearest points
+        import numpy as _np
+        xs = calib['pred_margin'].values
+        ys = calib['home_win_prob'].values
+        if margin_pred <= xs.min():
+            return float(ys[xs.argmin()])
+        if margin_pred >= xs.max():
+            return float(ys[xs.argmax()])
+        idx = xs.searchsorted(margin_pred)
+        x0,x1 = xs[idx-1], xs[idx]
+        y0,y1 = ys[idx-1], ys[idx]
+        if x1 == x0:
+            return float(y0)
+        return float(y0 + (y1-y0)*((margin_pred-x0)/(x1-x0)))
+    except Exception:
+        return None
+
+def _overlay_model_predictions(df):
+    if not _MODEL_ARTIFACTS:
+        _load_model_artifacts()
+    if not _MODEL_ARTIFACTS:
+        return
+    # Feature columns used during training
+    feat_cols = ['predicted_home_points','predicted_away_points','predicted_total_points','weather_temp','weather_wind','weather_adjustment','edge','confidence']
+    available = [c for c in feat_cols if c in df.columns]
+    if not available:
+        return
+    baseX = df[available].fillna(0.0)
+    # Predict new points if per-target models exist
+    home_model = _MODEL_ARTIFACTS.get('home_pts')
+    away_model = _MODEL_ARTIFACTS.get('away_pts')
+    if home_model and away_model:
+        try:
+            df['model_home_points'] = home_model['model'].predict(baseX[[c for c in home_model['features'] if c in baseX.columns]])
+            df['model_away_points'] = away_model['model'].predict(baseX[[c for c in away_model['features'] if c in baseX.columns]])
+            df['model_total_points'] = df['model_home_points'] + df['model_away_points']
+        except Exception as e:
+            print(f"[model-overlay] point preds failed: {e}")
+    margin_model = _MODEL_ARTIFACTS.get('margin')
+    if margin_model:
+        try:
+            df['model_margin'] = margin_model['model'].predict(baseX[[c for c in margin_model['features'] if c in baseX.columns]])
+        except Exception as e:
+            print(f"[model-overlay] margin pred failed: {e}")
+    # Calibrated win probability
+    try:
+        if 'model_margin' in df.columns:
+            df['model_home_win_prob'] = df['model_margin'].apply(_predict_proba_from_calibration)
+    except Exception:
+        pass
+
+@app.route('/api/model-metrics')
+def api_model_metrics():
+    if not _MODEL_META:
+        _load_model_artifacts()
+    if not _MODEL_META:
+        return {'status':'no_model'}, 404
+    meta = {k:v for k,v in _MODEL_META.items() if k not in ('home_pts_model','away_pts_model','margin_model')}
+    return meta
 
 @app.route('/api/week-status')
 def api_week_status():

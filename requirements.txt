@@ -3,3 +3,5 @@ pandas
 gunicorn
 pytz
 requests
+scikit-learn
+joblib
