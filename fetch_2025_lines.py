@@ -265,7 +265,7 @@ def main():
         return 3
 
     sport = os.environ.get('ODDS_API_SPORT', 'americanfootball_ncaaf')
-    regions = os.environ.get('ODDS_API_REGIONS', 'us')
+    regions = os.environ.get('ODDS_API_REGIONS', 'us,us2')  # broaden coverage for additional US books (e.g., Bovada)
     markets = os.environ.get('ODDS_API_MARKETS', 'h2h,spreads,totals')
     odds_format = os.environ.get('ODDS_API_ODDS_FORMAT', 'american')
 
