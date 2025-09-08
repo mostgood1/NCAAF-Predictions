@@ -718,6 +718,49 @@ def _build_game_card(game_row: pd.Series) -> dict:
         home_team=game_row['home_team'],
         away_team=game_row['away_team']
     )
+    # Synthetic fallback odds if no real lines available: derive from model predictions
+    if not betting_lines:
+        try:
+            mh = _safe_float(game_row.get('model_home_points'))
+            ma = _safe_float(game_row.get('model_away_points'))
+            mtot = _safe_float(game_row.get('model_total_points'))
+            mmargin = _safe_float(game_row.get('model_margin'))
+            if mh is not None and ma is not None:
+                if mtot is None:
+                    mtot = mh + ma
+                if mmargin is None:
+                    mmargin = mh - ma
+                # Implied spread: home minus away; total from mtot
+                spread = round(mmargin, 1)
+                ou = round(mtot, 1) if mtot is not None else None
+                p_home = _safe_float(game_row.get('model_home_win_prob'))
+                # Approximate fair moneyline from win prob if present
+                def _fair_ml(p):
+                    try:
+                        if p is None or p <= 0 or p >= 1:
+                            return None, None
+                        # American odds conversion ignoring vig
+                        if p >= 0.5:
+                            home_ml = int(round(-100 * p / (1 - p)))
+                            away_ml = int(round(100 * (1 - p) / p))
+                        else:
+                            away_ml = int(round(-100 * (1 - p) / p))
+                            home_ml = int(round(100 * p / (1 - p)))
+                        return home_ml, away_ml
+                    except Exception:
+                        return None, None
+                home_ml, away_ml = _fair_ml(p_home)
+                betting_lines = [{
+                    'provider': 'ModelImplied',
+                    'spread': spread,
+                    'formattedSpread': f"{game_row['home_team']} {spread:+.1f}",
+                    'overUnder': ou,
+                    'homeMoneyline': home_ml,
+                    'awayMoneyline': away_ml,
+                    'synthetic': True
+                }]
+        except Exception:
+            pass
     # Time handling and sort key (robust to NaN/NaT/None)
     def _is_bad_date_val(v):
         try:
@@ -1854,6 +1897,31 @@ def debug_week_counts():
             'sample_w0': sample_week(0),
             'sample_w1': sample_week(1),
         }, 200
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+@app.route('/api/debug-missing-odds')
+def debug_missing_odds():
+    """List games missing real bookmaker odds (ignores synthetic ModelImplied). Accepts ?season=&week=."""
+    try:
+        season = request.args.get('season', default=2025, type=int)
+        week = request.args.get('week', default=None, type=int)
+        df = pred_df[pred_df.get('season', 0) == season].copy()
+        if week is not None:
+            df = df[df.get('week', 0) == week]
+        out = []
+        for _, r in df.iterrows():
+            lines = get_betting_lines(r['season'], r['week'], r['home_team'], r['away_team'])
+            if not any(not l.get('synthetic') for l in lines):
+                out.append({
+                    'season': int(r['season']),
+                    'week': int(r['week']),
+                    'home': r['home_team'],
+                    'away': r['away_team'],
+                    'model_spread': _safe_float(r.get('model_margin')),
+                    'model_total': _safe_float(r.get('model_total_points')),
+                })
+        return {'count': len(out), 'games': out[:1000]}, 200
     except Exception as e:
         return {'error': str(e)}, 500
 
