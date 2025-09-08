@@ -84,6 +84,15 @@ if(-not $env:ODDS_API_KEY){
     Write-Host "[info] ODDS_API_KEY present (len=$($env:ODDS_API_KEY.Length))" -ForegroundColor Cyan
 }
 
+# Secrets fallback file (not committed)
+if(-not $env:ODDS_API_KEY){
+    $secretFile = Join-Path $root 'secrets/odds_api_key.txt'
+    if(Test-Path $secretFile){
+        try { $env:ODDS_API_KEY = (Get-Content $secretFile -Raw).Trim() } catch {}
+        if($env:ODDS_API_KEY){ Write-Host "[info] Loaded ODDS_API_KEY from secrets file" -ForegroundColor Cyan }
+    }
+}
+
 # Ensure logs directory exists
 $logDir = Join-Path $root 'logs'
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null

@@ -21,3 +21,4 @@ logs/
 # Data backups and archives
 data/backups/
 data/archive/
+secrets/

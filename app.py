@@ -82,6 +82,18 @@ def _load_env_file(path: str):
 _load_env_file(os.path.join(BASE_DIR, '.env'))
 _load_env_file(os.path.join(BASE_DIR, '.env.local'))
 
+# Secrets fallback (non-committed): load odds api key from secrets/ if env var absent
+try:
+    if 'ODDS_API_KEY' not in os.environ:
+        skey_path = os.path.join(BASE_DIR, 'secrets', 'odds_api_key.txt')
+        if os.path.exists(skey_path):
+            with open(skey_path, 'r', encoding='utf-8') as f:
+                val = f.read().strip()
+            if val:
+                os.environ['ODDS_API_KEY'] = val
+except Exception:
+    pass
+
 def _ensure_cfbd_key():
     """Ensure CFBD_API_KEY (or compatible token) is present; if missing, re-read .env files.
     This function previously became corrupted during a large patch; restored to a minimal safe helper.
