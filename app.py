@@ -479,6 +479,18 @@ TEAM_ALIASES = {
     'uconn': 'connecticut',
     'utsa roadrunners': 'texas san antonio',
     'byu cougars': 'byu',
+    # Extended mascot / full-name forms (keep normalized)
+    'ole miss rebels': 'mississippi',
+    'arkansas razorbacks': 'arkansas',
+    'umass minutemen': 'massachusetts',
+    'notre dame fighting irish': 'notre dame',
+    'texas a m aggies': 'texas am', 'texas a and m aggies': 'texas am', 'texas am aggies': 'texas am',
+    'miami hurricanes': 'miami',
+    'florida gators': 'florida', 'florida state seminoles': 'florida state',
+    'georgia bulldogs': 'georgia', 'alabama crimson tide': 'alabama',
+    'penn state nittany lions': 'penn state', 'oregon ducks': 'oregon',
+    'nebraska cornhuskers': 'nebraska', 'michigan wolverines': 'michigan',
+    'lsu tigers': 'lsu', 'uconn huskies': 'connecticut', 'delaware blue hens': 'delaware',
 }
 
 def _canon_team(name: str) -> str:

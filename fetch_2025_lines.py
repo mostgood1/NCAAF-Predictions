@@ -28,32 +28,99 @@ PRED_FILES_GLOB = os.path.join(DATA_DIR, 'college_football_schedule_2025_predict
 LINES_PATH = os.path.join(DATA_DIR, 'college_football_betting_lines_2025.csv')
 YEAR = 2025
 
-# Minimal team normalization mirroring logic in app._norm_team_for_odds (simplified)
-import re
-_ws_re = re.compile(r"\s+")
-_punct_re = re.compile(r"[^a-z0-9 ]+")
+"""Team name normalization & aliasing.
 
+This now closely mirrors the logic in app._norm_team_for_odds plus expanded
+alias coverage for Odds API naming conventions (mascot suffixes, full school
+names vs abbreviations, etc.). We also implement a fallback that progressively
+strips trailing tokens (e.g., 'north carolina state wolfpack' ->
+'north carolina state') when attempting to match schedule pairs.
+"""
+import re
+_space_re = re.compile(r"\s+")
+
+def _base_norm(name: str) -> str:
+    try:
+        s = str(name or '')
+    except Exception:
+        return ''
+    s = s.strip().lower()
+    s = s.replace('&', ' and ')
+    # unify different apostrophes
+    s = s.replace("ʻ", "'").replace("’", "'")
+    # keep letters/numbers/space/apostrophe/hyphen
+    s = re.sub(r"[^a-z0-9 '\-]", " ", s)
+    s = s.replace("hawai'i", "hawaii")
+    s = _space_re.sub(' ', s).strip()
+    return s
+
+# Alias map (keys & values are post _base_norm). Includes canonical collapse of mascots
 ALIASES = {
-    'hawai\'i': 'hawaii', 'hawaii': 'hawaii',
+    # Existing / prior
+    'miami oh': 'miami ohio', 'miami ohio': 'miami ohio',
+    'ole miss': 'mississippi', 'miss st': 'mississippi state',
     'utsa': 'texas san antonio', 'ut san antonio': 'texas san antonio',
-    'app st': 'appalachian state', 'app state': 'appalachian state', 'appalachian st': 'appalachian state',
-    'ole miss': 'mississippi', 'miss st': 'mississippi state', 'la lafayette': 'louisiana', 'louisiana lafayette': 'louisiana',
-    'la monroe': 'louisiana monroe', 'umass': 'massachusetts', 'uconn': 'connecticut',
-    'byu cougars': 'byu', 'utsa roadrunners': 'texas san antonio',
-    'san jose state': 'san josé state', 'san josé state': 'san josé state',
-    'sjsu': 'san josé state',
-    'texas a&m': 'texas am', 'texas a and m': 'texas am',
-    'penn st': 'penn state', 'mich st': 'michigan state', 'florida st': 'florida state', 'boise st': 'boise state',
+    'utsa roadrunners': 'texas san antonio',
+    'app state': 'appalachian state', 'appalachian st': 'appalachian state', 'app st': 'appalachian state',
+    'southern miss': 'southern mississippi',
+    'hawaii': 'hawaii',
+    'la lafayette': 'louisiana', 'louisiana lafayette': 'louisiana',
+    'la monroe': 'louisiana monroe',
+    'umass': 'massachusetts', 'uconn': 'connecticut',
+    'byu cougars': 'byu', 'byu': 'byu',
+    'ucf': 'ucf', 'central florida': 'ucf', 'central florida knights': 'ucf',
+    'usf': 'usf', 'south florida': 'usf', 'south florida bulls': 'usf',
+    # Common abbreviation expansions
+    'lsu': 'lsu', 'louisiana state': 'lsu', 'louisiana state tigers': 'lsu',
+    'tcu': 'tcu', 'texas christian': 'tcu', 'texas christian horned frogs': 'tcu',
+    'usc': 'usc', 'southern california': 'usc', 'southern california trojans': 'usc',
+    'smu': 'smu', 'southern methodist': 'smu', 'southern methodist mustangs': 'smu',
+    'uab': 'uab', 'alabama birmingham': 'uab', 'alabama birmingham blazers': 'uab',
+    'utep': 'utep', 'texas el paso': 'utep', 'texas el paso miners': 'utep',
+    'utsa roadrunners': 'texas san antonio',
+    'texas a&m': 'texas am', 'texas a and m': 'texas am', 'texas am': 'texas am',
+    'penn st': 'penn state', 'penn state nittany lions': 'penn state',
+    'mich st': 'michigan state', 'michigan st': 'michigan state',
+    'florida st': 'florida state', 'florida state seminoles': 'florida state',
+    'boise st': 'boise state', 'boise state broncos': 'boise state',
+    'san jose state': 'san jose state', 'san josé state': 'san jose state', 'sjsu': 'san jose state',
+    'texas san antonio': 'texas san antonio',
+    # Parenthetical state schools
+    'miami fl': 'miami', 'miami florida': 'miami',
+    # Mascot forms -> school canonical
+    'ole miss rebels': 'mississippi',
+    'arkansas razorbacks': 'arkansas',
+    'umass minutemen': 'massachusetts',
+    'notre dame fighting irish': 'notre dame',
+    'texas a m aggies': 'texas am', 'texas am aggies': 'texas am', 'texas a and m aggies': 'texas am',
+    'miami hurricanes': 'miami',
+    'florida gators': 'florida', 'florida state seminoles': 'florida state',
+    'georgia bulldogs': 'georgia', 'alabama crimson tide': 'alabama',
+    'penn state nittany lions': 'penn state', 'oregon ducks': 'oregon',
+    'nebraska cornhuskers': 'nebraska', 'michigan wolverines': 'michigan',
+    'lsu tigers': 'lsu', 'uconn huskies': 'connecticut', 'delaware blue hens': 'delaware',
 }
 
 def norm_team(name: str) -> str:
-    if not isinstance(name, str):
-        return ''
-    s = name.strip().lower()
-    s = s.replace('&', ' and ')
-    s = _punct_re.sub('', s)
-    s = _ws_re.sub(' ', s).strip()
-    return ALIASES.get(s, s)
+    b = _base_norm(name)
+    return ALIASES.get(b, b)
+
+def best_schedule_norm(raw: str, schedule_norm_set: set[str]) -> str:
+    """Return the normalized form most likely to match schedule names.
+
+    Strategy: exact alias/normalized match, else iteratively trim trailing tokens
+    (to discard mascot words) until a match arises, else original normalized.
+    """
+    n = norm_team(raw)
+    if n in schedule_norm_set:
+        return n
+    tokens = n.split()
+    while len(tokens) > 1:
+        tokens = tokens[:-1]
+        cand = ' '.join(tokens)
+        if cand in schedule_norm_set:
+            return cand
+    return n
 
 # ---------------------------------------------------------------------------
 # Week detection
@@ -174,28 +241,53 @@ def _extract_markets(bookmaker: Dict[str, Any], home_team: str, away_team: str) 
     return provider_entry
 
 
-def build_lines_rows(week: int, odds_events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def build_lines_rows(week: int, odds_events: List[Dict[str, Any]], debug: bool = False) -> List[Dict[str, Any]]:
     pred_df = _select_predictions_frame(week)
     # Map normalized pair -> schedule row
-    schedule_index = {}
+    schedule_index: dict[tuple[str,str], tuple[str,str]] = {}
+    schedule_team_norms: set[str] = set()
     for _, r in pred_df.iterrows():
         ht = str(r['home_team']); at = str(r['away_team'])
-        schedule_index[(norm_team(ht), norm_team(at))] = (ht, at)
-    rows = []
-    unmatched = []
+        n_ht = norm_team(ht); n_at = norm_team(at)
+        schedule_index[(n_ht, n_at)] = (ht, at)
+        schedule_team_norms.add(n_ht); schedule_team_norms.add(n_at)
+    # Determine approximate temporal bounds for the week (if start_date present)
+    week_start = None; week_end = None
+    if 'start_date' in pred_df.columns:
+        try:
+            sd = pd.to_datetime(pred_df['start_date'], errors='coerce')
+            if not sd.isna().all():
+                week_start = sd.min() - pd.Timedelta(hours=6)
+                week_end = sd.max() + pd.Timedelta(hours=6)
+        except Exception:
+            pass
+    rows: List[Dict[str, Any]] = []
+    unmatched: List[Dict[str, Any]] = []
+    skipped_time = 0
     for ev in odds_events:
-        home = ev.get('home_team'); away = ev.get('away_team')
-        if not home or not away:
+        raw_home = ev.get('home_team'); raw_away = ev.get('away_team')
+        if not raw_home or not raw_away:
             continue
-        key = (norm_team(home), norm_team(away))
+        if week_start is not None and week_end is not None:
+            ct = ev.get('commence_time') or ev.get('commenceTime')
+            if ct:
+                try:
+                    ctd = pd.to_datetime(ct, utc=True)
+                    if ctd < week_start or ctd > week_end:
+                        skipped_time += 1
+                        continue
+                except Exception:
+                    pass
+        # Best-match normalization (account for mascots / suffixes)
+        n_home = best_schedule_norm(raw_home, schedule_team_norms)
+        n_away = best_schedule_norm(raw_away, schedule_team_norms)
+        key = (n_home, n_away)
         if key not in schedule_index:
-            # Try reversed orientation (Odds API may list differently)
-            key_rev = (norm_team(away), norm_team(home))
+            key_rev = (n_away, n_home)
             if key_rev in schedule_index:
-                home, away = away, home
                 key = key_rev
             else:
-                unmatched.append({'home': home, 'away': away})
+                unmatched.append({'home': raw_home, 'away': raw_away, 'norm_home': n_home, 'norm_away': n_away})
                 continue
         (sched_home, sched_away) = schedule_index[key]
         provs = []
@@ -215,6 +307,11 @@ def build_lines_rows(week: int, odds_events: List[Dict[str, Any]]) -> List[Dict[
         })
     if unmatched:
         print(f"[warn] Unmatched odds events: {len(unmatched)}", file=sys.stderr)
+    if skipped_time and debug:
+        print(f"[info] Skipped events outside inferred week window: {skipped_time}", file=sys.stderr)
+    if unmatched and debug:
+        sample = unmatched[:10]
+        print('[debug] sample unmatched events:', json.dumps(sample, indent=2), file=sys.stderr)
     return rows
 
 # ---------------------------------------------------------------------------
@@ -252,10 +349,20 @@ def merge_and_write(rows: List[Dict[str, Any]], week: int):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--week', type=int, default=None, help='Target week (default: auto-detect upcoming)')
-    ap.add_argument('--api-key', type=str, default=None, help='Odds API Key (fallback ODDS_API_KEY env)')
+    ap.add_argument('--api-key', type=str, default=None, help='Odds API Key (fallback ODDS_API_KEY env or secrets file)')
+    ap.add_argument('--debug', action='store_true', help='Enable debug logging (sample unmatched)')
     args = ap.parse_args()
 
     api_key = args.api_key or os.environ.get('ODDS_API_KEY')
+    if not api_key:
+        # fallback to secrets/odds_api_key.txt
+        try:
+            sec_path = os.path.join(BASE_DIR, 'secrets', 'odds_api_key.txt')
+            if os.path.exists(sec_path):
+                with open(sec_path, 'r', encoding='utf-8') as fh:
+                    api_key = fh.read().strip()
+        except Exception:
+            pass
     if not api_key:
         print('[error] Missing Odds API key (provide --api-key or set ODDS_API_KEY).', file=sys.stderr)
         return 2
@@ -275,7 +382,7 @@ def main():
     except Exception as e:
         print(f"[error] fetch failed: {e}", file=sys.stderr)
         return 4
-    rows = build_lines_rows(week, events)
+    rows = build_lines_rows(week, events, debug=args.debug)
     if not rows:
         print('[warn] No rows matched schedule / produced provider lines; nothing written.')
         return 0
