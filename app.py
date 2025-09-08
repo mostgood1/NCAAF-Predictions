@@ -3290,6 +3290,9 @@ def version_info():
             if not sub.empty and 'actual_home_points' in sub.columns:
                 finals = int(((~sub['actual_home_points'].isna()) & (~sub['actual_away_points'].isna())).sum())
                 total = int(len(sub))
+        # Ensure model artifacts/meta loaded for current prefix
+        if not _MODEL_META:
+            _load_model_artifacts()
         return jsonify({
             'build_time': BUILD_TIME,
             'commit': BUILD_COMMIT,
@@ -3298,7 +3301,8 @@ def version_info():
             'latest_week_finals': finals,
             'latest_week_total': total,
             'model_version': _MODEL_META.get('model_version'),
-            'model_counts': _MODEL_META.get('counts')
+            'model_counts': _MODEL_META.get('counts'),
+            'model_manifest_prefix': globals().get('_MODEL_PREFIX')
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
