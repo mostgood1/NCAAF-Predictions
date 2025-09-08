@@ -14,7 +14,7 @@ No placeholders: if a row cannot be enriched (missing date, location, API failur
 from __future__ import annotations
 import os, csv, math, time, json
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 import requests
 import pandas as pd
 from datetime import datetime, timezone
@@ -27,6 +27,40 @@ CURRENT_URL = "https://api.openweathermap.org/data/2.5/weather"
 FORECAST_URL = "https://api.openweathermap.org/data/2.5/forecast"  # 5 day / 3 hour
 
 API_KEY = os.getenv('OPENWEATHER_API_KEY') or os.getenv('OWM_API_KEY')
+
+# Basic list of FBS conferences (2025) for prioritizing enrichment
+FBS_CONFERENCES: List[str] = [
+    'SEC','Big Ten','Big 12','ACC','Pac-12','AAC','Mountain West','Sun Belt','Conference USA','MAC',
+    'Independents','American','CUSA','MWC'
+]
+
+def _load_conference_map() -> dict:
+    tc_path = DATA_DIR / 'team_conferences.csv'
+    if not tc_path.exists():
+        return {}
+    try:
+        df = pd.read_csv(tc_path)
+        if not {'school','conference'}.issubset(df.columns):
+            return {}
+        mp = {}
+        for _, r in df.iterrows():
+            try:
+                mp[str(r['school']).strip().lower()] = str(r['conference']).strip()
+            except Exception:
+                continue
+        return mp
+    except Exception:
+        return {}
+
+_CONF_MAP = _load_conference_map()
+
+def _is_fbs_team(team: str) -> bool:
+    if not team:
+        return False
+    conf = _CONF_MAP.get(str(team).strip().lower())
+    if not conf:
+        return False
+    return any(conf.startswith(fbs) for fbs in FBS_CONFERENCES)
 
 def _log(msg: str):
     print(f"[weather] {msg}")
@@ -190,6 +224,66 @@ def enrich_dataframe(df: pd.DataFrame, limit: int = 150) -> pd.DataFrame:
         df.at[idx,'weather_adjustment'] = compute_weather_adjustment(temp_f, wind_mph, indoor)
     return df
 
+def enrich_fbs_games(df: pd.DataFrame, horizon_days: int = 6, batch: int = 150, max_loops: int = 8) -> pd.DataFrame:
+    """Attempt to fully enrich FBS games whose start_date is within forecast horizon.
+
+    Does multiple passes (loops) because new geocodes are appended progressively.
+    Ignores Non-FBS games when they would block completion metrics.
+    """
+    if df.empty:
+        return df
+    # Ensure requisite columns present
+    for c in ['weather_temp','weather_wind','weather_adjustment']:
+        if c not in df.columns:
+            df[c] = pd.NA
+    if 'enrichment_failed' not in df.columns:
+        df['enrichment_failed'] = False
+    now = datetime.now(timezone.utc)
+    horizon_sec = horizon_days * 86400
+    def _parse(dt_str):
+        try:
+            return pd.to_datetime(dt_str, errors='coerce')
+        except Exception:
+            return pd.NaT
+    # Build candidate mask
+    if 'start_date' in df.columns:
+        sdt = df['start_date'].apply(_parse)
+    else:
+        sdt = pd.Series([pd.NaT]*len(df), index=df.index)
+    within = (sdt.notna()) & ((sdt.dt.tz_localize('UTC', nonexistent='NaT', ambiguous='NaT') - now).dt.total_seconds() <= horizon_sec)
+    # FBS by home team conference mapping
+    fbs_mask = df['home_team'].apply(_is_fbs_team)
+    need_weather = df['weather_temp'].isna() & df['weather_wind'].isna() & within & fbs_mask
+    loops = 0
+    while need_weather.any() and loops < max_loops:
+        loops += 1
+        target_idx = need_weather[need_weather].head(batch).index
+        if not len(target_idx):
+            break
+        # Reuse enrich logic row-by-row for these indices
+        for idx in target_idx:
+            row = df.loc[idx]
+            start_dt = _parse_start(row.get('start_date') or row.get('start_date_api'))
+            if not start_dt:
+                df.at[idx,'enrichment_failed'] = True
+                continue
+            loc = ensure_team_location(row.get('home_team',''))
+            if not loc:
+                df.at[idx,'enrichment_failed'] = True
+                continue
+            lat, lon, indoor = loc
+            w = fetch_weather(lat, lon, start_dt if start_dt.tzinfo else start_dt.replace(tzinfo=timezone.utc))
+            if not w:
+                df.at[idx,'enrichment_failed'] = True
+                continue
+            temp_f = w.get('temp_f'); wind_mph = w.get('wind_mph')
+            df.at[idx,'weather_temp'] = temp_f
+            df.at[idx,'weather_wind'] = wind_mph
+            df.at[idx,'weather_adjustment'] = compute_weather_adjustment(temp_f, wind_mph, indoor)
+        # Recompute remaining need
+        need_weather = df['weather_temp'].isna() & df['weather_wind'].isna() & within & fbs_mask
+    return df
+
 __all__ = [
-    'enrich_dataframe','ensure_team_location','fetch_weather','compute_weather_adjustment'
+    'enrich_dataframe','enrich_fbs_games','ensure_team_location','fetch_weather','compute_weather_adjustment'
 ]

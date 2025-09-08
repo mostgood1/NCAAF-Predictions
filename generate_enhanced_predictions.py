@@ -12,7 +12,7 @@ import os, math, argparse, json
 from datetime import datetime, timezone
 from pathlib import Path
 import pandas as pd
-from src.data.weather_enrichment import enrich_dataframe
+from src.data.weather_enrichment import enrich_dataframe, enrich_fbs_games
 
 BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = BASE_DIR / 'data'
@@ -140,6 +140,15 @@ def main():
         df = enrich_dataframe(df)
     except Exception as e:
         print(json.dumps({'status':'warn','phase':'enrichment','error':str(e)}))
+    # Additional focused enrichment for FBS games within forecast horizon
+    try:
+        before_missing = int((df['weather_temp'].isna() & df['weather_wind'].isna()).sum()) if {'weather_temp','weather_wind'}.issubset(df.columns) else None
+        df = enrich_fbs_games(df, horizon_days=6, batch=200, max_loops=6)
+        after_missing = int((df['weather_temp'].isna() & df['weather_wind'].isna()).sum()) if {'weather_temp','weather_wind'}.issubset(df.columns) else None
+        if before_missing is not None and after_missing is not None:
+            print(f"[weather] FBS focused enrichment reduced missing rows from {before_missing} to {after_missing}")
+    except Exception as e:
+        print(f"[warn] fbs enrichment error: {e}")
     # Ensure minimal feature set (edge, confidence, predicted_total_points) before model overlay
     try:
         if 'predicted_total_points' not in df.columns and {'predicted_home_points','predicted_away_points'}.issubset(df.columns):

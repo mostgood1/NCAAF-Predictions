@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 import re
 import pandas as pd
 
-from src.data.weather_enrichment import enrich_dataframe
+from src.data.weather_enrichment import enrich_dataframe, enrich_fbs_games
 
 BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
 RETUNE = BASE_DIR / 'src' / 'modeling' / 'retune_models.py'
@@ -90,12 +90,14 @@ def main():
         if enh_file.exists():
             _df_base = pd.read_csv(enh_file)
             pre_rows = len(_df_base)
+            before_missing = int((_df_base['weather_temp'].isna() & _df_base['weather_wind'].isna()).sum()) if {'weather_temp','weather_wind'}.issubset(_df_base.columns) else None
             _df_base = enrich_dataframe(_df_base)
+            _df_base = enrich_fbs_games(_df_base, horizon_days=6, batch=250, max_loops=6)
+            after_missing = int((_df_base['weather_temp'].isna() & _df_base['weather_wind'].isna()).sum()) if {'weather_temp','weather_wind'}.issubset(_df_base.columns) else None
             _df_base.to_csv(enh_file, index=False)
             results['pre_enrichment_rows'] = pre_rows
-            results['post_enrichment_rows'] = len(_df_base)
-            miss_weather = int((_df_base['weather_temp'].isna() | _df_base['weather_wind'].isna()).sum()) if {'weather_temp','weather_wind'}.issubset(_df_base.columns) else None
-            results['post_enrichment_missing_weather'] = miss_weather
+            results['weather_missing_before'] = before_missing
+            results['weather_missing_after'] = after_missing
     except Exception as e:
         results['pre_enrichment_error'] = str(e)
 
