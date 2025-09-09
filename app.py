@@ -5019,15 +5019,53 @@ def api_game_cards():
             if wi in weeks:
                 sel_week = wi
         if sel_week is None and weeks:
+            # Improved default selection: choose the "current" week based on today's date.
+            # Strategy:
+            # 1. Parse start_date per week (min & max).
+            # 2. If today (UTC) falls within (min_date - 2d, max_date + 1d) range, pick that week.
+            # 3. Else choose the next upcoming week whose min_date is after now (earliest such).
+            # 4. Fallback to prior logic (latest week with any finals else earliest) if parsing fails.
             try:
-                finals_per = {}
-                for w in weeks:
-                    subw = pred_df[pred_df['week']==w]
-                    finals_per[w] = int(((subw['actual_home_points'].notna()) & (subw['actual_away_points'].notna())).sum())
-                with_finals = [w for w,c in finals_per.items() if c>0]
-                sel_week = max(with_finals) if with_finals else min(weeks)
+                import pandas as _pd, datetime as _dt
+                now = _dt.datetime.utcnow().replace(tzinfo=_dt.timezone.utc)
+                ranges = []  # (week, min_dt, max_dt)
+                if 'start_date' in pred_df.columns:
+                    tmp = pred_df[['week','start_date']].copy()
+                    tmp['ts_parsed'] = _pd.to_datetime(tmp['start_date'], errors='coerce', utc=True)
+                    for w in weeks:
+                        sw = tmp[tmp['week']==w]['ts_parsed'].dropna()
+                        if not sw.empty:
+                            mn = sw.min(); mx = sw.max()
+                            ranges.append((w, mn, mx))
+                picked = None
+                for w, mn, mx in ranges:
+                    if mn - _dt.timedelta(days=2) <= now <= mx + _dt.timedelta(days=1):
+                        picked = w; break
+                if picked is None:
+                    # Find next upcoming
+                    upcoming = sorted([ (w, mn) for w,mn,mx in ranges if mn > now ])
+                    if upcoming:
+                        picked = upcoming[0][0]
+                if picked is not None:
+                    sel_week = picked
+                else:
+                    # Fallback original heuristic
+                    finals_per = {}
+                    for w in weeks:
+                        subw = pred_df[pred_df['week']==w]
+                        finals_per[w] = int(((subw['actual_home_points'].notna()) & (subw['actual_away_points'].notna())).sum())
+                    with_finals = [w for w,c in finals_per.items() if c>0]
+                    sel_week = max(with_finals) if with_finals else min(weeks)
             except Exception:
-                sel_week = min(weeks)
+                try:
+                    finals_per = {}
+                    for w in weeks:
+                        subw = pred_df[pred_df['week']==w]
+                        finals_per[w] = int(((subw['actual_home_points'].notna()) & (subw['actual_away_points'].notna())).sum())
+                    with_finals = [w for w,c in finals_per.items() if c>0]
+                    sel_week = max(with_finals) if with_finals else min(weeks)
+                except Exception:
+                    sel_week = min(weeks)
         dfw = pred_df[pred_df['week']==sel_week].copy() if sel_week is not None else pred_df.copy()
         # Exclude only non-FBS vs non-FBS games; keep FBS vs FBS and FBS vs Non-FBS
         if {'home_conference','away_conference'}.issubset(dfw.columns):
