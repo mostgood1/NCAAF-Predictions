@@ -4247,7 +4247,11 @@ def recommendations_page():
         return 3
     if sort_q == 'edge_desc':
         enriched.sort(key=lambda x: (-(x.get('edge') or 0.0)))
-    else:  # confidence_then_edge
+    elif sort_q == 'time':
+        enriched.sort(key=lambda x: (x.get('sort_ts') is None, x.get('sort_ts') or 0.0))
+    elif sort_q == 'market':
+        enriched.sort(key=lambda x: (str(x.get('market','')), x.get('sort_ts') is None, x.get('sort_ts') or 0.0))
+    else:  # confidence_then_edge default
         enriched.sort(key=lambda x: (_tier_rank(x.get('confidence')), -(x.get('edge') or 0.0)))
     # Group by tier (create 'Other' placeholder for future lower-confidence recs)
     high = [r for r in enriched if r.get('confidence') == 'High']
@@ -4340,6 +4344,8 @@ def recommendations_page():
                     <select name="sort">
                         <option value="confidence_then_edge" {% if sort_q=='confidence_then_edge' %}selected{% endif %}>Confidence→Edge</option>
                         <option value="edge_desc" {% if sort_q=='edge_desc' %}selected{% endif %}>Edge ↓</option>
+                        <option value="time" {% if sort_q=='time' %}selected{% endif %}>Start Time ↑</option>
+                        <option value="market" {% if sort_q=='market' %}selected{% endif %}>Market A→Z</option>
                     </select>
                 </label>
                 <label>Bankroll <input type="number" step="1" name="bankroll" value="{{bankroll}}" style="width:90px"/></label>
