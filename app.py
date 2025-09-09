@@ -736,6 +736,30 @@ def _build_game_card(game_row: pd.Series) -> dict:
             return val
     home_asset = get_team_asset(game_row['home_team'])
     away_asset = get_team_asset(game_row['away_team'])
+    # Matchup classification (FBS vs FBS or FBS vs Non-FBS)
+    try:
+        _fbs_conf_set = {
+            'acc','sec','big ten','big 12','pac 12','american','mountain west','sun belt','mac','conference usa','independent','independents','fbs independents','independent (fbs)'
+        }
+        _fbs_independents = {'notre dame','army','navy','umass','uconn','new mexico state'}
+        def _is_fbs(team, conf):
+            try:
+                t = str(team or '').strip().lower()
+                c = str(conf or '').strip().lower()
+                return c in _fbs_conf_set or t in _fbs_independents
+            except Exception:
+                return False
+        home_is_fbs = _is_fbs(game_row.get('home_team'), game_row.get('home_conference'))
+        away_is_fbs = _is_fbs(game_row.get('away_team'), game_row.get('away_conference'))
+        if home_is_fbs and away_is_fbs:
+            matchup_level = 'FBS_vs_FBS'
+        elif home_is_fbs or away_is_fbs:
+            matchup_level = 'FBS_vs_NonFBS'
+        else:
+            matchup_level = 'NonFBS_vs_NonFBS'
+    except Exception:
+        home_is_fbs = away_is_fbs = False
+        matchup_level = 'Unknown'
     betting_lines = get_betting_lines(
         year=int(game_row['season']),
         week=int(game_row['week']),
@@ -1059,6 +1083,9 @@ def _build_game_card(game_row: pd.Series) -> dict:
         'away_team': game_row['away_team'],
     'home_conference': game_row.get('home_conference', ''),
     'away_conference': game_row.get('away_conference', ''),
+    'home_is_fbs': bool(home_is_fbs),
+    'away_is_fbs': bool(away_is_fbs),
+    'matchup_level': matchup_level,
         'venue': game_row.get('venue', ''),
         'game_time': display_time_fallback,
         'start_iso': start_iso,
@@ -4973,7 +5000,7 @@ def api_game_cards():
     try:
         # Cache lookup key based on request args (stable ordering)
         key = (
-            'v2',  # bump cache version after FBS-only & synthetic removal changes
+            'v3',  # cache version bump after adding FBS vs Non-FBS inclusion & classification
             request.args.get('week',''),
             request.args.get('filter_type','all'),
             request.args.get('conference',''),
@@ -5002,24 +5029,19 @@ def api_game_cards():
             except Exception:
                 sel_week = min(weeks)
         dfw = pred_df[pred_df['week']==sel_week].copy() if sel_week is not None else pred_df.copy()
-        # Restrict to FBS vs FBS matchups only (user requirement)
-        FBS_CONFERENCES = {
-            'acc','sec','big ten','big 12','pac 12','american','mountain west','sun belt','mac','conference usa','independent','independents','fbs independents','independent (fbs)'
-        }
-        FBS_INDEPENDENT_TEAMS = {'notre dame','army','navy','umass','uconn','new mexico state'}
-        def _is_fbs_team(team, conf):
-            try:
-                t = str(team or '').strip().lower()
-                c = str(conf or '').strip().lower()
-                if c in FBS_CONFERENCES:
-                    return True
-                if t in FBS_INDEPENDENT_TEAMS:
-                    return True
-                return False
-            except Exception:
-                return False
+        # Exclude only non-FBS vs non-FBS games; keep FBS vs FBS and FBS vs Non-FBS
         if {'home_conference','away_conference'}.issubset(dfw.columns):
-            dfw = dfw[dfw.apply(lambda r: _is_fbs_team(r.get('home_team'), r.get('home_conference')) and _is_fbs_team(r.get('away_team'), r.get('away_conference')), axis=1)]
+            fbs_confs = {
+                'acc','sec','big ten','big 12','pac 12','american','mountain west','sun belt','mac','conference usa','independent','independents','fbs independents','independent (fbs)'
+            }
+            fbs_indies = {'notre dame','army','navy','umass','uconn','new mexico state'}
+            def _is_fbs(team, conf):
+                try:
+                    t = str(team or '').strip().lower(); c = str(conf or '').strip().lower()
+                    return c in fbs_confs or t in fbs_indies
+                except Exception:
+                    return False
+            dfw = dfw[dfw.apply(lambda r: _is_fbs(r.get('home_team'), r.get('home_conference')) or _is_fbs(r.get('away_team'), r.get('away_conference')), axis=1)]
         dfw['date_only'] = dfw.get('start_date','').astype(str).str[:10]
         # Filters
         filt_type = request.args.get('filter_type','all')
