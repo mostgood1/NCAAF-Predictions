@@ -742,8 +742,9 @@ def _build_game_card(game_row: pd.Series) -> dict:
         home_team=game_row['home_team'],
         away_team=game_row['away_team']
     )
-    # Synthetic fallback odds if no real lines available: derive from model predictions
-    if not betting_lines:
+    # Synthetic fallback odds have been disabled by default (user request to exclude).
+    # To re-enable, set environment variable ALLOW_SYNTHETIC_ODDS=1.
+    if not betting_lines and os.environ.get('ALLOW_SYNTHETIC_ODDS','0') == '1':
         try:
             mh = _safe_float(game_row.get('model_home_points'))
             ma = _safe_float(game_row.get('model_away_points'))
@@ -754,16 +755,13 @@ def _build_game_card(game_row: pd.Series) -> dict:
                     mtot = mh + ma
                 if mmargin is None:
                     mmargin = mh - ma
-                # Implied spread: home minus away; total from mtot
                 spread = round(mmargin, 1)
                 ou = round(mtot, 1) if mtot is not None else None
                 p_home = _safe_float(game_row.get('model_home_win_prob'))
-                # Approximate fair moneyline from win prob if present
                 def _fair_ml(p):
                     try:
                         if p is None or p <= 0 or p >= 1:
                             return None, None
-                        # American odds conversion ignoring vig
                         if p >= 0.5:
                             home_ml = int(round(-100 * p / (1 - p)))
                             away_ml = int(round(100 * (1 - p) / p))
@@ -4975,7 +4973,7 @@ def api_game_cards():
     try:
         # Cache lookup key based on request args (stable ordering)
         key = (
-            'v1',
+            'v2',  # bump cache version after FBS-only & synthetic removal changes
             request.args.get('week',''),
             request.args.get('filter_type','all'),
             request.args.get('conference',''),
@@ -5004,6 +5002,24 @@ def api_game_cards():
             except Exception:
                 sel_week = min(weeks)
         dfw = pred_df[pred_df['week']==sel_week].copy() if sel_week is not None else pred_df.copy()
+        # Restrict to FBS vs FBS matchups only (user requirement)
+        FBS_CONFERENCES = {
+            'acc','sec','big ten','big 12','pac 12','american','mountain west','sun belt','mac','conference usa','independent','independents','fbs independents','independent (fbs)'
+        }
+        FBS_INDEPENDENT_TEAMS = {'notre dame','army','navy','umass','uconn','new mexico state'}
+        def _is_fbs_team(team, conf):
+            try:
+                t = str(team or '').strip().lower()
+                c = str(conf or '').strip().lower()
+                if c in FBS_CONFERENCES:
+                    return True
+                if t in FBS_INDEPENDENT_TEAMS:
+                    return True
+                return False
+            except Exception:
+                return False
+        if {'home_conference','away_conference'}.issubset(dfw.columns):
+            dfw = dfw[dfw.apply(lambda r: _is_fbs_team(r.get('home_team'), r.get('home_conference')) and _is_fbs_team(r.get('away_team'), r.get('away_conference')), axis=1)]
         dfw['date_only'] = dfw.get('start_date','').astype(str).str[:10]
         # Filters
         filt_type = request.args.get('filter_type','all')
