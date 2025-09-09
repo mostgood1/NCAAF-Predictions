@@ -4402,10 +4402,11 @@ def recommendations_page():
             </table>
         {% else %}<div class="section-empty">No other recommendations.</div>{% endif %}
         <div style="margin-top:30px; font-size:.75rem; color:#666;">Generated at {{now}}. Edge = model EV (expected value) using American odds. Kelly stake capped & scaled. Times shown in original schedule timezone if available.</div>
+        <div style="margin-top:6px; font-size:.7rem; color:#777;">Build {{ BUILD_TIME }} • Commit {{ BUILD_COMMIT[:8] if BUILD_COMMIT else 'unknown' }}</div>
     </div>
     ''', weeks=weeks, sel_week=sel_week, sort_q=sort_q, bankroll=bankroll, kelly_factor=kelly_factor, ev_threshold=ev_threshold,
        high=high, medium=medium, low=low, other=other,
-       overall_stats=overall_stats, tier_stats=tier_stats, fmt_pct=fmt_pct, fmt_money=fmt_money, now=datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'))
+       overall_stats=overall_stats, tier_stats=tier_stats, fmt_pct=fmt_pct, fmt_money=fmt_money, now=datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'), BUILD_TIME=BUILD_TIME, BUILD_COMMIT=BUILD_COMMIT)
 @app.route('/recommendations/performance')
 def recommendations_performance_page():
     # Read performance via the same CSV and simple aggregation
