@@ -4196,248 +4196,216 @@ def recommendations_performance():
 
 @app.route('/recommendations', methods=['GET', 'POST'])
 def recommendations_page():
-        # Render a client-side UI that fetches from /api/recommendations with filters/sorting
-        weeks = sorted(pred_df['week'].dropna().unique())
-        default_bankroll = 1000
-        default_kelly = 0.5
-        default_ev = 0.02
-        default_limit = 100
-        return render_template_string('''
-        <style>
-            body { font-family: 'Segoe UI', Arial, sans-serif; background: #f6f8fb; }
-            .container { max-width: 1080px; margin: 30px auto; background:#fff; padding:24px; border-radius:14px; box-shadow:0 8px 24px rgba(0,0,0,.08); }
-            h2 { text-align:center; margin-bottom:12px; }
-            .toolbar { display:grid; grid-template-columns: repeat(7, minmax(140px,1fr)); gap:12px; align-items:end; margin-bottom:10px; }
-            label { font-weight: 600; color: #34495e; font-size:.95em; }
-            select,input,button { padding:8px 10px; border:1px solid #d0d7de; border-radius:8px; }
-            .tabs { display:flex; gap:10px; margin: 8px 0 14px; }
-            .tab { padding:6px 10px; border:1px solid #d0d7de; border-radius:8px; cursor:pointer; color:#34495e; }
-            .tab.active { background:#eaf1fb; border-color:#bfd3f2; color:#1d4ed8; font-weight:600; }
-            .rec-card { background:#f8fafc; border:1px solid #edf2f7; border-radius:12px; padding:14px; margin:10px 0; display:flex; justify-content:space-between; gap:16px; align-items:center; }
-            .lhs { display:flex; flex-direction:column; gap:6px; }
-            .teams { display:flex; align-items:center; gap:10px; font-weight:600; }
-            .team { display:flex; align-items:center; gap:8px; }
-            .logo { width:24px; height:24px; border-radius:50%; background:#eee; display:inline-block; background-size:cover; background-position:center; border:1px solid #ddd; }
-            .meta { font-size:.92em; color:#46556a; }
-            .edge { font-weight:700; color:#0d3b66; font-size:1.05em; }
-            .nav { text-align:right; margin-bottom:8px; }
-            .pill { padding:2px 8px; border-radius:999px; font-size:.82em; }
-            .pill.high { background:#eaf7ef; color:#1e8e3e; border:1px solid #bfe3c7; }
-            .pill.medium { background:#fff7e6; color:#b26b00; border:1px solid #ffe0a3; }
-            .pill.low { background:#fdecee; color:#b00020; border:1px solid #f4b4bd; }
-            .row { display:flex; gap:10px; align-items:center; }
-            .count { color:#555; margin: 6px 0 10px; }
-            .controls-row { display:flex; gap:10px; align-items:center; justify-content:space-between; }
-            .view-toggle { display:flex; gap:8px; align-items:center; }
-            table { width:100%; border-collapse:collapse; background:#fff; }
-            th,td { padding:8px 10px; border:1px solid #e0e0e0; text-align:center; }
-            th { background:#f1f5f9; }
-        </style>
-        <div class="container">
-            <div class="nav">
-                <a href="/">Main</a> | <a href="/conference-records">Conference Records</a> | <a href="/recommendations/performance">Performance</a>
-            </div>
-            <h2>Betting Recommendations</h2>
-            <div class="tabs" id="marketTabs">
-                <div class="tab active" data-market="">All</div>
-                <div class="tab" data-market="ML">Moneyline</div>
-                <div class="tab" data-market="Spread">Spread</div>
-                <div class="tab" data-market="Total">Total</div>
-            </div>
-            <form id="controls" class="toolbar">
-                <div>
-                    <label>Week</label>
-                    <select name="week" id="week">
-                        <option value="">All Upcoming</option>
-                        {% for w in weeks %}
-                            <option value="{{w}}">Week {{w}}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div>
-                    <label>Sort</label>
-                    <select name="sort" id="sort">
-                        <option value="edge_desc">Edge ↓</option>
-                        <option value="confidence_desc">Confidence ↓</option>
-                        <option value="stake_desc">Stake ↓</option>
-                        <option value="prob_desc">Model p ↓</option>
-                        <option value="time">Time ↑</option>
-                        <option value="market">Market A→Z</option>
-                    </select>
-                </div>
-                <div>
-                    <label>Bankroll</label>
-                    <input type="number" step="1" id="bankroll" value="{{default_bankroll}}"/>
-                </div>
-                <div>
-                    <label>Kelly</label>
-                    <input type="number" step="0.05" id="kelly" value="{{default_kelly}}"/>
-                </div>
-                <div>
-                    <label>EV ≥</label>
-                    <input type="number" step="0.01" id="ev" value="{{default_ev}}"/>
-                </div>
-                <div>
-                    <label>Limit</label>
-                    <input type="number" step="1" id="limit" value="{{default_limit}}"/>
-                </div>
-                <div style="grid-column: 1 / -1;" class="controls-row">
-                    <div class="row">
-                        <label>Confidence</label>
-                        <select id="confFilter">
-                            <option value="">All</option>
-                            <option value="High">High</option>
-                            <option value="Medium">Medium</option>
-                            <option value="Low">Low</option>
-                        </select>
-                    </div>
-                    <div class="view-toggle">
-                        <button type="button" id="refreshBtn">Refresh</button>
-                        <button type="button" id="logBtn">Log Shown</button>
-                        <span>|</span>
-                        <label>View</label>
-                        <select id="viewMode">
-                            <option value="cards">Cards</option>
-                            <option value="table">Table</option>
-                        </select>
-                    </div>
-                </div>
-            </form>
-            <div class="count" id="count"></div>
-            <div id="results"></div>
+    # Server-rendered grouped layout mimicking external recommendations page
+    weeks = sorted(pred_df['week'].dropna().unique())
+    # Inputs
+    week_q = request.args.get('week') or request.form.get('week')
+    sort_q = request.args.get('sort') or request.form.get('sort') or 'confidence_then_edge'
+    bankroll = float(request.args.get('bankroll') or request.form.get('bankroll') or 1000)
+    kelly_factor = float(request.args.get('kelly') or request.form.get('kelly') or 0.5)
+    ev_threshold = float(request.args.get('ev') or request.form.get('ev') or 0.02)
+    # Determine selected week (optional). If blank => auto upcoming similar to API
+    sel_week = int(week_q) if (week_q and week_q.isdigit()) else None
+    recs = compute_recommendations(week=sel_week, bankroll=bankroll, kelly_factor=kelly_factor, ev_threshold=ev_threshold)
+    # Attach confidence + timing like API
+    idx = {}
+    try:
+        df2025 = pred_df[(pred_df.get('season',0)==2025)].copy()
+        for _, r in df2025.iterrows():
+            idx[(int(r['season']), int(r['week']), str(r['home_team']), str(r['away_team']))] = r
+    except Exception:
+        pass
+    enriched = []
+    for rec in recs:
+        tier, score = _confidence_tier(rec.get('edge'), rec.get('kelly_f'), rec.get('model_prob'))
+        key = (rec['season'], rec['week'], rec['home_team'], rec['away_team'])
+        row = idx.get(key)
+        start_iso, sort_ts, display_time = _parse_start_ts(row) if row is not None else ('', None, '')
+        enriched.append({**rec, 'confidence': tier, 'confidence_score': score, 'start_iso': start_iso, 'display_time': display_time, 'sort_ts': sort_ts})
+    # Sorting primary: confidence tier order (High, Medium, Low) then edge desc
+    def _tier_rank(t: str):
+        s = (t or '').lower()
+        if s == 'high': return 0
+        if s == 'medium': return 1
+        if s == 'low': return 2
+        return 3
+    if sort_q == 'edge_desc':
+        enriched.sort(key=lambda x: (-(x.get('edge') or 0.0)))
+    else:  # confidence_then_edge
+        enriched.sort(key=lambda x: (_tier_rank(x.get('confidence')), -(x.get('edge') or 0.0)))
+    # Group by tier (create 'Other' placeholder for future lower-confidence recs)
+    high = [r for r in enriched if r.get('confidence') == 'High']
+    medium = [r for r in enriched if r.get('confidence') == 'Medium']
+    low = [r for r in enriched if r.get('confidence') == 'Low']
+    other = []  # currently unused; kept to mirror external layout
+    # Performance summary from logged CSV
+    overall_stats = {}
+    tier_stats = {}
+    try:
+        if os.path.exists(RECS_PATH):
+            perf_df = pd.read_csv(RECS_PATH)
+            # Recompute confidence if missing
+            if 'confidence' not in perf_df.columns and {'edge','kelly_f','model_prob'}.issubset(perf_df.columns):
+                perf_df['confidence'] = perf_df.apply(lambda r: _confidence_tier(r.get('edge'), r.get('kelly_f'), r.get('model_prob'))[0], axis=1)
+            def _agg(df_):
+                if df_.empty:
+                    return {'count':0,'wins':0,'losses':0,'pushes':0,'acc':0.0,'stake':0.0,'pnl':0.0,'roi':0.0}
+                wins = int((df_['result']=='win').sum()) if 'result' in df_.columns else 0
+                losses = int((df_['result']=='loss').sum()) if 'result' in df_.columns else 0
+                pushes = int((df_['result']=='push').sum()) if 'result' in df_.columns else 0
+                staked = float(df_['stake'].sum()) if 'stake' in df_.columns else 0.0
+                pnl = float(df_['pnl'].sum()) if 'pnl' in df_.columns else 0.0
+                acc = (wins / (wins+losses)) if (wins+losses)>0 else 0.0
+                roi = (pnl / staked) if staked>0 else 0.0
+                return {'count':len(df_), 'wins':wins,'losses':losses,'pushes':pushes,'acc':acc,'stake':staked,'pnl':pnl,'roi':roi}
+            overall_stats = _agg(perf_df)
+            for t in ['High','Medium','Low']:
+                tier_stats[t] = _agg(perf_df[perf_df.get('confidence','')==t])
+        else:
+            overall_stats = {'count':0,'wins':0,'losses':0,'pushes':0,'acc':0.0,'stake':0.0,'pnl':0.0,'roi':0.0}
+            tier_stats = {k: overall_stats for k in ['High','Medium','Low']}
+    except Exception:
+        overall_stats = {'count':0,'wins':0,'losses':0,'pushes':0,'acc':0.0,'stake':0.0,'pnl':0.0,'roi':0.0}
+        tier_stats = {k: overall_stats for k in ['High','Medium','Low']}
+    def fmt_pct(x):
+        try:
+            return f"{x*100:.1f}%"
+        except Exception:
+            return ""
+    def fmt_money(x):
+        try:
+            return f"${x:.0f}"
+        except Exception:
+            return "$0"
+    return render_template_string('''
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background:#f4f6f9; margin:0; }
+        h1 { font-size:1.6rem; margin:0 0 10px; }
+        h2 { margin:28px 0 8px; font-size:1.25rem; }
+        .wrap { max-width:1200px; margin:18px auto 60px; background:#fff; padding:26px 30px 34px; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,.08);} 
+        table { width:100%; border-collapse:collapse; margin-top:6px; }
+        th,td { border:1px solid #e1e5ec; padding:6px 8px; font-size:.92rem; text-align:center; }
+        th { background:#f0f4f9; }
+        .nav { font-size:.85rem; margin-bottom:12px; text-align:right; }
+        .nav a { color:#1b4d91; text-decoration:none; margin-left:10px; }
+        .summary { background:#f8fafc; border:1px solid #e0e7ef; padding:10px 14px; border-radius:10px; font-size:.85rem; line-height:1.5; }
+        .kpi-line { margin:8px 0 4px; }
+        .section-empty { font-size:.85rem; color:#777; margin:4px 0 14px; }
+        .filters form { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:12px 0 4px; }
+        select, input[type=number] { padding:4px 6px; }
+        button { padding:6px 12px; border:1px solid #2d6cdf; background:#2d6cdf; color:#fff; border-radius:6px; cursor:pointer; }
+        button.secondary { background:#fff; color:#2d6cdf; }
+        .conf-high { background:#eaf7ef; }
+        .conf-medium { background:#fff7e6; }
+        .conf-low { background:#fdecee; }
+        caption { text-align:left; font-weight:600; margin:12px 0 4px; }
+        .meta-bar { font-size:.75rem; color:#555; margin-top:4px; }
+        @media (max-width:900px){ th,td { font-size:.72rem; padding:4px; } }
+    </style>
+    <div class="wrap">
+        <div class="nav"><a href="/">Cards</a> | <a href="/recommendations">Recommendations</a> | <a href="/recommendations/performance">Performance</a></div>
+        <h1>NCAAF Betting – Recommendations</h1>
+        <div class="summary">
+            <div class="kpi-line"><b>OVERALL</b> {{fmt_pct(overall_stats.acc)}} Accuracy {{overall_stats.wins}}W-{{overall_stats.losses}}L{% if overall_stats.pushes %}-{{overall_stats.pushes}}P{% endif %} / {{overall_stats.wins + overall_stats.losses + overall_stats.pushes}} settled ROI: {{fmt_pct(overall_stats.roi)}} Stake: {{fmt_money(overall_stats.stake)}} | P/L: {{fmt_money(overall_stats.pnl)}} Total picks: {{overall_stats.count}}</div>
+            <div class="kpi-line">HIGH {{fmt_pct(tier_stats['High'].acc)}} Acc {{tier_stats['High'].wins}}W-{{tier_stats['High'].losses}}L{% if tier_stats['High'].pushes %}-{{tier_stats['High'].pushes}}P{% endif %} ROI: {{fmt_pct(tier_stats['High'].roi)}} Stake: {{fmt_money(tier_stats['High'].stake)}} | P/L: {{fmt_money(tier_stats['High'].pnl)}} Picks: {{tier_stats['High'].count}}</div>
+            <div class="kpi-line">MEDIUM {{fmt_pct(tier_stats['Medium'].acc)}} Acc {{tier_stats['Medium'].wins}}W-{{tier_stats['Medium'].losses}}L{% if tier_stats['Medium'].pushes %}-{{tier_stats['Medium'].pushes}}P{% endif %} ROI: {{fmt_pct(tier_stats['Medium'].roi)}} Stake: {{fmt_money(tier_stats['Medium'].stake)}} | P/L: {{fmt_money(tier_stats['Medium'].pnl)}} Picks: {{tier_stats['Medium'].count}}</div>
+            <div class="kpi-line">LOW {{fmt_pct(tier_stats['Low'].acc)}} Acc {{tier_stats['Low'].wins}}W-{{tier_stats['Low'].losses}}L{% if tier_stats['Low'].pushes %}-{{tier_stats['Low'].pushes}}P{% endif %} ROI: {{fmt_pct(tier_stats['Low'].roi)}} Stake: {{fmt_money(tier_stats['Low'].stake)}} | P/L: {{fmt_money(tier_stats['Low'].pnl)}} Picks: {{tier_stats['Low'].count}}</div>
+            <div class="meta-bar">Sorted by {{ 'confidence then edge' if sort_q!='edge_desc' else 'edge descending' }}. Moneyline, spread (-110 assumed if book price missing) and totals included.</div>
         </div>
-        <script>
-        const el = id => document.getElementById(id);
-        function qs() {
-            const p = new URLSearchParams();
-            const week = el('week').value.trim();
-            const market = document.querySelector('.tab.active')?.dataset.market || '';
-            const sort = el('sort').value.trim();
-            const bankroll = el('bankroll').value.trim();
-            const kelly = el('kelly').value.trim();
-            const ev = el('ev').value.trim();
-            const limit = el('limit').value.trim();
-            if (week) p.set('week', week);
-            if (market) p.set('market', market);
-            if (sort) p.set('sort', sort);
-            if (bankroll) p.set('bankroll', bankroll);
-            if (kelly) p.set('kelly', kelly);
-            if (ev) p.set('ev', ev);
-            if (limit) p.set('limit', limit);
-            return p.toString();
-        }
-        function pillClass(t) {
-            const s = (t||'').toLowerCase();
-            if (s==='high') return 'pill high';
-            if (s==='medium') return 'pill medium';
-            return 'pill low';
-        }
-        function fmt(n, d=2) {
-            if (n===null || n===undefined || Number.isNaN(n)) return '';
-            try { return Number(n).toFixed(d); } catch { return n; }
-        }
-        function toLocal(iso) {
-            try { return new Date(iso).toLocaleString(); } catch { return iso||''; }
-        }
-        function renderCards(list) {
-            const frag = document.createDocumentFragment();
-            list.forEach(r => {
-                const card = document.createElement('div');
-                card.className = 'rec-card';
-                const left = document.createElement('div');
-                left.className = 'lhs';
-                left.innerHTML = `
-                    <div class="row">
-                      <span class="pill ${pillClass(r.confidence)}">${r.confidence||''}</span>
-                      <span class="meta">${toLocal(r.start_iso)||r.game_time||''}</span>
-                    </div>
-                    <div class="teams">
-                      <span class="team"><span class="logo" style="background-image:url('${r.away_logo||''}')"></span>${r.away_team}</span>
-                      <span>@</span>
-                      <span class="team"><span class="logo" style="background-image:url('${r.home_logo||''}')"></span>${r.home_team}</span>
-                    </div>
-                    <div><b>${r.market}</b> — ${r.side}${r.line!==undefined && r.line!==null ? ' ' + r.line : ''} — Price ${r.price_american} — <span class="meta">${r.provider||''}</span></div>
-                    <div>Model p: ${fmt(r.model_prob,3)} | Implied: ${fmt(r.implied_prob,3)} | Kelly: ${fmt(r.kelly_f,3)} | Stake: $${fmt(r.stake,2)}</div>
-                `;
-                const right = document.createElement('div');
-                right.innerHTML = `<div class="edge">Edge: ${fmt(r.edge,3)}</div>`;
-                card.appendChild(left);
-                card.appendChild(right);
-                frag.appendChild(card);
-            });
-            el('results').appendChild(frag);
-        }
-        function renderTable(list) {
-            const cols = ['week','start_iso','market','side','line','price_american','home_team','away_team','provider','model_prob','implied_prob','edge','kelly_f','stake','confidence'];
-            const tbl = document.createElement('table');
-            const thead = document.createElement('thead');
-            thead.innerHTML = '<tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr>';
-            const tbody = document.createElement('tbody');
-            list.forEach(r => {
-                const tr = document.createElement('tr');
-                cols.forEach(c => {
-                    const td = document.createElement('td');
-                    let v = r[c];
-                    if (c==='start_iso') v = toLocal(r.start_iso||'');
-                    if (typeof v==='number') v = fmt(v, c==='stake'?2:3);
-                    td.textContent = v==null?'':v;
-                    tr.appendChild(td);
-                });
-                tbody.appendChild(tr);
-            });
-            tbl.appendChild(thead); tbl.appendChild(tbody);
-            el('results').appendChild(tbl);
-        }
-        async function fetchRecs() {
-            const url = '/api/recommendations?' + qs();
-            el('count').textContent = 'Loading…';
-            el('results').innerHTML = '';
-            try {
-                const res = await fetch(url);
-                const data = await res.json();
-                let list = data.results || [];
-                // Confidence filter
-                const cf = (el('confFilter').value||'').trim();
-                if (cf) list = list.filter(x => (x.confidence||'')===cf);
-                el('count').textContent = `Results: ${list.length}${data.week!==null?` (Week ${data.week})`:''}`;
-                const mode = el('viewMode').value;
-                if (mode==='table') renderTable(list); else renderCards(list);
-            } catch (e) {
-                el('count').textContent = 'Error loading recommendations.';
-            }
-        }
-        async function logShown() {
-            // Use the simple API to log top N (best effort; may not match sort exactly)
-            const p = new URLSearchParams();
-            const week = el('week').value.trim();
-            if (week) p.set('week', week);
-            p.set('bankroll', el('bankroll').value.trim());
-            p.set('kelly_factor', el('kelly').value.trim());
-            p.set('ev_threshold', el('ev').value.trim());
-            p.set('log', 'true');
-            const url = '/api/recommendations/simple?' + p.toString();
-            try {
-                const res = await fetch(url);
-                const data = await res.json();
-                alert(`Logged ${data.count||0} recommendations.`);
-            } catch (e) {
-                alert('Log failed.');
-            }
-        }
-        el('refreshBtn').addEventListener('click', fetchRecs);
-        el('logBtn').addEventListener('click', logShown);
-        // Tabs
-        document.querySelectorAll('#marketTabs .tab').forEach(t => t.addEventListener('click', () => {
-            document.querySelectorAll('#marketTabs .tab').forEach(x => x.classList.remove('active'));
-            t.classList.add('active');
-            fetchRecs();
-        }));
-        // View toggle
-        el('viewMode').addEventListener('change', fetchRecs);
-        // Auto-load on page open
-        fetchRecs();
-        </script>
-        ''', weeks=weeks, default_bankroll=default_bankroll, default_kelly=default_kelly, default_ev=default_ev, default_limit=default_limit)
+        <div class="filters">
+            <form method="GET">
+                <label>Week
+                    <select name="week">
+                        <option value="">(auto)</option>
+                        {% for w in weeks %}<option value="{{w}}" {% if sel_week==w %}selected{% endif %}>Week {{w}}</option>{% endfor %}
+                    </select>
+                </label>
+                <label>Sort
+                    <select name="sort">
+                        <option value="confidence_then_edge" {% if sort_q=='confidence_then_edge' %}selected{% endif %}>Confidence→Edge</option>
+                        <option value="edge_desc" {% if sort_q=='edge_desc' %}selected{% endif %}>Edge ↓</option>
+                    </select>
+                </label>
+                <label>Bankroll <input type="number" step="1" name="bankroll" value="{{bankroll}}" style="width:90px"/></label>
+                <label>Kelly <input type="number" step="0.05" name="kelly" value="{{kelly_factor}}" style="width:70px"/></label>
+                <label>Min EV <input type="number" step="0.01" name="ev" value="{{ev_threshold}}" style="width:70px"/></label>
+                <button type="submit">Apply</button>
+                <a href="/recommendations" style="margin-left:6px; text-decoration:none;"><button type="button" class="secondary">Reset</button></a>
+            </form>
+        </div>
+        <h2>High confidence</h2>
+        {% if high %}
+        <table class="conf-high"><tr><th>Matchup</th><th>Market</th><th>Recommendation</th><th>Price</th><th>Edge</th><th>Stake</th><th>Model p</th><th>Date</th></tr>
+            {% for r in high %}
+            <tr>
+                <td>{{r.away_team}} @ {{r.home_team}}</td>
+                <td>{{r.market}}</td>
+                <td>{{r.side}}{% if r.line is defined and r.line is not none %} {{r.line}}{% endif %} {{r.confidence}}</td>
+                <td>{{r.price_american}}</td>
+                <td>{{'%0.1f'%(r.edge*100) if r.edge is not none else ''}}%</td>
+                <td>${{'%0.2f'%r.stake}}</td>
+                <td>{{'%0.1f'%(r.model_prob*100) if r.model_prob is not none else ''}}%</td>
+                <td>{{r.display_time}}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% else %}<div class="section-empty">No high confidence recommendations.</div>{% endif %}
+        <h2>Medium confidence</h2>
+        {% if medium %}
+        <table class="conf-medium"><tr><th>Matchup</th><th>Market</th><th>Recommendation</th><th>Price</th><th>Edge</th><th>Stake</th><th>Model p</th><th>Date</th></tr>
+            {% for r in medium %}
+            <tr>
+                <td>{{r.away_team}} @ {{r.home_team}}</td>
+                <td>{{r.market}}</td>
+                <td>{{r.side}}{% if r.line is defined and r.line is not none %} {{r.line}}{% endif %} {{r.confidence}}</td>
+                <td>{{r.price_american}}</td>
+                <td>{{'%0.1f'%(r.edge*100) if r.edge is not none else ''}}%</td>
+                <td>${{'%0.2f'%r.stake}}</td>
+                <td>{{'%0.1f'%(r.model_prob*100) if r.model_prob is not none else ''}}%</td>
+                <td>{{r.display_time}}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% else %}<div class="section-empty">No medium confidence recommendations.</div>{% endif %}
+        <h2>Low confidence</h2>
+        {% if low %}
+        <table class="conf-low"><tr><th>Matchup</th><th>Market</th><th>Recommendation</th><th>Price</th><th>Edge</th><th>Stake</th><th>Model p</th><th>Date</th></tr>
+            {% for r in low %}
+            <tr>
+                <td>{{r.away_team}} @ {{r.home_team}}</td>
+                <td>{{r.market}}</td>
+                <td>{{r.side}}{% if r.line is defined and r.line is not none %} {{r.line}}{% endif %} {{r.confidence}}</td>
+                <td>{{r.price_american}}</td>
+                <td>{{'%0.1f'%(r.edge*100) if r.edge is not none else ''}}%</td>
+                <td>${{'%0.2f'%r.stake}}</td>
+                <td>{{'%0.1f'%(r.model_prob*100) if r.model_prob is not none else ''}}%</td>
+                <td>{{r.display_time}}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% else %}<div class="section-empty">No low confidence recommendations.</div>{% endif %}
+        <h2>Other</h2>
+        {% if other %}
+            <table><tr><th>Matchup</th><th>Market</th><th>Recommendation</th><th>Price</th><th>Edge</th><th>Stake</th><th>Model p</th><th>Date</th></tr>
+            {% for r in other %}
+            <tr>
+                <td>{{r.away_team}} @ {{r.home_team}}</td>
+                <td>{{r.market}}</td>
+                <td>{{r.side}}{% if r.line is defined and r.line is not none %} {{r.line}}{% endif %}{% if r.confidence %} {{r.confidence}}{% endif %}</td>
+                <td>{{r.price_american}}</td>
+                <td>{{'%0.1f'%(r.edge*100) if r.edge is not none else ''}}%</td>
+                <td>${{'%0.2f'%r.stake}}</td>
+                <td>{{'%0.1f'%(r.model_prob*100) if r.model_prob is not none else ''}}%</td>
+                <td>{{r.display_time}}</td>
+            </tr>
+            {% endfor %}
+            </table>
+        {% else %}<div class="section-empty">No other recommendations.</div>{% endif %}
+        <div style="margin-top:30px; font-size:.75rem; color:#666;">Generated at {{now}}. Edge = model EV (expected value) using American odds. Kelly stake capped & scaled. Times shown in original schedule timezone if available.</div>
+    </div>
+    ''', weeks=weeks, sel_week=sel_week, sort_q=sort_q, bankroll=bankroll, kelly_factor=kelly_factor, ev_threshold=ev_threshold,
+       high=high, medium=medium, low=low, other=other,
+       overall_stats=overall_stats, tier_stats=tier_stats, fmt_pct=fmt_pct, fmt_money=fmt_money, now=datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'))
 @app.route('/recommendations/performance')
 def recommendations_performance_page():
     # Read performance via the same CSV and simple aggregation
