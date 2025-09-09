@@ -2246,6 +2246,14 @@ def recommendations_api():
             if market_filter and ent.get('market') != market_filter:
                 continue
             out.append(ent)
+        # Deduplicate: keep highest edge per (season,week,home,away,market,side)
+        dedup = {}
+        for r in out:
+            dkey = (r.get('season'), r.get('week'), r.get('home_team'), r.get('away_team'), r.get('market'), r.get('side'))
+            prev = dedup.get(dkey)
+            if prev is None or (r.get('edge') or 0) > (prev.get('edge') or 0):
+                dedup[dkey] = r
+        out = list(dedup.values())
         # Sorting
         try:
             if sort_key == 'time':
@@ -4222,6 +4230,14 @@ def recommendations_page():
         row = idx.get(key)
         start_iso, sort_ts, display_time = _parse_start_ts(row) if row is not None else ('', None, '')
         enriched.append({**rec, 'confidence': tier, 'confidence_score': score, 'start_iso': start_iso, 'display_time': display_time, 'sort_ts': sort_ts})
+    # Deduplicate recommendations (server page) by (season,week,home,away,market,side) keeping highest edge
+    dedup_page = {}
+    for r in enriched:
+        dkey = (r.get('season'), r.get('week'), r.get('home_team'), r.get('away_team'), r.get('market'), r.get('side'))
+        prev = dedup_page.get(dkey)
+        if prev is None or (r.get('edge') or 0) > (prev.get('edge') or 0):
+            dedup_page[dkey] = r
+    enriched = list(dedup_page.values())
     # Sorting primary: confidence tier order (High, Medium, Low) then edge desc
     def _tier_rank(t: str):
         s = (t or '').lower()
