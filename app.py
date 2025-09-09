@@ -2300,6 +2300,28 @@ def index():
                     selected_week = w_int
         except Exception:
             pass
+        # If no explicit week chosen, pick the "current" (upcoming) week instead of earliest or last-completed.
+        if week_q is None:
+            try:
+                # Determine current week based on earliest game date for each week.
+                # Strategy: choose the smallest week whose earliest game date is >= (today - 2 days).
+                today = dt.date.today()
+                week_min_dates = {}
+                if 'start_date' in pred_df.columns:
+                    tmp = pred_df[['week','start_date']].dropna().copy()
+                    # Coerce start_date to datetime safely
+                    tmp['start_dt'] = pd.to_datetime(tmp['start_date'], errors='coerce', utc=True)
+                    tmp = tmp.dropna(subset=['start_dt'])
+                    for w, grp in tmp.groupby('week'):
+                        try:
+                            week_min_dates[int(w)] = grp['start_dt'].min().date()
+                        except Exception:
+                            continue
+                candidate_weeks = [w for w,d in week_min_dates.items() if d >= (today - dt.timedelta(days=2))]
+                if candidate_weeks:
+                    selected_week = min(candidate_weeks)
+            except Exception:
+                pass
         if weeks and selected_week is None:  # auto-pick most recent with finals
             try:
                 finals_counts = {}
@@ -2581,6 +2603,7 @@ def index():
         <div style="text-align:center; margin:-2px 0 8px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
             <button type="button" id="toggleFinalsBtn" style="background:#8e44ad;">{{ 'Show All Games' if filter_type == 'completed' else 'Show Finals Only' }}</button>
             <button type="button" id="toggleScopeBtn" style="background:#16a085;">{{ 'Include Non-FBS' if hide_both_unknown else 'Hide Non-FBS' }}</button>
+            <button type="button" id="toggleFBSvFBSBtn" style="background:#34495e;">FBS vs FBS</button>
         </div>
         <div style="text-align:center; margin:-6px 0 10px;">
             <label style="font-size:0.95em;color:#34495e;"><input type="checkbox" id="toggleWxTotals" checked> Show weather-adjusted totals</label>
@@ -3094,6 +3117,27 @@ def index():
                             } else {
                                 url.searchParams.set('include_non_fbs','1');
                                 // When including non-FBS, keep existing hide_both_unknown if user forced earlier
+                            }
+                            if(!url.searchParams.get('week')){ url.searchParams.set('week','{{ selected_week }}'); }
+                            window.location.href = url.toString();
+                        });
+                    }
+                    const fbsBtn = document.getElementById('toggleFBSvFBSBtn');
+                    if(fbsBtn){
+                        // Initialize active state based on matchup param
+                        try {
+                            const currentUrl = new URL(window.location.href);
+                            if(currentUrl.searchParams.get('matchup') === 'FBSvFBS'){
+                                fbsBtn.classList.add('active');
+                                fbsBtn.style.outline='2px solid #2ecc71';
+                            }
+                        } catch(e) {}
+                        fbsBtn.addEventListener('click', ()=>{
+                            const url = new URL(window.location.href);
+                            if(url.searchParams.get('matchup') === 'FBSvFBS'){
+                                url.searchParams.delete('matchup');
+                            } else {
+                                url.searchParams.set('matchup','FBSvFBS');
                             }
                             if(!url.searchParams.get('week')){ url.searchParams.set('week','{{ selected_week }}'); }
                             window.location.href = url.toString();
