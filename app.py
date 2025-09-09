@@ -2354,6 +2354,25 @@ def index():
             filtered_games = filtered_games[(filtered_games['actual_home_points'].isna()) & (filtered_games['actual_away_points'].isna())]
         if hide_both_unknown:
             filtered_games = filtered_games[~((filtered_games['home_conference']=='Unknown') & (filtered_games['away_conference']=='Unknown'))]
+        # Optional matchup filter (currently only supports FBSvFBS like API endpoint)
+        matchup_filter = request.args.get('matchup','').strip().lower()
+        if matchup_filter == 'fbsvfbs' and {'home_conference','away_conference'}.issubset(filtered_games.columns):
+            fbs_confs = {
+                'acc','sec','big ten','big 12','pac 12','american','mountain west','sun belt','mac','conference usa','independent','independents','fbs independents','independent (fbs)'
+            }
+            fbs_indies = {'notre dame','army','navy','umass','uconn','new mexico state'}
+            def _both_fbs(row):
+                try:
+                    hc = str(row.get('home_conference','')).strip().lower()
+                    ac = str(row.get('away_conference','')).strip().lower()
+                    ht = str(row.get('home_team','')).strip().lower()
+                    at = str(row.get('away_team','')).strip().lower()
+                    def _is_fbs(team, conf):
+                        return conf in fbs_confs or team in fbs_indies
+                    return _is_fbs(ht,hc) and _is_fbs(at,ac)
+                except Exception:
+                    return False
+            filtered_games = filtered_games[filtered_games.apply(_both_fbs, axis=1)]
         try:
             if {'week','home_team','away_team'}.issubset(filtered_games.columns):
                 filtered_games = filtered_games.sort_values(by=['start_date','home_team','away_team']).drop_duplicates(subset=['week','home_team','away_team'], keep='first')
