@@ -1127,6 +1127,11 @@ def _build_game_card(game_row: pd.Series) -> dict:
         'ats_edge_num': ats_edge,
         'ats_actual_result': ats_actual_result,
         'ats_correct': ats_correct,
+        # Edge summary fields (duplicates numeric forms for clearer API names)
+        'edge_spread': ats_edge,
+        'edge_total': ou_edge,
+        # edge_moneyline_ev: best expected value (per 1 unit risk) among available MLs
+        'edge_moneyline_ev': None,
         'wx_temp_f': r2(wx_temp) if wx_temp is not None else None,
         'wx_wind_mph': r2(wx_wind) if wx_wind is not None else None,
         'wx_adjust_total': r2(wx_adj) if wx_adj is not None else None,
@@ -2451,10 +2456,11 @@ def index():
         pass
 
     page_html = render_template_string('''
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
     <style>
         html, body { height:100%; }
-        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6fa; margin: 0; padding: 0 0 40px; }
-        .container { max-width: 1100px; margin: 16px auto 0; background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); padding: 20px 22px 28px; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6fa; margin: 0; padding: 0 0 40px; -webkit-font-smoothing: antialiased; }
+        .container { max-width: 1100px; margin: 8px auto 0; background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); padding: 16px 18px 24px; }
         h2 { text-align: center; color: #2c3e50; margin-bottom: 24px; }
         form { display: flex; flex-direction: column; gap: 16px; margin-bottom: 32px; }
         /* Centered filter bar */
@@ -2507,8 +2513,28 @@ def index():
 
         /* Responsive grid for cards */
     .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
-    @media (min-width: 900px) { .grid { grid-template-columns: 1fr 1fr; } }
-    @media (min-width: 1300px) { .grid { grid-template-columns: 1fr 1fr 1fr; } }
+    @media (min-width: 660px) { .grid { grid-template-columns: 1fr 1fr; } }
+    @media (min-width: 1150px) { .grid { grid-template-columns: 1fr 1fr 1fr; } }
+
+    /* Mobile tweaks */
+    @media (max-width: 660px) {
+        .container { border-radius:0; box-shadow:none; padding:12px 10px 40px; }
+        h2 { font-size:1.25rem; margin-top:4px; }
+        .topbar { flex-wrap:wrap; gap:6px; padding:8px 6px; }
+        .links { overflow-x:auto; white-space:nowrap; width:100%; font-size:0.85rem; }
+        .links a { display:inline-block; padding:4px 6px; }
+        .summary { flex-direction:column; gap:4px; font-size:0.8rem; }
+        .teams { grid-template-columns: 1fr 40px 1fr; }
+        .team-logo { height:42px; }
+        .team-name { font-size:0.85rem; padding:3px 6px; }
+        .score { font-size:1.2rem; }
+        .card { padding:10px 10px 8px; }
+        .rows { grid-template-columns:1fr; }
+        .odds-table th, .odds-table td { padding:6px 4px; font-size:0.65rem; }
+        button, select { font-size:0.8rem; }
+        #backToTop { right:10px; bottom:10px; padding:6px 10px; }
+        .filterbar { gap:6px 8px; padding:6px 6px; }
+    }
 
         .filterbar .control { display: inline-flex; align-items: center; gap: 8px; }
         .filterbar .control label { font-size: 0.95em; margin: 0; color: #34495e; }
@@ -4996,6 +5022,7 @@ def api_game_cards():
       date: YYYY-MM-DD (start_date prefix) when available
       full=1 : bypass initial cap (otherwise finals + 80 upcoming)
       sort: time|winprob_desc|ou_edge_desc|ats_edge_desc
+    matchup: FBSvFBS (limits to only FBS vs FBS games). Future: could extend (FBSvNonFBS)
     """
     try:
         # Cache lookup key based on request args (stable ordering)
@@ -5006,7 +5033,8 @@ def api_game_cards():
             request.args.get('conference',''),
             request.args.get('date',''),
             request.args.get('full','0'),
-            request.args.get('sort','time')
+        request.args.get('sort','time'),
+        request.args.get('matchup','')
         )
         cached = GAME_CARDS_CACHE.get(key)
         if cached:
@@ -5094,6 +5122,26 @@ def api_game_cards():
             dfw = dfw[(dfw['actual_home_points'].notna()) & (dfw['actual_away_points'].notna())]
         elif filt_type == 'upcoming':
             dfw = dfw[(dfw['actual_home_points'].isna()) & (dfw['actual_away_points'].isna())]
+        matchup_filter = request.args.get('matchup','').strip().lower()
+        if matchup_filter == 'fbsvfbs':
+            # Keep only rows where both teams FBS
+            if {'home_conference','away_conference'}.issubset(dfw.columns):
+                fbs_confs = {
+                    'acc','sec','big ten','big 12','pac 12','american','mountain west','sun belt','mac','conference usa','independent','independents','fbs independents','independent (fbs)'
+                }
+                fbs_indies = {'notre dame','army','navy','umass','uconn','new mexico state'}
+                def _is_fbs_row(row):
+                    try:
+                        hc = str(row.get('home_conference','')).strip().lower()
+                        ac = str(row.get('away_conference','')).strip().lower()
+                        ht = str(row.get('home_team','')).strip().lower()
+                        at = str(row.get('away_team','')).strip().lower()
+                        def _fbs(team, conf):
+                            return conf in fbs_confs or team in fbs_indies
+                        return _fbs(ht,hc) and _fbs(at,ac)
+                    except Exception:
+                        return False
+                dfw = dfw[dfw.apply(_is_fbs_row, axis=1)]
         # Build game cards
         cards = []
         for _, r in dfw.iterrows():

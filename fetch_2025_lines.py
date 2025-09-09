@@ -194,6 +194,15 @@ def _extract_markets(bookmaker: Dict[str, Any], home_team: str, away_team: str) 
     home_ml = None
     away_ml = None
     markets = bookmaker.get('markets', [])
+    home_norm = norm_team(home_team)
+    away_norm = norm_team(away_team)
+    def _belongs(out_name_norm: str, base_norm: str) -> bool:
+        if out_name_norm == base_norm:
+            return True
+        # Allow mascot extension (e.g., 'arizona wildcats' startswith 'arizona ')
+        if out_name_norm.startswith(base_norm + ' '):
+            return True
+        return False
     for m in markets:
         key = m.get('key')
         outcomes = m.get('outcomes', [])
@@ -201,10 +210,10 @@ def _extract_markets(bookmaker: Dict[str, Any], home_team: str, away_team: str) 
             # outcomes contain team, point, price
             for o in outcomes:
                 t = norm_team(o.get('name',''))
-                if t == norm_team(home_team):
+                if _belongs(t, home_norm):
                     try: spread_val = float(o.get('point'))
                     except Exception: pass
-                elif t == norm_team(away_team):
+                elif _belongs(t, away_norm):
                     # If we only saw away spread (positive), derive home as negative
                     if spread_val is None:
                         try:
@@ -226,9 +235,9 @@ def _extract_markets(bookmaker: Dict[str, Any], home_team: str, away_team: str) 
             for o in outcomes:
                 t = norm_team(o.get('name',''))
                 price = o.get('price')
-                if t == norm_team(home_team):
+                if _belongs(t, home_norm):
                     home_ml = price
-                elif t == norm_team(away_team):
+                elif _belongs(t, away_norm):
                     away_ml = price
     provider_entry = {
         'provider': bookmaker.get('title') or bookmaker.get('key'),
@@ -246,6 +255,8 @@ def build_lines_rows(week: int, odds_events: List[Dict[str, Any]], debug: bool =
     # Map normalized pair -> schedule row
     schedule_index: dict[tuple[str,str], tuple[str,str]] = {}
     schedule_team_norms: set[str] = set()
+    # Build schedule index for normalization lookups
+
     for _, r in pred_df.iterrows():
         ht = str(r['home_team']); at = str(r['away_team'])
         n_ht = norm_team(ht); n_at = norm_team(at)
@@ -313,6 +324,67 @@ def build_lines_rows(week: int, odds_events: List[Dict[str, Any]], debug: bool =
         sample = unmatched[:10]
         print('[debug] sample unmatched events:', json.dumps(sample, indent=2), file=sys.stderr)
     return rows
+
+# ---------------------------------------------------------------------------
+# Helpers for ML enhancement / merging second-pass h2h fetch
+# ---------------------------------------------------------------------------
+
+def _classify_fbs_pairs(pred_df: pd.DataFrame) -> set[tuple[str,str]]:
+    fbs_confs = {
+        'acc','sec','big ten','big 12','pac 12','american','mountain west','sun belt','mac','conference usa','independent','independents','fbs independents','independent (fbs)'
+    }
+    fbs_indies = {'notre dame','army','navy','umass','uconn','new mexico state'}
+    pairs: set[tuple[str,str]] = set()
+    for _, r in pred_df.iterrows():
+        try:
+            ht = str(r['home_team']); at = str(r['away_team'])
+            hc = str(r.get('home_conference','') or '').lower().strip()
+            ac = str(r.get('away_conference','') or '').lower().strip()
+            def _is_fbs(team, conf):
+                t = str(team or '').lower().strip()
+                return conf in fbs_confs or t in fbs_indies
+            if _is_fbs(ht, hc) and _is_fbs(at, ac):
+                pairs.add((ht, at))
+        except Exception:
+            continue
+    return pairs
+
+def _rows_to_index(rows: List[Dict[str, Any]]) -> dict[tuple[str,str], Dict[str, Any]]:
+    idx: dict[tuple[str,str], Dict[str, Any]] = {}
+    for r in rows:
+        try:
+            idx[(r['homeTeam'], r['awayTeam'])] = r
+        except Exception:
+            continue
+    return idx
+
+def _merge_h2h_only_rows(base_rows: List[Dict[str, Any]], h2h_rows: List[Dict[str, Any]]):
+    base_idx = _rows_to_index(base_rows)
+    for r in h2h_rows:
+        k = (r['homeTeam'], r['awayTeam'])
+        if k not in base_idx:
+            base_rows.append(r)
+            base_idx[k] = r
+            continue
+        try:
+            existing_lines = json.loads(base_idx[k]['lines']) if isinstance(base_idx[k]['lines'], str) else base_idx[k]['lines']
+            new_lines = json.loads(r['lines']) if isinstance(r['lines'], str) else r['lines']
+            prov_map = { (pl.get('provider') or '').lower(): pl for pl in existing_lines }
+            for nl in new_lines:
+                pname = (nl.get('provider') or '').lower()
+                if not pname:
+                    continue
+                if pname in prov_map:
+                    pl = prov_map[pname]
+                    if (pl.get('homeMoneyline') is None or pl.get('homeMoneyline')=='') and nl.get('homeMoneyline') is not None:
+                        pl['homeMoneyline'] = nl.get('homeMoneyline')
+                    if (pl.get('awayMoneyline') is None or pl.get('awayMoneyline')=='') and nl.get('awayMoneyline') is not None:
+                        pl['awayMoneyline'] = nl.get('awayMoneyline')
+                else:
+                    existing_lines.append(nl)
+            base_idx[k]['lines'] = json.dumps(existing_lines, separators=(',',':'))
+        except Exception:
+            continue
 
 # ---------------------------------------------------------------------------
 # Merge & write
@@ -383,6 +455,39 @@ def main():
         print(f"[error] fetch failed: {e}", file=sys.stderr)
         return 4
     rows = build_lines_rows(week, events, debug=args.debug)
+    # Attempt second-pass h2h fetch if FBS vs FBS moneylines missing
+    try:
+        pred_df = _select_predictions_frame(week)
+        fbs_pairs = _classify_fbs_pairs(pred_df)
+        # Determine which FBS vs FBS pairs lack any moneyline
+        rows_idx = _rows_to_index(rows)
+        missing_ml = []
+        for (ht, at) in fbs_pairs:
+            r = rows_idx.get((ht, at))
+            if not r:
+                missing_ml.append((ht, at))
+                continue
+            try:
+                line_list = json.loads(r['lines']) if isinstance(r['lines'], str) else r['lines']
+            except Exception:
+                line_list = []
+            has_ml = any( (pl.get('homeMoneyline') is not None or pl.get('awayMoneyline') is not None) for pl in line_list )
+            if not has_ml:
+                missing_ml.append((ht, at))
+        if missing_ml:
+            extra_regions = os.environ.get('ODDS_API_H2H_EXTRA_REGIONS', 'us,us2,eu,uk')
+            if args.debug:
+                print(f"[info] Second-pass h2h fetch for missing ML games: {len(missing_ml)} regions={extra_regions}", file=sys.stderr)
+            try:
+                h2h_events = fetch_odds(api_key, sport, extra_regions, 'h2h', odds_format)
+                h2h_rows = build_lines_rows(week, h2h_events, debug=args.debug)
+                _merge_h2h_only_rows(rows, h2h_rows)
+            except Exception as e:
+                if args.debug:
+                    print(f"[warn] second-pass h2h fetch failed: {e}", file=sys.stderr)
+    except Exception as e:
+        if args.debug:
+            print(f"[warn] ML enhancement logic failed: {e}", file=sys.stderr)
     if not rows:
         print('[warn] No rows matched schedule / produced provider lines; nothing written.')
         return 0
