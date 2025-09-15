@@ -2435,6 +2435,15 @@ def index():
         finals_count_week = int(((week_scope_df['actual_home_points'].notna()) & (week_scope_df['actual_away_points'].notna())).sum())
         total_games_week = int(len(week_scope_df))
         finals_pct_week = (f"{(finals_count_week/total_games_week*100):.1f}%" if total_games_week>0 else '—')
+        # Odds coverage for selected week: count games with at least one real (non-synthetic) bookmaker line
+        try:
+            odds_with_lines_week = 0
+            for _, r in week_scope_df.iterrows():
+                lines = get_betting_lines(int(r.get('season', 2025)), int(r.get('week', selected_week or 0)), r.get('home_team'), r.get('away_team'))
+                if lines and any(not (l.get('synthetic') or False) for l in lines):
+                    odds_with_lines_week += 1
+        except Exception:
+            odds_with_lines_week = 0
         unknown_pending = int(((week_scope_df['home_conference']=='Unknown') & (week_scope_df['away_conference']=='Unknown') & (week_scope_df['actual_home_points'].isna()) & (week_scope_df['actual_away_points'].isna())).sum())
     except Exception:
         finals_count_week = 0; total_games_week = 0; finals_pct_week='—'; unknown_pending=0
@@ -2617,7 +2626,9 @@ def index():
     {% endif %}
     </div> <!-- end topbar -->
     <div class="banner">
-        Week {{selected_week}}: <strong>{{finals_count_week}}</strong> finals / {{total_games_week}} games ({{finals_pct_week}} complete)
+        Week {{selected_week}}:
+        <strong>{{finals_count_week}}</strong> finals / {{total_games_week}} games ({{finals_pct_week}} complete)
+        • Odds coverage: <strong>{{odds_with_lines_week}}</strong> / {{total_games_week}} games with lines
     </div>
         <h2>2025 NCAA Football Predictions</h2>
         <div class="summary">
