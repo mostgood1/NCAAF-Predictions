@@ -2340,6 +2340,19 @@ def index():
                 selected_week = max(done_weeks) if done_weeks else min(weeks)
             except Exception:
                 selected_week = weeks[0]
+        # If the chosen week has no finals yet (e.g., upcoming Week 4 on Monday),
+        # fallback to the most recent week that does have finals so FINAL cards render by default.
+        try:
+            if selected_week is not None:
+                sub_sel = pred_df[pred_df['week']==int(selected_week)]
+                sel_finals = int((sub_sel['actual_home_points'].notna() & sub_sel['actual_away_points'].notna()).sum())
+                if sel_finals == 0 and weeks:
+                    finals_counts = {int(w): int((pred_df[pred_df['week']==w]['actual_home_points'].notna() & pred_df[pred_df['week']==w]['actual_away_points'].notna()).sum()) for w in weeks}
+                    done_weeks = [w for w,c in finals_counts.items() if c>0]
+                    if done_weeks:
+                        selected_week = max(done_weeks)
+        except Exception:
+            pass
         week_games = pred_df[pred_df['week']==int(selected_week)].copy() if selected_week is not None else pred_df.copy()
         week_games['date_only'] = week_games.get('start_date','').astype(str).str[:10]
         all_dates = sorted([d for d in week_games['date_only'].dropna().unique() if d])
@@ -3189,7 +3202,7 @@ def index():
         Build {{ BUILD_TIME }} • Commit {{ BUILD_COMMIT[:8] if BUILD_COMMIT else 'unknown' }} • Source {{ PRED_SOURCE }}
         • <a href="/version" style="color:#2980b9;">version JSON</a>
     </div>
-    ''', weeks=weeks, selected_week=selected_week, all_dates=all_dates, selected_date=selected_date, show_all=show_all, hide_both_unknown=hide_both_unknown, all_conferences=pred_df['home_conference'].unique(), selected_conference=selected_conference, game_cards=game_cards, filter_type=filter_type, summary=summary, sort_by=sort_by, HIDE_REFRESH=HIDE_REFRESH, finals_count_week=finals_count_week, total_games_week=total_games_week, finals_pct_week=finals_pct_week, unknown_pending=unknown_pending, BUILD_TIME=BUILD_TIME, BUILD_COMMIT=BUILD_COMMIT, PRED_SOURCE=PRED_SOURCE)
+    ''', weeks=weeks, selected_week=selected_week, all_dates=all_dates, selected_date=selected_date, show_all=show_all, hide_both_unknown=hide_both_unknown, all_conferences=pred_df['home_conference'].unique(), selected_conference=selected_conference, game_cards=game_cards, filter_type=filter_type, summary=summary, sort_by=sort_by, HIDE_REFRESH=HIDE_REFRESH, finals_count_week=finals_count_week, total_games_week=total_games_week, finals_pct_week=finals_pct_week, unknown_pending=unknown_pending, odds_with_lines_week=odds_with_lines_week, BUILD_TIME=BUILD_TIME, BUILD_COMMIT=BUILD_COMMIT, PRED_SOURCE=PRED_SOURCE)
     resp = make_response(page_html)
     resp.headers['Cache-Control'] = 'no-store, max-age=0'
     resp.headers['Pragma'] = 'no-cache'
