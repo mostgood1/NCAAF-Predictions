@@ -53,11 +53,18 @@ if(Test-Path $secretsPs1){
 # --- Ensure OpenWeather API key is available for downstream Python processes ---
 if($OpenWeatherApiKey){
     $env:OPENWEATHER_API_KEY = $OpenWeatherApiKey
+    $env:OWM_API_KEY = $OpenWeatherApiKey
+}
+if(-not $env:OPENWEATHER_API_KEY){
+    # Allow alternate env var names to satisfy the requirement
+    if($env:OWM_API_KEY){ $env:OPENWEATHER_API_KEY = $env:OWM_API_KEY }
+    elseif($env:OPENWEATHERMAP_API_KEY){ $env:OPENWEATHER_API_KEY = $env:OPENWEATHERMAP_API_KEY }
 }
 if(-not $env:OPENWEATHER_API_KEY){
     # 1) explicit key file
     if($OpenWeatherKeyFile -and (Test-Path $OpenWeatherKeyFile)){
         try { $env:OPENWEATHER_API_KEY = (Get-Content $OpenWeatherKeyFile -Raw).Trim() } catch {}
+        if($env:OPENWEATHER_API_KEY){ $env:OWM_API_KEY = $env:OPENWEATHER_API_KEY }
     }
 }
 if(-not $env:OPENWEATHER_API_KEY){
@@ -66,16 +73,30 @@ if(-not $env:OPENWEATHER_API_KEY){
     if($EnvFile){ $candidateEnv += $EnvFile }
     $candidateEnv += (Join-Path $root '.env')
     foreach($ef in $candidateEnv){
-        Set-EnvFromFileIfPresent -FilePath $ef -Keys @('OPENWEATHER_API_KEY')
+        Set-EnvFromFileIfPresent -FilePath $ef -Keys @('OPENWEATHER_API_KEY','OWM_API_KEY','OPENWEATHERMAP_API_KEY')
+        if(-not $env:OPENWEATHER_API_KEY){
+            if($env:OWM_API_KEY){ $env:OPENWEATHER_API_KEY = $env:OWM_API_KEY }
+            elseif($env:OPENWEATHERMAP_API_KEY){ $env:OPENWEATHER_API_KEY = $env:OPENWEATHERMAP_API_KEY }
+        }
         if($env:OPENWEATHER_API_KEY){ break }
     }
 }
 if(-not $env:OPENWEATHER_API_KEY){
     # 3) secrets fallback file
-    $owSecret = Join-Path $root 'secrets\openweather_api_key.txt'
-    if(Test-Path $owSecret){
-        try { $env:OPENWEATHER_API_KEY = (Get-Content $owSecret -Raw).Trim() } catch {}
-        if($env:OPENWEATHER_API_KEY){ Write-Host "[info] Loaded OPENWEATHER_API_KEY from secrets file" -ForegroundColor Cyan }
+    $owFiles = @(
+        (Join-Path $root 'secrets\openweather_api_key.txt'),
+        (Join-Path $root 'secrets\owm_api_key.txt'),
+        (Join-Path $root 'secrets\openweathermap_api_key.txt')
+    )
+    foreach($f in $owFiles){
+        if(Test-Path $f){
+            try { $env:OPENWEATHER_API_KEY = (Get-Content $f -Raw).Trim() } catch {}
+            if($env:OPENWEATHER_API_KEY){
+                $env:OWM_API_KEY = $env:OPENWEATHER_API_KEY
+                Write-Host "[info] Loaded OPENWEATHER_API_KEY from secrets file ($([System.IO.Path]::GetFileName($f)))" -ForegroundColor Cyan
+                break
+            }
+        }
     }
 }
 if(-not $env:OPENWEATHER_API_KEY){
