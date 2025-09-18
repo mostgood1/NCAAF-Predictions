@@ -21,35 +21,61 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 
+# --- Helper: parse .env style key=value files into env vars (only keys we care about) ---
+function Set-EnvFromFileIfPresent {
+    param(
+        [string]$FilePath,
+        [string[]]$Keys
+    )
+    if(-not $FilePath -or -not (Test-Path $FilePath)){ return }
+    try {
+        Get-Content $FilePath | ForEach-Object {
+            $line = $_.Trim()
+            if($line -and -not $line.StartsWith('#') -and $line -match '='){
+                $k,$v = $line.Split('=',2)
+                if($Keys -contains $k){
+                    $val = $v.Trim().Trim('"').Trim("'")
+                    if(-not [string]::IsNullOrWhiteSpace($val)){
+                        Set-Item -Path "Env:$k" -Value $val -ErrorAction SilentlyContinue | Out-Null
+                    }
+                }
+            }
+        }
+    } catch {}
+}
+
+# --- Optional: dot-source a secrets script if provided ---
+$secretsPs1 = Join-Path $root 'secrets\secrets.ps1'
+if(Test-Path $secretsPs1){
+    try { . $secretsPs1 } catch {}
+}
+
 # --- Ensure OpenWeather API key is available for downstream Python processes ---
 if($OpenWeatherApiKey){
     $env:OPENWEATHER_API_KEY = $OpenWeatherApiKey
-} elseif(-not $env:OPENWEATHER_API_KEY) {
+}
+if(-not $env:OPENWEATHER_API_KEY){
     # 1) explicit key file
     if($OpenWeatherKeyFile -and (Test-Path $OpenWeatherKeyFile)){
         try { $env:OPENWEATHER_API_KEY = (Get-Content $OpenWeatherKeyFile -Raw).Trim() } catch {}
     }
-    # 2) .env style file (parse key=value)
-    if(-not $env:OPENWEATHER_API_KEY){
-        $candidateEnv = @()
-        if($EnvFile){ $candidateEnv += $EnvFile }
-        $candidateEnv += (Join-Path $root '.env')
-        foreach($ef in $candidateEnv){
-            if(Test-Path $ef){
-                try {
-                    Get-Content $ef | ForEach-Object {
-                        $line = $_.Trim()
-                        if($line -and -not $line.StartsWith('#') -and $line -match '='){
-                            $k,$v = $line.Split('=',2)
-                            if($k -eq 'OPENWEATHER_API_KEY' -and -not [string]::IsNullOrWhiteSpace($v)){
-                                $env:OPENWEATHER_API_KEY = $v.Trim().Trim('"').Trim("'")
-                            }
-                        }
-                    }
-                } catch {}
-            }
-            if($env:OPENWEATHER_API_KEY){ break }
-        }
+}
+if(-not $env:OPENWEATHER_API_KEY){
+    # 2) .env style files
+    $candidateEnv = @()
+    if($EnvFile){ $candidateEnv += $EnvFile }
+    $candidateEnv += (Join-Path $root '.env')
+    foreach($ef in $candidateEnv){
+        Set-EnvFromFileIfPresent -FilePath $ef -Keys @('OPENWEATHER_API_KEY')
+        if($env:OPENWEATHER_API_KEY){ break }
+    }
+}
+if(-not $env:OPENWEATHER_API_KEY){
+    # 3) secrets fallback file
+    $owSecret = Join-Path $root 'secrets\openweather_api_key.txt'
+    if(Test-Path $owSecret){
+        try { $env:OPENWEATHER_API_KEY = (Get-Content $owSecret -Raw).Trim() } catch {}
+        if($env:OPENWEATHER_API_KEY){ Write-Host "[info] Loaded OPENWEATHER_API_KEY from secrets file" -ForegroundColor Cyan }
     }
 }
 if(-not $env:OPENWEATHER_API_KEY){
@@ -61,36 +87,34 @@ if(-not $env:OPENWEATHER_API_KEY){
 # --- Ensure Odds API key present ---
 if($OddsApiKey){
     $env:ODDS_API_KEY = $OddsApiKey
-} elseif(-not $env:ODDS_API_KEY) {
+}
+if(-not $env:ODDS_API_KEY){
     if($OddsApiKeyFile -and (Test-Path $OddsApiKeyFile)){
         try { $env:ODDS_API_KEY = (Get-Content $OddsApiKeyFile -Raw).Trim() } catch {}
     }
-    if(-not $env:ODDS_API_KEY -and $EnvFile -and (Test-Path $EnvFile)){
-        try {
-            Get-Content $EnvFile | ForEach-Object {
-                $line = $_.Trim(); if($line -and -not $line.StartsWith('#') -and $line -match '='){
-                    $k,$v = $line.Split('=',2)
-                    if($k -eq 'ODDS_API_KEY' -and -not [string]::IsNullOrWhiteSpace($v)){
-                        $env:ODDS_API_KEY = $v.Trim().Trim('"').Trim("'")
-                    }
-                }
-            }
-        } catch {}
+}
+if(-not $env:ODDS_API_KEY){
+    # .env style files (support both provided EnvFile and default .env like OpenWeather)
+    $candidateEnv2 = @()
+    if($EnvFile){ $candidateEnv2 += $EnvFile }
+    $candidateEnv2 += (Join-Path $root '.env')
+    foreach($ef in $candidateEnv2){
+        Set-EnvFromFileIfPresent -FilePath $ef -Keys @('ODDS_API_KEY')
+        if($env:ODDS_API_KEY){ break }
+    }
+}
+if(-not $env:ODDS_API_KEY){
+    # Secrets fallback file (not committed)
+    $secretFile = Join-Path $root 'secrets\odds_api_key.txt'
+    if(Test-Path $secretFile){
+        try { $env:ODDS_API_KEY = (Get-Content $secretFile -Raw).Trim() } catch {}
+        if($env:ODDS_API_KEY){ Write-Host "[info] Loaded ODDS_API_KEY from secrets file" -ForegroundColor Cyan }
     }
 }
 if(-not $env:ODDS_API_KEY){
     Write-Host "[warn] ODDS_API_KEY not set; real bookmaker odds fetch will be skipped." -ForegroundColor Yellow
 } else {
     Write-Host "[info] ODDS_API_KEY present (len=$($env:ODDS_API_KEY.Length))" -ForegroundColor Cyan
-}
-
-# Secrets fallback file (not committed)
-if(-not $env:ODDS_API_KEY){
-    $secretFile = Join-Path $root 'secrets/odds_api_key.txt'
-    if(Test-Path $secretFile){
-        try { $env:ODDS_API_KEY = (Get-Content $secretFile -Raw).Trim() } catch {}
-        if($env:ODDS_API_KEY){ Write-Host "[info] Loaded ODDS_API_KEY from secrets file" -ForegroundColor Cyan }
-    }
 }
 
 # Ensure logs directory exists
