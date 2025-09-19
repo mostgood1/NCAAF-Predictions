@@ -185,11 +185,17 @@ try {
             $recUrl = "http://127.0.0.1:5051/api/recommendations/simple?log=true&bankroll=$Bankroll&kelly_factor=$KellyFactor&ev_threshold=$EvThreshold"
             if($LogWeek){ $recUrl += "&week=$LogWeek" }
             Write-Host "Attempting to log recommendations via $recUrl" -ForegroundColor Cyan
-            # Use curl if available; fallback to Invoke-WebRequest
-            if(Get-Command curl -ErrorAction SilentlyContinue){
-                curl -s $recUrl | Out-Null
-            } else {
-                Invoke-WebRequest -Uri $recUrl -UseBasicParsing | Out-Null
+            # Prefer native curl.exe if available; otherwise use PowerShell web cmdlets
+            $curlExe = Get-Command -Name curl.exe -ErrorAction SilentlyContinue
+            if($curlExe){
+                & $curlExe.Path -s $recUrl | Out-Null
+            }
+            else {
+                try {
+                    Invoke-RestMethod -Method GET -Uri $recUrl -TimeoutSec 5 -ErrorAction SilentlyContinue | Out-Null
+                } catch {
+                    Invoke-WebRequest -Uri $recUrl -UseBasicParsing -TimeoutSec 5 -ErrorAction SilentlyContinue | Out-Null
+                }
             }
             Write-Host "Recommendations logging request sent." -ForegroundColor Green
         }
