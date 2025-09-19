@@ -827,15 +827,14 @@ def _build_game_card(game_row: pd.Series) -> dict:
     display_time_fallback = val_sd or val_api or ''
     start_iso = ''
     sort_ts = None
-    candidates = [c for c in [val_api, val_sd] if c]
-    for c in candidates:
+    # Parse both API and local start_date to UTC and reconcile
+    def _parse_to_utc(s_val: str | None):
+        if not s_val:
+            return None
         try:
-            s = c
-            # Normalize space to 'T'
+            s = s_val
             if 'T' not in s and ' ' in s:
                 s = s.replace(' ', 'T')
-            # Parse with fromisoformat; if fails, try pandas
-            dt_obj = None
             try:
                 if s.endswith('Z'):
                     dt_obj = datetime.fromisoformat(s.replace('Z', '+00:00'))
@@ -843,25 +842,39 @@ def _build_game_card(game_row: pd.Series) -> dict:
                     dt_obj = datetime.fromisoformat(s)
             except Exception:
                 try:
-                    dt_obj = pd.to_datetime(c, errors='coerce').to_pydatetime() if c else None
+                    dt_obj = pd.to_datetime(s_val, errors='coerce').to_pydatetime()
                 except Exception:
                     dt_obj = None
             if not dt_obj:
-                continue
-            # Ensure timezone-aware UTC
+                return None
             if getattr(dt_obj, 'tzinfo', None) is None:
-                dt_utc = dt_obj.replace(tzinfo=pytz.UTC)
-            else:
-                dt_utc = dt_obj.astimezone(pytz.UTC)
-            sort_ts = dt_utc.timestamp()
-            start_iso = dt_utc.isoformat().replace('+00:00', 'Z')
-            try:
-                display_time_fallback = dt_utc.strftime('%a, %b %d, %Y, %I:%M %p UTC')
-            except Exception:
-                display_time_fallback = start_iso
-            break
+                return dt_obj.replace(tzinfo=pytz.UTC)
+            return dt_obj.astimezone(pytz.UTC)
         except Exception:
-            continue
+            return None
+
+    dt_api_utc = _parse_to_utc(val_api)
+    dt_sd_utc = _parse_to_utc(val_sd)
+    chosen_dt = None
+    if dt_api_utc and dt_sd_utc:
+        try:
+            # If they disagree by >= 6 hours, prefer the later timestamp to avoid day-early artifacts
+            if abs(dt_api_utc.timestamp() - dt_sd_utc.timestamp()) >= 6 * 3600:
+                chosen_dt = max(dt_api_utc, dt_sd_utc)
+            else:
+                chosen_dt = dt_api_utc  # default to API when roughly aligned
+        except Exception:
+            chosen_dt = dt_api_utc or dt_sd_utc
+    else:
+        chosen_dt = dt_api_utc or dt_sd_utc
+
+    if chosen_dt is not None:
+        sort_ts = chosen_dt.timestamp()
+        start_iso = chosen_dt.isoformat().replace('+00:00', 'Z')
+        try:
+            display_time_fallback = chosen_dt.strftime('%a, %b %d, %Y, %I:%M %p UTC')
+        except Exception:
+            display_time_fallback = start_iso
     # Confidence bounds
     conf_lower = conf_upper = conf_std = None
     try:
