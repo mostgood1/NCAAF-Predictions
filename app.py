@@ -872,9 +872,10 @@ def _build_game_card(game_row: pd.Series) -> dict:
         sort_ts = chosen_dt.timestamp()
         start_iso = chosen_dt.isoformat().replace('+00:00', 'Z')
         try:
-            display_time_fallback = chosen_dt.strftime('%a, %b %d, %Y, %I:%M %p UTC')
+            # Show a neutral placeholder until client-side local-time conversion runs
+            display_time_fallback = 'Loading local time…'
         except Exception:
-            display_time_fallback = start_iso
+            display_time_fallback = 'Loading local time…'
     # Confidence bounds
     conf_lower = conf_upper = conf_std = None
     try:
@@ -2938,32 +2939,34 @@ def index():
                 if(btn){ btn.addEventListener('click', doRefresh); }
 
                 // Render game times in user's local timezone
-                try {
-                    const opts = { weekday: 'short', month: 'short', day: '2-digit', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' };
-                    document.querySelectorAll('.local-time').forEach(el => {
-                        let iso = (el.getAttribute('data-iso') || '').trim();
-                        // Fallback: parse the visible text if no data-iso present
-                        if(!iso){
-                            iso = (el.textContent || '').trim();
-                            if(!iso) return;
-                        }
-                        let s = iso;
-                        if(s.indexOf('T') === -1 && s.indexOf(' ') !== -1){ s = s.replace(' ', 'T'); }
-                        // If no timezone provided, assume UTC (append Z)
-                        if(!/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) s = s + 'Z';
-                        let d = new Date(s);
-                        if(isNaN(d)){
-                            // Coerce common raw form: YYYY-MM-DD HH:MM:SS+00:00 -> ISO Z
-                            const m = s.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\+00:00)?$/);
-                            if(m){ s = m[1] + 'T' + m[2] + 'Z'; d = new Date(s); }
-                        }
-                        if(!isNaN(d)){
-                            el.textContent = d.toLocaleString(undefined, opts);
-                            // Normalize attribute for consistency next time
-                            el.setAttribute('data-iso', s);
-                        }
-                    });
-                } catch(e) { /* no-op */ }
+                function applyLocalTimes(root){
+                    try {
+                        const opts = { weekday: 'short', month: 'short', day: '2-digit', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' };
+                        (root || document).querySelectorAll('.local-time').forEach(el => {
+                            let iso = (el.getAttribute('data-iso') || '').trim();
+                            // Fallback: parse the visible text if no data-iso present
+                            if(!iso){
+                                iso = (el.textContent || '').trim();
+                                if(!iso) return;
+                            }
+                            let s = iso;
+                            if(s.indexOf('T') === -1 && s.indexOf(' ') !== -1){ s = s.replace(' ', 'T'); }
+                            // If no timezone provided, assume UTC (append Z)
+                            if(!/[zZ]|[+-]\\d{2}:?\\d{2}$/.test(s)) s = s + 'Z';
+                            let d = new Date(s);
+                            if(isNaN(d)){
+                                // Coerce common raw form: YYYY-MM-DD HH:MM:SS+00:00 -> ISO Z
+                                const m = s.match(/^(\\d{4}-\\d{2}-\\d{2})[ T](\\d{2}:\\d{2}:\\d{2})(?:\\+00:00)?$/);
+                                if(m){ s = m[1] + 'T' + m[2] + 'Z'; d = new Date(s); }
+                            }
+                            if(!isNaN(d)){
+                                el.textContent = d.toLocaleString(undefined, opts);
+                                el.setAttribute('data-iso', s);
+                            }
+                        });
+                    } catch(e) { /* no-op */ }
+                }
+                applyLocalTimes(document);
 
                 // Build Date dropdown from cards (local dates)
                 try {
@@ -2986,6 +2989,8 @@ def index():
                         const label = d.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'2-digit', year:'numeric' });
                         dOpts.set(key, label);
                         c.setAttribute('data-local-date', key);
+                        // Ensure time is rendered in local zone for this card
+                        applyLocalTimes(c);
                     });
                     function recalcSummary(){
                         try{
