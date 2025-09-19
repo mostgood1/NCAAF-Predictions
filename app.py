@@ -950,17 +950,15 @@ def _build_game_card(game_row: pd.Series) -> dict:
     wx_temp = _safe_float(game_row.get('wx_temp_f', None))
     wx_wind = _safe_float(game_row.get('wx_wind_mph', None))
     wx_adj = _safe_float(game_row.get('wx_adjust_total', None), None)
-    pred_total_adj_num = _safe_float(game_row.get('predicted_total_points', None), None)
+    # Force displayed model total to equal the sum of the two team model values
+    pred_total_adj_num = _safe_float(predicted_total_points, None)
     pred_total_pre_num = None
     if pred_total_adj_num is not None:
         try:
+            # If a weather adjustment is available, expose a pre-adjusted figure for tooling/debug
             pred_total_pre_num = pred_total_adj_num - (wx_adj if wx_adj is not None else 0.0)
         except Exception:
             pred_total_pre_num = None
-    else:
-        if predicted_home is not None and predicted_away is not None:
-            pred_total_pre_num = predicted_home + predicted_away
-            pred_total_adj_num = pred_total_pre_num
     # O/U
     ou_line = None
     ou_model_lean = None
