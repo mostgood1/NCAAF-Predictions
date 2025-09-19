@@ -1368,6 +1368,218 @@ def _reload_predictions():
             pass
     pred_df = new_df
 
+def _refresh_schedule_kickoffs(week: int | None = None, overwrite: bool = True) -> dict:
+    """Re-pull kickoff times (start_date_api) for 2025 and update the with_scores CSV.
+    Primary source: CFBD /games with start_date.
+    Fallback (no CFBD key): ESPN scoreboard per-date 'competitions[0].date'.
+    """
+    try:
+        import requests
+    except Exception:
+        requests = None
+
+    # Determine target CSV (prefer with_scores, else enhanced)
+    global pred_path_scores, pred_path_enh
+    target_path = pred_path_scores if (pred_path_scores and os.path.exists(pred_path_scores)) else pred_path_enh
+    if not target_path or not os.path.exists(target_path):
+        return {'step': 'schedule_refresh', 'skipped': 'no_source_csv'}
+
+    try:
+        df = pd.read_csv(target_path)
+    except Exception as e:
+        return {'step': 'schedule_refresh', 'error': f'read_failed: {e}'}
+    if df.empty or 'home_team' not in df.columns or 'away_team' not in df.columns:
+        return {'step': 'schedule_refresh', 'skipped': 'df_invalid'}
+    if 'season' in df.columns:
+        try:
+            df = df[df['season'] == 2025].copy()
+        except Exception:
+            pass
+    # Ensure column exists in file (not just filtered copy)
+    try:
+        all_df = pd.read_csv(target_path)
+        if 'start_date_api' not in all_df.columns:
+            all_df['start_date_api'] = pd.NA
+    except Exception:
+        return {'step': 'schedule_refresh', 'error': 'cannot_prepare_output'}
+
+    def _norm_team_base(name: str) -> str:
+        try:
+            s = str(name or '').strip().lower()
+            s = s.replace('&', 'and').replace("ʻ", "'").replace("’", "'")
+            s = s.replace("hawai'i", "hawaii")
+            s = unicodedata.normalize('NFKD', s)
+            s = ''.join(ch for ch in s if not unicodedata.combining(ch))
+            s = re.sub(r"[^a-z0-9 '\-\(\)]", " ", s)
+            s = re.sub(r"\s+", " ", s).strip()
+            return s
+        except Exception:
+            return str(name)
+
+    # Build desired weeks set
+    if week is None:
+        try:
+            weeks = sorted(int(w) for w in pd.to_numeric(df.get('week'), errors='coerce').dropna().unique())
+        except Exception:
+            weeks = []
+    else:
+        weeks = [int(week)]
+
+    updates_map: dict[tuple[int, str, str], str] = {}
+
+    # CFBD fetch
+    api_key = os.environ.get('CFBD_API_KEY') or os.environ.get('CFBD_TOKEN') or os.environ.get('CFBD')
+    if requests is not None and api_key:
+        base_url = 'https://api.collegefootballdata.com/games'
+        headers = {'Authorization': f'Bearer {api_key}', 'Accept': 'application/json'}
+        def _variants(wk: int):
+            base = {'year': 2025, 'week': wk}
+            combos = [
+                {'seasonType': 'regular', 'division': 'fbs'},
+                {'seasonType': 'regular'},
+                {},
+            ]
+            return [dict(base, **c) for c in combos]
+        try:
+            target_weeks = weeks if weeks else [int(w) for w in range(0, 16)]
+        except Exception:
+            target_weeks = [0, 1, 2, 3, 4, 5]
+        for wk in target_weeks:
+            try:
+                for pr in _variants(wk):
+                    try:
+                        resp = requests.get(base_url, headers=headers, params=pr, timeout=25)
+                        if resp.status_code != 200:
+                            continue
+                        data = resp.json() or []
+                        if not data:
+                            continue
+                        for g in data:
+                            try:
+                                ht = _norm_team_base(g.get('home_team'))
+                                at = _norm_team_base(g.get('away_team'))
+                                sd = g.get('start_date') or g.get('start_time') or g.get('start')
+                                if not sd:
+                                    continue
+                                updates_map[(wk, ht, at)] = str(sd)
+                            except Exception:
+                                continue
+                        # Stop cycling variants once we have some entries for this week
+                        if any(k[0] == wk for k in updates_map.keys()):
+                            break
+                    except Exception:
+                        continue
+            except Exception:
+                continue
+
+    # ESPN fallback if no CFBD updates
+    if not updates_map and requests is not None:
+        try:
+            unique_dates = set()
+            try:
+                sub = df.copy()
+                if weeks:
+                    sub = sub[sub['week'].isin(weeks)] if 'week' in sub.columns else sub
+                if 'start_date' in sub.columns:
+                    for _, r in sub.iterrows():
+                        d = pd.to_datetime(r.get('start_date'), errors='coerce')
+                        if pd.notna(d):
+                            unique_dates.add(d.date().isoformat())
+            except Exception:
+                pass
+            # If we still don't have dates, use an upcoming window for September
+            if not unique_dates:
+                unique_dates.update({'2025-09-18','2025-09-19','2025-09-20','2025-09-21'})
+            for dstr in sorted(unique_dates):
+                ymd = dstr.replace('-', '')
+                es_urls = [
+                    f'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates={ymd}&groups=80',
+                    f'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates={ymd}',
+                ]
+                for u in es_urls:
+                    try:
+                        r = requests.get(u, timeout=20, headers={'Accept':'application/json','User-Agent':'Mozilla/5.0'})
+                        if r.status_code != 200:
+                            continue
+                        j = r.json() or {}
+                        events = j.get('events') or []
+                        for ev in events:
+                            comps = (ev.get('competitions') or [{}])[0]
+                            comps_list = comps.get('competitors') or []
+                            if len(comps_list) != 2:
+                                continue
+                            home = next((c for c in comps_list if c.get('homeAway')=='home'), comps_list[0])
+                            away = next((c for c in comps_list if c.get('homeAway')=='away'), comps_list[-1])
+                            hteam = home.get('team') or {}
+                            ateam = away.get('team') or {}
+                            def _cands(t):
+                                return [
+                                    _norm_team_base(t.get('location')),
+                                    _norm_team_base(t.get('shortDisplayName')),
+                                    _norm_team_base(t.get('displayName')),
+                                    _norm_team_base(t.get('abbreviation')),
+                                ]
+                            hcands = [c for c in _cands(hteam) if c]
+                            acands = [c for c in _cands(ateam) if c]
+                            iso = (comps.get('date') or ev.get('date') or '').strip()
+                            if not iso:
+                                continue
+                            # ESPN iso is UTC Z; store directly
+                            for ht in hcands:
+                                for at in acands:
+                                    updates_map[(None, ht, at)] = iso
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+
+    if not updates_map:
+        return {'step': 'schedule_refresh', 'skipped': 'no_updates_from_sources'}
+
+    # Apply to file (preserve all rows not in scope)
+    try:
+        out_df = pd.read_csv(target_path)
+        if 'start_date_api' not in out_df.columns:
+            out_df['start_date_api'] = pd.NA
+        changed = 0
+        for i, r in out_df.iterrows():
+            try:
+                if int(r.get('season', 0)) != 2025:
+                    continue
+            except Exception:
+                continue
+            if week is not None:
+                try:
+                    if int(r.get('week')) != int(week):
+                        continue
+                except Exception:
+                    continue
+            ht = _norm_team_base(r.get('home_team'))
+            at = _norm_team_base(r.get('away_team'))
+            can_keys = []
+            try:
+                rw = int(r.get('week')) if pd.notna(r.get('week')) else None
+            except Exception:
+                rw = None
+            if rw is not None:
+                can_keys.append((rw, ht, at))
+            can_keys.append((None, ht, at))
+            iso = None
+            for k in can_keys:
+                if k in updates_map:
+                    iso = updates_map[k]
+                    break
+            if not iso:
+                continue
+            if overwrite or pd.isna(r.get('start_date_api')) or not r.get('start_date_api'):
+                out_df.at[i, 'start_date_api'] = iso
+                changed += 1
+        if changed > 0:
+            out_df.to_csv(target_path, index=False)
+        return {'step': 'schedule_refresh', 'updated_rows': int(changed), 'path': target_path}
+    except Exception as e:
+        return {'step': 'schedule_refresh', 'error': f'apply_failed: {e}'}
+
 def _update_scores_with_cfbd(week: int | None = None, overwrite: bool = False) -> dict:
     """Update actual scores in the with_scores CSV using CFBD API.
     - Reads CFBD_API_KEY from environment; if missing, returns a skipped result.
@@ -2281,6 +2493,26 @@ def recommendations_api():
         if limit is not None and limit > 0:
             out = out[:limit]
         return jsonify({'count': len(out), 'week': week_val, 'sort': sort_key, 'results': out}), 200
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+@app.route('/api/admin/refresh-schedule', methods=['GET','POST'])
+def admin_refresh_schedule():
+    """Admin endpoint to repull kickoff times and reload predictions.
+    Optional query/form param: week=INT to limit updates to a single week.
+    """
+    try:
+        wq = request.args.get('week') or request.form.get('week')
+        wv = int(wq) if (wq and str(wq).isdigit()) else None
+        res = _refresh_schedule_kickoffs(week=wv, overwrite=True)
+        # Reload in-memory predictions so UI updates immediately
+        _reload_predictions()
+        try:
+            _overlay_lines_2025_if_present()
+        except Exception:
+            pass
+        settle = _settle_recommendations()
+        return {'schedule': res, 'reload': True, 'recs_settled': settle}, 200
     except Exception as e:
         return {'error': str(e)}, 500
 @app.route('/api/build-calibration', methods=['POST'])
