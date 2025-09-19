@@ -848,7 +848,13 @@ def _build_game_card(game_row: pd.Series) -> dict:
             if not dt_obj:
                 return None
             if getattr(dt_obj, 'tzinfo', None) is None:
-                return dt_obj.replace(tzinfo=pytz.UTC)
+                # Assume naive schedule times are published in US Eastern
+                try:
+                    eastern = pytz.timezone('America/New_York')
+                    dt_obj = eastern.localize(dt_obj)
+                except Exception:
+                    # Fallback to UTC if localization fails
+                    return dt_obj.replace(tzinfo=pytz.UTC)
             return dt_obj.astimezone(pytz.UTC)
         except Exception:
             return None
@@ -2933,26 +2939,15 @@ def index():
                     try {
                         const opts = { weekday: 'short', month: 'short', day: '2-digit', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' };
                         (root || document).querySelectorAll('.local-time').forEach(el => {
-                            let iso = (el.getAttribute('data-iso') || '').trim();
-                            // Fallback: parse the visible text if no data-iso present
-                            if(!iso){
-                                iso = (el.textContent || '').trim();
-                                if(!iso) return;
-                            }
-                            let s = iso;
+                            let s = (el.getAttribute('data-iso') || '').trim();
+                            if(!s) return; // require server-provided ISO
                             if(s.indexOf('T') === -1 && s.indexOf(' ') !== -1){ s = s.replace(' ', 'T'); }
                             // If no timezone provided, assume UTC (append Z)
                             if(!/[zZ]|[+-]\\d{2}:?\\d{2}$/.test(s)) s = s + 'Z';
                             let d = new Date(s);
-                            if(isNaN(d)){
-                                // Coerce common raw form: YYYY-MM-DD HH:MM:SS+00:00 -> ISO Z
-                                const m = s.match(/^(\\d{4}-\\d{2}-\\d{2})[ T](\\d{2}:\\d{2}:\\d{2})(?:\\+00:00)?$/);
-                                if(m){ s = m[1] + 'T' + m[2] + 'Z'; d = new Date(s); }
-                            }
-                            if(!isNaN(d)){
-                                el.textContent = d.toLocaleString(undefined, opts);
-                                el.setAttribute('data-iso', s);
-                            }
+                            if(isNaN(d)) return;
+                            el.textContent = d.toLocaleString(undefined, opts);
+                            el.setAttribute('data-iso', s);
                         });
                     } catch(e) { /* no-op */ }
                 }
