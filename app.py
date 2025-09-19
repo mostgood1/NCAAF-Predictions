@@ -855,18 +855,8 @@ def _build_game_card(game_row: pd.Series) -> dict:
 
     dt_api_utc = _parse_to_utc(val_api)
     dt_sd_utc = _parse_to_utc(val_sd)
-    chosen_dt = None
-    if dt_api_utc and dt_sd_utc:
-        try:
-            # If they disagree by >= 6 hours, prefer the later timestamp to avoid day-early artifacts
-            if abs(dt_api_utc.timestamp() - dt_sd_utc.timestamp()) >= 6 * 3600:
-                chosen_dt = max(dt_api_utc, dt_sd_utc)
-            else:
-                chosen_dt = dt_api_utc  # default to API when roughly aligned
-        except Exception:
-            chosen_dt = dt_api_utc or dt_sd_utc
-    else:
-        chosen_dt = dt_api_utc or dt_sd_utc
+    # Prefer API kickoff time when present; fallback to start_date otherwise
+    chosen_dt = dt_api_utc or dt_sd_utc
 
     if chosen_dt is not None:
         sort_ts = chosen_dt.timestamp()
