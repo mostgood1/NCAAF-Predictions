@@ -2387,9 +2387,14 @@ def _parse_start_ts(row: pd.Series) -> tuple[str, float | None, str]:
                     dt_obj = None
             if not dt_obj:
                 continue
-            # Ensure timezone-aware UTC
+            # Ensure timezone-aware UTC; assume naive times are Eastern
             if getattr(dt_obj, 'tzinfo', None) is None:
-                dt_utc = dt_obj.replace(tzinfo=pytz.UTC)
+                try:
+                    eastern = pytz.timezone('America/New_York')
+                    dt_obj = eastern.localize(dt_obj)
+                except Exception:
+                    dt_obj = dt_obj.replace(tzinfo=pytz.UTC)
+                dt_utc = dt_obj.astimezone(pytz.UTC)
             else:
                 dt_utc = dt_obj.astimezone(pytz.UTC)
             sort_ts = dt_utc.timestamp()
