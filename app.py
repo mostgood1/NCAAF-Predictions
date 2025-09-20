@@ -912,18 +912,8 @@ def _build_game_card(game_row: pd.Series) -> dict:
             predicted_winner = game_row['home_team']
         elif predicted_home < predicted_away:
             predicted_winner = game_row['away_team']
-    # Win probability: prefer calibrated model probability if available
-    p_home_win = _safe_float(game_row.get('model_home_win_prob'))
-    if p_home_win is None:
-        try:
-            if predicted_home is not None and predicted_away is not None:
-                pred_margin_tmp = _safe_float(game_row.get('model_margin'))
-                if pred_margin_tmp is None:
-                    pred_margin_tmp = _safe_float(game_row.get('predicted_win_margin'), predicted_home - predicted_away)
-                sigma_tmp = _get_conf_std_for_game(game_row)
-                p_home_win = _phi(pred_margin_tmp / sigma_tmp)
-        except Exception:
-            p_home_win = None
+    # Win probability: robust computation with clamp and file-prob sanity check
+    p_home_win = _compute_home_win_prob(game_row)
     if _is_valid_num(actual_home) and _is_valid_num(actual_away):
         if actual_home > actual_away:
             actual_winner = game_row['home_team']
@@ -1159,6 +1149,57 @@ def _safe_float(x, default=None):
 def _phi(z):
     # Standard normal CDF using error function
     return 0.5 * (1.0 + math.erf(z / math.sqrt(2)))
+
+def _compute_home_win_prob(row: pd.Series) -> float | None:
+    """Compute a realistic home win probability.
+    Strategy:
+    - Prefer margin-based probability using a per-game sigma (_get_conf_std_for_game).
+    - If a file-provided model_home_win_prob exists and is close to the margin-based value (<= 0.15 abs diff),
+      lightly blend it; otherwise ignore it (guards against corrupted/extreme inputs).
+    - Clamp final p to [0.005, 0.995] so UI never shows 0.0%/100.0% from rounding.
+    """
+    try:
+        # Margin: model_margin -> predicted_win_margin -> model pts -> predicted pts
+        def _f(x):
+            return _safe_float(row.get(x))
+        margin = _f('model_margin')
+        if margin is None:
+            margin = _safe_float(row.get('predicted_win_margin'))
+        if margin is None:
+            mh = _safe_float(row.get('model_home_points'))
+            ma = _safe_float(row.get('model_away_points'))
+            if mh is not None and ma is not None:
+                margin = mh - ma
+        if margin is None:
+            ph = _safe_float(row.get('predicted_home_points'))
+            pa = _safe_float(row.get('predicted_away_points'))
+            if ph is not None and pa is not None:
+                margin = ph - pa
+        if margin is None:
+            return None
+        sigma = _get_conf_std_for_game(row)
+        if sigma is None or sigma <= 0:
+            sigma = 14.0
+        p_margin = _phi(margin / sigma)
+        p_file = _safe_float(row.get('model_home_win_prob'))
+        # If file prob is valid and not wildly off, blend slightly; else trust p_margin.
+        if p_file is not None and 0.0 <= p_file <= 1.0:
+            if abs(p_file - p_margin) <= 0.15:
+                p = 0.75 * p_margin + 0.25 * p_file
+            else:
+                p = p_margin
+        else:
+            p = p_margin
+        # Optional calibration hook (currently identity/clamp)
+        p = _calibrate_win_prob(p) or p
+        # Hard clamp to avoid 0/100% display after rounding
+        if p < 0.005:
+            p = 0.005
+        elif p > 0.995:
+            p = 0.995
+        return float(p)
+    except Exception:
+        return None
 
 def american_to_decimal(odds):
     # Return decimal odds and net b (decimal-1)
@@ -2242,7 +2283,7 @@ def compute_recommendations(week=None, bankroll=1000.0, kelly_factor=0.5, ev_thr
             home_ml = _safe_float(odds.get('homeMoneyline'))
             away_ml = _safe_float(odds.get('awayMoneyline'))
             if home_ml is not None:
-                p_home = _safe_float(row.get('model_home_win_prob'))
+                p_home = _compute_home_win_prob(row)
                 if p_home is None:
                     p_home = _phi(pred_margin / sigma_m)
                 dec, _ = american_to_decimal(home_ml)
@@ -2260,7 +2301,7 @@ def compute_recommendations(week=None, bankroll=1000.0, kelly_factor=0.5, ev_thr
                         stake = round(bankroll * kf * kelly_factor, 2)
                         recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'ML', 'side': 'Home', 'provider': provider, 'price_american': int(home_ml), 'model_prob': round(p_home,4), 'implied_prob': round(1/(dec),4), 'edge': round(ev,4), 'kelly_f': round(kf,4), 'stake': stake})
             if away_ml is not None:
-                p_home_tmp = _safe_float(row.get('model_home_win_prob'))
+                p_home_tmp = _compute_home_win_prob(row)
                 if p_home_tmp is None:
                     p_home_tmp = _phi(pred_margin / sigma_m)
                 p_away = max(0.0, 1.0 - p_home_tmp)
