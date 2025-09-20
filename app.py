@@ -1,4 +1,5 @@
 import os
+# noop: touch for deploy trigger (no behavior change)
 
 # -------------------- Build / Version Introspection --------------------
 import time as _time
