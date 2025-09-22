@@ -4117,16 +4117,23 @@ def api_data_health():
 @app.route('/api/performance/ats-ou')
 def api_performance_ats_ou():
     """Return ATS and Totals hit rates for completed 2025 games.
-    Optional params:
-      - week: INT
-      - min_spread_edge_pts: float; require abs(model_margin - line) >= threshold to include ATS sample
-      - min_total_edge_pts: float; require abs(pred_total - OU) >= threshold to include Totals sample
+        Optional params:
+            - week: INT
+            - min_spread_edge_pts: float; require abs(model_margin - line) >= threshold to include ATS sample
+            - min_total_edge_pts: float; require abs(pred_total - OU) >= threshold to include Totals sample
+            - max_sigma_margin: float; exclude games with margin sigma above this
+            - allowed_conferences: comma-separated list; include games where either team conference is in list
     Uses available betting lines (averaged across providers) to approximate closing lines.
     """
     try:
         week_param = request.args.get('week')
         min_spread_edge = float(request.args.get('min_spread_edge_pts', 0.0) or 0.0)
         min_total_edge = float(request.args.get('min_total_edge_pts', 0.0) or 0.0)
+        max_sigma_margin = request.args.get('max_sigma_margin')
+        max_sigma_margin = float(max_sigma_margin) if (max_sigma_margin not in (None, '')) else None
+        allowed_conferences = request.args.get('allowed_conferences', '')
+        allow_set = {s.strip().lower() for s in allowed_conferences.split(',') if s.strip()} if allowed_conferences else None
+
         df = pred_df[(pred_df.get('season', 0) == 2025)].copy()
         if week_param and str(week_param).isdigit():
             df = df[df.get('week', 0) == int(week_param)]
@@ -4134,12 +4141,18 @@ def api_performance_ats_ou():
         df = df[df['actual_home_points'].notna() & df['actual_away_points'].notna()].copy()
         if df.empty:
             return {'count': 0, 'message': 'No completed games for selection'}, 200
+
         ats_wins = ats_losses = ats_pushes = 0
         ou_wins = ou_losses = ou_pushes = 0
         samples = []
         for _, r in df.iterrows():
             year = int(r.get('season', 2025)); wk = int(r.get('week', 0))
             ht = r.get('home_team'); at = r.get('away_team')
+            # Conference and model context to filter by uncertainty and scope
+            if allow_set is not None:
+                hc = str(r.get('home_conference','')).strip().lower(); ac = str(r.get('away_conference','')).strip().lower()
+                if hc not in allow_set and ac not in allow_set:
+                    continue
             # Model predictions to measure distance to line
             ph = _safe_float(r.get('model_home_points')) or _safe_float(r.get('predicted_home_points'))
             pa = _safe_float(r.get('model_away_points')) or _safe_float(r.get('predicted_away_points'))
@@ -4149,6 +4162,14 @@ def api_performance_ats_ou():
                 pm = _safe_float(r.get('predicted_win_margin'))
             if pm is None and ph is not None and pa is not None:
                 pm = ph - pa
+            # Uncertainty gate
+            try:
+                sig = _get_conf_std_for_game(r)
+                if max_sigma_margin is not None and sig is not None and sig > max_sigma_margin:
+                    continue
+            except Exception:
+                pass
+
             lines = get_betting_lines(year, wk, ht, at)
             # derive average home spread and total
             spreads = []
@@ -4178,6 +4199,7 @@ def api_performance_ats_ou():
                         totals.append(float(ou))
                 except Exception:
                     pass
+
             ah = _safe_float(r.get('actual_home_points'))
             aa = _safe_float(r.get('actual_away_points'))
             if spreads:
@@ -4204,13 +4226,15 @@ def api_performance_ats_ou():
                         ou_wins += 1
                     else:
                         ou_losses += 1
+
             if len(samples) < 30:
                 samples.append({'week': wk, 'away': at, 'home': ht, 'spread_avg': round(sum(spreads)/len(spreads),1) if spreads else None, 'total_avg': round(sum(totals)/len(totals),1) if totals else None})
+
         ats_games = ats_wins + ats_losses + ats_pushes
         ou_games = ou_wins + ou_losses + ou_pushes
         out = {
             'count': int(len(df)),
-            'filters': {'min_spread_edge_pts': min_spread_edge, 'min_total_edge_pts': min_total_edge},
+            'filters': {'min_spread_edge_pts': min_spread_edge, 'min_total_edge_pts': min_total_edge, 'max_sigma_margin': max_sigma_margin, 'allowed_conferences': list(allow_set) if allow_set else None},
             'ats': {'wins': ats_wins, 'losses': ats_losses, 'pushes': ats_pushes, 'hit_rate': round((ats_wins/(ats_wins+ats_losses)) if (ats_wins+ats_losses)>0 else 0.0, 4)},
             'totals': {'wins': ou_wins, 'losses': ou_losses, 'pushes': ou_pushes, 'hit_rate': round((ou_wins/(ou_wins+ou_losses)) if (ou_wins+ou_losses)>0 else 0.0, 4)},
             'sample': samples

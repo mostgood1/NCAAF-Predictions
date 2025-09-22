@@ -1,0 +1,13 @@
+{
+  "model_prefix": "rf_v2",
+  "generated_at_utc": "2025-09-22T14:52:29.995867+00:00",
+  "replace_predicted": false,
+  "retune": {
+    "rc": 0,
+    "status": "ok"
+  },
+  "regeneration": {
+    "rc": 0,
+    "output_file": null
+  }
+}
