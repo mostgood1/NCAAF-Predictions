@@ -122,6 +122,64 @@ _REFRESH_LOCK = threading.Lock()
 # Simple in-memory cache for game cards API (invalidated on prediction reload)
 GAME_CARDS_CACHE = {}
 
+# Dynamic total-points uncertainty (std) estimated from completed games
+_TOTAL_POINTS_STD_2025 = None
+def _recompute_total_points_std():
+    """Compute std of (actual_total - predicted_total) for completed 2025 games.
+    Prefer model_* predictions when available. Clamp to a reasonable range to avoid instability.
+    """
+    global _TOTAL_POINTS_STD_2025
+    try:
+        df = pred_df[(pred_df.get('season', 0) == 2025)].copy()
+        if df.empty:
+            _TOTAL_POINTS_STD_2025 = 12.0
+            return _TOTAL_POINTS_STD_2025
+        def _p_total(r):
+            try:
+                mh = r.get('model_home_points'); ma = r.get('model_away_points')
+                ph = r.get('predicted_home_points'); pa = r.get('predicted_away_points')
+                if pd.notna(mh) and pd.notna(ma):
+                    return float(mh) + float(ma)
+                if pd.notna(ph) and pd.notna(pa):
+                    return float(ph) + float(pa)
+            except Exception:
+                return None
+            return None
+        df = df[(df['actual_home_points'].notna()) & (df['actual_away_points'].notna())].copy()
+        if df.empty:
+            _TOTAL_POINTS_STD_2025 = 12.0
+            return _TOTAL_POINTS_STD_2025
+        df['_pred_total'] = df.apply(_p_total, axis=1)
+        df['_act_total'] = pd.to_numeric(df['actual_home_points'], errors='coerce') + pd.to_numeric(df['actual_away_points'], errors='coerce')
+        errs = pd.to_numeric(df['_act_total'] - df['_pred_total'], errors='coerce')
+        errs = errs.dropna()
+        if len(errs) < 10:
+            _TOTAL_POINTS_STD_2025 = 12.0
+        else:
+            try:
+                val = float(errs.std())
+            except Exception:
+                val = 12.0
+            # Clamp to a sane window
+            if not math.isfinite(val) or val <= 6:
+                val = 10.0
+            elif val > 22:
+                val = 22.0
+            _TOTAL_POINTS_STD_2025 = val
+        return _TOTAL_POINTS_STD_2025
+    except Exception:
+        _TOTAL_POINTS_STD_2025 = 12.0
+        return _TOTAL_POINTS_STD_2025
+
+def _get_total_points_std():
+    global _TOTAL_POINTS_STD_2025
+    try:
+        if _TOTAL_POINTS_STD_2025 is None:
+            return _recompute_total_points_std()
+        return _TOTAL_POINTS_STD_2025
+    except Exception:
+        return 12.0
+
 def _calibrate_win_prob(p):
     """Fallback calibration (identity clamp) if real calibration artifacts absent due to earlier truncation."""
     try:
@@ -363,6 +421,10 @@ def _load_predictions_df() -> pd.DataFrame:
     return df
 
 pred_df = _load_predictions_df()
+try:
+    _recompute_total_points_std()
+except Exception:
+    pass
 
 # Coerce core columns to numeric where applicable for reliable filtering/sorting
 try:
@@ -1409,6 +1471,10 @@ def _reload_predictions():
         except Exception:
             pass
     pred_df = new_df
+    try:
+        _recompute_total_points_std()
+    except Exception:
+        pass
 
 def _refresh_schedule_kickoffs(week: int | None = None, overwrite: bool = True) -> dict:
     """Re-pull kickoff times (start_date_api) for 2025 and update the with_scores CSV.
@@ -2276,7 +2342,7 @@ def compute_recommendations(week=None, bankroll=1000.0, kelly_factor=0.5, ev_thr
         if pred_margin is None:
             pred_margin = pred_home - pred_away
         sigma_m = _get_conf_std_for_game(row)
-        sigma_t = 12.0
+        sigma_t = _get_total_points_std()
         for odds in odds_list:
             provider = odds.get('provider')
             # ML
@@ -4048,6 +4114,111 @@ def api_data_health():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/performance/ats-ou')
+def api_performance_ats_ou():
+    """Return ATS and Totals hit rates for completed 2025 games.
+    Optional params:
+      - week: INT
+      - min_spread_edge_pts: float; require abs(model_margin - line) >= threshold to include ATS sample
+      - min_total_edge_pts: float; require abs(pred_total - OU) >= threshold to include Totals sample
+    Uses available betting lines (averaged across providers) to approximate closing lines.
+    """
+    try:
+        week_param = request.args.get('week')
+        min_spread_edge = float(request.args.get('min_spread_edge_pts', 0.0) or 0.0)
+        min_total_edge = float(request.args.get('min_total_edge_pts', 0.0) or 0.0)
+        df = pred_df[(pred_df.get('season', 0) == 2025)].copy()
+        if week_param and str(week_param).isdigit():
+            df = df[df.get('week', 0) == int(week_param)]
+        # Completed only
+        df = df[df['actual_home_points'].notna() & df['actual_away_points'].notna()].copy()
+        if df.empty:
+            return {'count': 0, 'message': 'No completed games for selection'}, 200
+        ats_wins = ats_losses = ats_pushes = 0
+        ou_wins = ou_losses = ou_pushes = 0
+        samples = []
+        for _, r in df.iterrows():
+            year = int(r.get('season', 2025)); wk = int(r.get('week', 0))
+            ht = r.get('home_team'); at = r.get('away_team')
+            # Model predictions to measure distance to line
+            ph = _safe_float(r.get('model_home_points')) or _safe_float(r.get('predicted_home_points'))
+            pa = _safe_float(r.get('model_away_points')) or _safe_float(r.get('predicted_away_points'))
+            pred_total = (ph + pa) if (ph is not None and pa is not None) else None
+            pm = _safe_float(r.get('model_margin'))
+            if pm is None:
+                pm = _safe_float(r.get('predicted_win_margin'))
+            if pm is None and ph is not None and pa is not None:
+                pm = ph - pa
+            lines = get_betting_lines(year, wk, ht, at)
+            # derive average home spread and total
+            spreads = []
+            totals = []
+            for bl in lines:
+                try:
+                    s_fmt = bl.get('formattedSpread'); s_raw = bl.get('spread')
+                    v = None
+                    if isinstance(s_fmt, str) and s_fmt:
+                        m = re.match(r"^(.*)\s+([+-]?[0-9]*\.?[0-9]+)$", s_fmt.strip())
+                        if m:
+                            team_label = m.group(1).strip().lower()
+                            num = float(m.group(2))
+                            if str(ht).strip().lower() in team_label and str(at).strip().lower() not in team_label:
+                                v = num
+                            elif str(at).strip().lower() in team_label and str(ht).strip().lower() not in team_label:
+                                v = -num
+                    if v is None and s_raw not in (None, ''):
+                        v = float(s_raw)
+                    if v is not None:
+                        spreads.append(v)
+                except Exception:
+                    pass
+                try:
+                    ou = bl.get('overUnder')
+                    if ou not in (None, ''):
+                        totals.append(float(ou))
+                except Exception:
+                    pass
+            ah = _safe_float(r.get('actual_home_points'))
+            aa = _safe_float(r.get('actual_away_points'))
+            if spreads:
+                line = sum(spreads)/len(spreads)
+                # Respect spread distance filter if provided
+                if (min_spread_edge == 0.0) or (pm is not None and abs(pm - line) >= min_spread_edge):
+                    margin = ah - aa
+                    comp = margin + line
+                    if abs(comp) < 1e-9:
+                        ats_pushes += 1
+                    elif comp > 0:
+                        ats_wins += 1
+                    else:
+                        ats_losses += 1
+            if totals:
+                tline = sum(totals)/len(totals)
+                # Respect total distance filter if provided
+                if (min_total_edge == 0.0) or (pred_total is not None and abs(pred_total - tline) >= min_total_edge):
+                    tot = ah + aa
+                    diff = tot - tline
+                    if abs(diff) < 1e-9:
+                        ou_pushes += 1
+                    elif diff > 0:
+                        ou_wins += 1
+                    else:
+                        ou_losses += 1
+            if len(samples) < 30:
+                samples.append({'week': wk, 'away': at, 'home': ht, 'spread_avg': round(sum(spreads)/len(spreads),1) if spreads else None, 'total_avg': round(sum(totals)/len(totals),1) if totals else None})
+        ats_games = ats_wins + ats_losses + ats_pushes
+        ou_games = ou_wins + ou_losses + ou_pushes
+        out = {
+            'count': int(len(df)),
+            'filters': {'min_spread_edge_pts': min_spread_edge, 'min_total_edge_pts': min_total_edge},
+            'ats': {'wins': ats_wins, 'losses': ats_losses, 'pushes': ats_pushes, 'hit_rate': round((ats_wins/(ats_wins+ats_losses)) if (ats_wins+ats_losses)>0 else 0.0, 4)},
+            'totals': {'wins': ou_wins, 'losses': ou_losses, 'pushes': ou_pushes, 'hit_rate': round((ou_wins/(ou_wins+ou_losses)) if (ou_wins+ou_losses)>0 else 0.0, 4)},
+            'sample': samples
+        }
+        return out, 200
+    except Exception as e:
+        return {'error': str(e)}, 500
+
 @app.route('/api/model-metrics')
 def api_model_metrics():
     if not _MODEL_META:
@@ -4055,6 +4226,10 @@ def api_model_metrics():
     if not _MODEL_META:
         return {'status':'no_model'}, 404
     meta = {k:v for k,v in _MODEL_META.items() if k not in ('home_pts_model','away_pts_model','margin_model')}
+    try:
+        meta['total_points_sigma_estimate'] = _get_total_points_std()
+    except Exception:
+        pass
     return meta
 
 @app.route('/api/week-status')
