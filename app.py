@@ -2308,8 +2308,25 @@ def debug_missing_odds():
         return {'error': str(e)}, 500
 
 
-def compute_recommendations(week=None, bankroll=1000.0, kelly_factor=0.5, ev_threshold=0.02):
-    """Core engine to compute EV+ recommendations, reused by API and UI."""
+def compute_recommendations(
+    week=None,
+    bankroll=1000.0,
+    kelly_factor=0.5,
+    ev_threshold=0.02,
+    min_spread_edge_pts: float = 0.0,
+    min_total_edge_pts: float = 0.0,
+    min_prob: float | None = None,
+    max_sigma_margin: float | None = None,
+    allowed_conferences=None,
+):
+    """Core engine to compute EV+ recommendations, reused by API and UI.
+    Optional selection filters:
+      - min_spread_edge_pts: abs(model_margin - line) threshold for Spread picks
+      - min_total_edge_pts: abs(model_total - OU) threshold for Total picks
+      - min_prob: minimum model probability for ML side (e.g., 0.55)
+      - max_sigma_margin: exclude games whose margin std (confidence) exceeds this
+      - allowed_conferences: list/set or comma-separated string; keep games where either team conf is in this list
+    """
     df = pred_df[(pred_df['season'] == 2025)].copy()
     # Upcoming only
     df = df[df['actual_home_points'].isna() & df['actual_away_points'].isna()]
@@ -2318,11 +2335,29 @@ def compute_recommendations(week=None, bankroll=1000.0, kelly_factor=0.5, ev_thr
             df = df[df['week'] == int(week)]
         except Exception:
             pass
+    # Normalize allowed conferences to a lowercase set
+    allow_set = None
+    if allowed_conferences:
+        if isinstance(allowed_conferences, str):
+            allow_set = {s.strip().lower() for s in allowed_conferences.split(',') if s.strip()}
+        else:
+            try:
+                allow_set = {str(s).strip().lower() for s in allowed_conferences}
+            except Exception:
+                allow_set = None
     recs = []
     kelly_cap = 0.10  # never stake >10% per bet
     longshot_cap_odds = 4.0  # decimal (>4.0 ~= +300)
     min_prob_for_longshot = 0.30
     for _, row in df.iterrows():
+        # Conference scope filter
+        if allow_set is not None:
+            try:
+                hc = str(row.get('home_conference','')).strip().lower(); ac = str(row.get('away_conference','')).strip().lower()
+                if hc not in allow_set and ac not in allow_set:
+                    continue
+            except Exception:
+                pass
         odds_list = get_betting_lines(int(row['season']), int(row['week']), row['home_team'], row['away_team'])
         if not odds_list:
             continue
@@ -2342,6 +2377,12 @@ def compute_recommendations(week=None, bankroll=1000.0, kelly_factor=0.5, ev_thr
         if pred_margin is None:
             pred_margin = pred_home - pred_away
         sigma_m = _get_conf_std_for_game(row)
+        # Uncertainty filter on game-level margin sigma
+        try:
+            if max_sigma_margin is not None and sigma_m is not None and sigma_m > float(max_sigma_margin):
+                continue
+        except Exception:
+            pass
         sigma_t = _get_total_points_std()
         for odds in odds_list:
             provider = odds.get('provider')
@@ -2354,18 +2395,22 @@ def compute_recommendations(week=None, bankroll=1000.0, kelly_factor=0.5, ev_thr
                     p_home = _phi(pred_margin / sigma_m)
                 dec, _ = american_to_decimal(home_ml)
                 if dec:
-                    kf = None
-                    # Skip extreme longshots unless model prob decent
-                    if not (dec > longshot_cap_odds and p_home < min_prob_for_longshot):
-                        kf = kelly_fraction(p_home, dec)
-                        kf = min(kf, kelly_cap)
-                        # Scale down for longshots
-                        if dec > longshot_cap_odds:
-                            kf *= 0.25
-                    ev = p_home * (dec - 1) - (1 - p_home)
-                    if ev > ev_threshold and kf is not None and kf > 0:
-                        stake = round(bankroll * kf * kelly_factor, 2)
-                        recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'ML', 'side': 'Home', 'provider': provider, 'price_american': int(home_ml), 'model_prob': round(p_home,4), 'implied_prob': round(1/(dec),4), 'edge': round(ev,4), 'kelly_f': round(kf,4), 'stake': stake})
+                    # Side-level min prob filter
+                    if min_prob is not None and p_home is not None and p_home < float(min_prob):
+                        pass  # below threshold; skip
+                    else:
+                        kf = None
+                        # Skip extreme longshots unless model prob decent
+                        if not (dec > longshot_cap_odds and p_home < min_prob_for_longshot):
+                            kf = kelly_fraction(p_home, dec)
+                            kf = min(kf, kelly_cap)
+                            # Scale down for longshots
+                            if dec > longshot_cap_odds:
+                                kf *= 0.25
+                        ev = p_home * (dec - 1) - (1 - p_home)
+                        if ev > ev_threshold and kf is not None and kf > 0:
+                            stake = round(bankroll * kf * kelly_factor, 2)
+                            recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'ML', 'side': 'Home', 'provider': provider, 'price_american': int(home_ml), 'model_prob': round(p_home,4), 'implied_prob': round(1/(dec),4), 'edge': round(ev,4), 'kelly_f': round(kf,4), 'stake': stake})
             if away_ml is not None:
                 p_home_tmp = _compute_home_win_prob(row)
                 if p_home_tmp is None:
@@ -2373,16 +2418,19 @@ def compute_recommendations(week=None, bankroll=1000.0, kelly_factor=0.5, ev_thr
                 p_away = max(0.0, 1.0 - p_home_tmp)
                 dec, _ = american_to_decimal(away_ml)
                 if dec:
-                    kf = None
-                    if not (dec > longshot_cap_odds and p_away < min_prob_for_longshot):
-                        kf = kelly_fraction(p_away, dec)
-                        kf = min(kf, kelly_cap)
-                        if dec > longshot_cap_odds:
-                            kf *= 0.25
-                    ev = p_away * (dec - 1) - (1 - p_away)
-                    if ev > ev_threshold and kf is not None and kf > 0:
-                        stake = round(bankroll * kf * kelly_factor, 2)
-                        recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'ML', 'side': 'Away', 'provider': provider, 'price_american': int(away_ml), 'model_prob': round(p_away,4), 'implied_prob': round(1/(dec),4), 'edge': round(ev,4), 'kelly_f': round(kf,4), 'stake': stake})
+                    if min_prob is not None and p_away is not None and p_away < float(min_prob):
+                        pass
+                    else:
+                        kf = None
+                        if not (dec > longshot_cap_odds and p_away < min_prob_for_longshot):
+                            kf = kelly_fraction(p_away, dec)
+                            kf = min(kf, kelly_cap)
+                            if dec > longshot_cap_odds:
+                                kf *= 0.25
+                        ev = p_away * (dec - 1) - (1 - p_away)
+                        if ev > ev_threshold and kf is not None and kf > 0:
+                            stake = round(bankroll * kf * kelly_factor, 2)
+                            recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'ML', 'side': 'Away', 'provider': provider, 'price_american': int(away_ml), 'model_prob': round(p_away,4), 'implied_prob': round(1/(dec),4), 'edge': round(ev,4), 'kelly_f': round(kf,4), 'stake': stake})
             # Spread / Totals
             spread = odds.get('spread')
             try:
@@ -2395,26 +2443,40 @@ def compute_recommendations(week=None, bankroll=1000.0, kelly_factor=0.5, ev_thr
                 p_home_cover = _phi((pred_margin - spread_val) / sigma_m)
                 ev_home = p_home_cover * (dec_110 - 1) - (1 - p_home_cover)
                 kf_home = min(kelly_fraction(p_home_cover, dec_110), kelly_cap)
-                if ev_home > ev_threshold and kf_home > 0:
+                # Edge points filter for spread
+                spread_dist_ok = True
+                try:
+                    if min_spread_edge_pts and abs(pred_margin - spread_val) < float(min_spread_edge_pts):
+                        spread_dist_ok = False
+                except Exception:
+                    pass
+                if spread_dist_ok and ev_home > ev_threshold and kf_home > 0:
                     stake = round(bankroll * kf_home * kelly_factor, 2)
                     recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'Spread', 'side': 'Home', 'provider': provider, 'price_american': -110, 'model_prob': round(p_home_cover,4), 'implied_prob': round(1/(dec_110),4), 'edge': round(ev_home,4), 'kelly_f': round(kf_home,4), 'stake': stake, 'line': spread_val})
                 p_away_cover = 1 - p_home_cover
                 ev_away = p_away_cover * (dec_110 - 1) - (1 - p_away_cover)
                 kf_away = min(kelly_fraction(p_away_cover, dec_110), kelly_cap)
-                if ev_away > ev_threshold and kf_away > 0:
+                if spread_dist_ok and ev_away > ev_threshold and kf_away > 0:
                     stake = round(bankroll * kf_away * kelly_factor, 2)
                     recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'Spread', 'side': 'Away', 'provider': provider, 'price_american': -110, 'model_prob': round(p_away_cover,4), 'implied_prob': round(1/(dec_110),4), 'edge': round(ev_away,4), 'kelly_f': round(kf_away,4), 'stake': stake, 'line': spread_val})
             if ou_val is not None:
                 p_over = 1 - _phi((ou_val - pred_total) / sigma_t)
                 ev_over = p_over * (dec_110 - 1) - (1 - p_over)
                 kf_over = min(kelly_fraction(p_over, dec_110), kelly_cap)
-                if ev_over > ev_threshold and kf_over > 0:
+                # Edge points filter for total
+                total_dist_ok = True
+                try:
+                    if min_total_edge_pts and abs(pred_total - ou_val) < float(min_total_edge_pts):
+                        total_dist_ok = False
+                except Exception:
+                    pass
+                if total_dist_ok and ev_over > ev_threshold and kf_over > 0:
                     stake = round(bankroll * kf_over * kelly_factor, 2)
                     recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'Total', 'side': 'Over', 'provider': provider, 'price_american': -110, 'model_prob': round(p_over,4), 'implied_prob': round(1/(dec_110),4), 'edge': round(ev_over,4), 'kelly_f': round(kf_over,4), 'stake': stake, 'line': ou_val})
                 p_under = 1 - p_over
                 ev_under = p_under * (dec_110 - 1) - (1 - p_under)
                 kf_under = min(kelly_fraction(p_under, dec_110), kelly_cap)
-                if ev_under > ev_threshold and kf_under > 0:
+                if total_dist_ok and ev_under > ev_threshold and kf_under > 0:
                     stake = round(bankroll * kf_under * kelly_factor, 2)
                     recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'Total', 'side': 'Under', 'provider': provider, 'price_american': -110, 'model_prob': round(p_under,4), 'implied_prob': round(1/(dec_110),4), 'edge': round(ev_under,4), 'kelly_f': round(kf_under,4), 'stake': stake, 'line': ou_val})
     recs.sort(key=lambda x: x['edge'], reverse=True)
@@ -2537,9 +2599,27 @@ def recommendations_api():
         sort_key = request.args.get('sort', 'edge_desc')
         limit = request.args.get('limit')
         limit = int(limit) if (limit and str(limit).isdigit()) else None
+        # New selection filters
+        min_spread_edge_pts = float(request.args.get('min_spread_edge_pts', 0.0) or 0.0)
+        min_total_edge_pts = float(request.args.get('min_total_edge_pts', 0.0) or 0.0)
+        min_prob = request.args.get('min_prob')
+        min_prob = float(min_prob) if (min_prob not in (None, '')) else None
+        max_sigma_margin = request.args.get('max_sigma_margin')
+        max_sigma_margin = float(max_sigma_margin) if (max_sigma_margin not in (None, '')) else None
+        allowed_conferences = request.args.get('allowed_conferences', '')
 
         week_val = int(week_q) if (week_q and str(week_q).isdigit()) else None
-        recs = compute_recommendations(week=week_val, bankroll=bankroll, kelly_factor=kelly_factor, ev_threshold=ev_threshold)
+        recs = compute_recommendations(
+            week=week_val,
+            bankroll=bankroll,
+            kelly_factor=kelly_factor,
+            ev_threshold=ev_threshold,
+            min_spread_edge_pts=min_spread_edge_pts,
+            min_total_edge_pts=min_total_edge_pts,
+            min_prob=min_prob,
+            max_sigma_margin=max_sigma_margin,
+            allowed_conferences=allowed_conferences,
+        )
         # Attach timing and confidence
         out = []
         # Build a quick index by (season,week,home,away) to get start time
@@ -2605,7 +2685,19 @@ def recommendations_api():
             pass
         if limit is not None and limit > 0:
             out = out[:limit]
-        return jsonify({'count': len(out), 'week': week_val, 'sort': sort_key, 'results': out}), 200
+        return jsonify({
+            'count': len(out),
+            'week': week_val,
+            'sort': sort_key,
+            'results': out,
+            'filters': {
+                'min_spread_edge_pts': min_spread_edge_pts,
+                'min_total_edge_pts': min_total_edge_pts,
+                'min_prob': min_prob,
+                'max_sigma_margin': max_sigma_margin,
+                'allowed_conferences': [s.strip() for s in allowed_conferences.split(',') if s.strip()] if allowed_conferences else None,
+            }
+        }), 200
     except Exception as e:
         return {'error': str(e)}, 500
 
@@ -4715,9 +4807,27 @@ def recommendations_page():
     bankroll = float(request.args.get('bankroll') or request.form.get('bankroll') or 1000)
     kelly_factor = float(request.args.get('kelly') or request.form.get('kelly') or 0.5)
     ev_threshold = float(request.args.get('ev') or request.form.get('ev') or 0.02)
+    # New filter inputs with conservative defaults
+    min_spread_edge_pts = float(request.args.get('min_spread_edge_pts') or request.form.get('min_spread_edge_pts') or 2.5)
+    min_total_edge_pts = float(request.args.get('min_total_edge_pts') or request.form.get('min_total_edge_pts') or 3.0)
+    min_prob = request.args.get('min_prob') or request.form.get('min_prob') or ''
+    min_prob = float(min_prob) if str(min_prob).strip() not in ('', 'None') else None
+    max_sigma_margin = request.args.get('max_sigma_margin') or request.form.get('max_sigma_margin') or ''
+    max_sigma_margin = float(max_sigma_margin) if str(max_sigma_margin).strip() not in ('', 'None') else None
+    allowed_conferences = request.args.get('allowed_conferences') or request.form.get('allowed_conferences') or 'Big Ten'
     # Determine selected week (optional). If blank => auto upcoming similar to API
     sel_week = int(week_q) if (week_q and week_q.isdigit()) else None
-    recs = compute_recommendations(week=sel_week, bankroll=bankroll, kelly_factor=kelly_factor, ev_threshold=ev_threshold)
+    recs = compute_recommendations(
+        week=sel_week,
+        bankroll=bankroll,
+        kelly_factor=kelly_factor,
+        ev_threshold=ev_threshold,
+        min_spread_edge_pts=min_spread_edge_pts,
+        min_total_edge_pts=min_total_edge_pts,
+        min_prob=min_prob,
+        max_sigma_margin=max_sigma_margin,
+        allowed_conferences=allowed_conferences,
+    )
     # Attach confidence + timing like API
     idx = {}
     try:
@@ -4854,6 +4964,11 @@ def recommendations_page():
                 <label>Bankroll <input type="number" step="1" name="bankroll" value="{{bankroll}}" style="width:90px"/></label>
                 <label>Kelly <input type="number" step="0.05" name="kelly" value="{{kelly_factor}}" style="width:70px"/></label>
                 <label>Min EV <input type="number" step="0.01" name="ev" value="{{ev_threshold}}" style="width:70px"/></label>
+                <label>Min Spread Δ <input type="number" step="0.5" name="min_spread_edge_pts" value="{{min_spread_edge_pts}}" style="width:80px" title="abs(model_margin - spread) ≥ this many points"/></label>
+                <label>Min Total Δ <input type="number" step="0.5" name="min_total_edge_pts" value="{{min_total_edge_pts}}" style="width:80px" title="abs(model_total - O/U) ≥ this many points"/></label>
+                <label>Min Prob <input type="number" step="0.01" name="min_prob" value="{{min_prob if min_prob is not none else ''}}" style="width:70px" placeholder="0.55" title="ML side must be ≥ this probability"/></label>
+                <label>Max σ(margin) <input type="number" step="0.5" name="max_sigma_margin" value="{{max_sigma_margin if max_sigma_margin is not none else ''}}" style="width:90px" placeholder="" title="Exclude high-uncertainty games"/></label>
+                <label>Conferences <input type="text" name="allowed_conferences" value="{{allowed_conferences}}" style="min-width:180px" placeholder="SEC, Big Ten" title="Comma-separated list"/></label>
                 <button type="submit">Apply</button>
                 <a href="/recommendations" style="margin-left:6px; text-decoration:none;"><button type="button" class="secondary">Reset</button></a>
             </form>
@@ -4929,9 +5044,10 @@ def recommendations_page():
         <div style="margin-top:30px; font-size:.75rem; color:#666;">Generated at {{now}}. Edge = model EV (expected value) using American odds. Kelly stake capped & scaled. Times shown in original schedule timezone if available.</div>
         <div style="margin-top:6px; font-size:.7rem; color:#777;">Build {{ BUILD_TIME }} • Commit {{ BUILD_COMMIT[:8] if BUILD_COMMIT else 'unknown' }}</div>
     </div>
-    ''', weeks=weeks, sel_week=sel_week, sort_q=sort_q, bankroll=bankroll, kelly_factor=kelly_factor, ev_threshold=ev_threshold,
+     ''', weeks=weeks, sel_week=sel_week, sort_q=sort_q, bankroll=bankroll, kelly_factor=kelly_factor, ev_threshold=ev_threshold,
        high=high, medium=medium, low=low, other=other,
-       overall_stats=overall_stats, tier_stats=tier_stats, fmt_pct=fmt_pct, fmt_money=fmt_money, now=datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'), BUILD_TIME=BUILD_TIME, BUILD_COMMIT=BUILD_COMMIT)
+         overall_stats=overall_stats, tier_stats=tier_stats, fmt_pct=fmt_pct, fmt_money=fmt_money, now=datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'), BUILD_TIME=BUILD_TIME, BUILD_COMMIT=BUILD_COMMIT,
+         min_spread_edge_pts=min_spread_edge_pts, min_total_edge_pts=min_total_edge_pts, min_prob=min_prob, max_sigma_margin=max_sigma_margin, allowed_conferences=allowed_conferences)
 @app.route('/recommendations/performance')
 def recommendations_performance_page():
     # Read performance via the same CSV and simple aggregation
