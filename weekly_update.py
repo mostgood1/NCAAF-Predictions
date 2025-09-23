@@ -32,12 +32,14 @@ def _here() -> str:
 def _resolve_script(rel_path: str) -> str | None:
     base = _here()
     cands = [
+        # Prefer the root script first (Odds API version)
+        os.path.join(base, rel_path),
+        # Then project subfolders
         os.path.join(base, 'src', 'data', rel_path),
         os.path.join(base, 'src', 'modeling', rel_path),
-    os.path.join(base, 'NCAFCompare', 'src', 'data', rel_path),
-    os.path.join(base, 'NCAFCompare', 'src', 'modeling', rel_path),
-    os.path.join(base, 'NCAFCompare', rel_path),
-        os.path.join(base, rel_path),
+        os.path.join(base, 'NCAFCompare', 'src', 'data', rel_path),
+        os.path.join(base, 'NCAFCompare', 'src', 'modeling', rel_path),
+        os.path.join(base, 'NCAFCompare', rel_path),
     ]
     for p in cands:
         try:
@@ -143,7 +145,7 @@ def weekly_update(prior_week: int | None, upcoming_week: int | None) -> dict:
 
     # Fetch betting lines for upcoming week (if script exists)
     if upcoming_week is not None:
-        results['fetch_lines'] = _run_script_if_exists('fetch_2025_lines.py', ['--week', str(upcoming_week)])
+        results['fetch_lines'] = _run_script_if_exists('fetch_2025_lines.py', ['--week', str(upcoming_week), '--debug'])
     else:
         results['fetch_lines'] = {'skipped': 'no_upcoming_week'}
 

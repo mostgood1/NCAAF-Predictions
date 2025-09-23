@@ -505,6 +505,48 @@ def get_team_asset(team_name):
 lines_df = pd.read_csv(os.path.join(DATA_DIR, "college_football_betting_lines_last_15_years.csv")) if os.path.exists(os.path.join(DATA_DIR, "college_football_betting_lines_last_15_years.csv")) else pd.DataFrame(columns=['year','week','homeTeam','awayTeam','lines'])
 lines_index = {}
 lines_index_norm = {}
+def _parse_lines_field(odds_str):
+    """Parse the 'lines' column which is a JSON array serialized into CSV.
+    Handles typical CSV double-quote escaping (e.g., "[{""provider"":...}]") and
+    gracefully falls back to ast.literal_eval. Returns a list or []."""
+    try:
+        # Already a list?
+        if isinstance(odds_str, list):
+            return odds_str
+        # Must be a string to parse
+        if not isinstance(odds_str, str):
+            return []
+        s = odds_str.strip()
+        if not s:
+            return []
+        # Fast path: try direct JSON first
+        try:
+            return json.loads(s)
+        except Exception:
+            pass
+        # CSV may have doubled quotes inside the cell; normalize them
+        try:
+            s2 = s.replace('""', '"')
+            return json.loads(s2)
+        except Exception:
+            pass
+        # Sometimes the whole cell is quoted, strip outer quotes then normalize
+        try:
+            t = s
+            if (t.startswith('"') and t.endswith('"')) or (t.startswith("'") and t.endswith("'")):
+                t = t[1:-1]
+            t = t.replace('""', '"')
+            return json.loads(t)
+        except Exception:
+            pass
+        # Last resort: literal_eval on a cleaned string
+        try:
+            import ast as _ast
+            return _ast.literal_eval(s)
+        except Exception:
+            return []
+    except Exception:
+        return []
 def _norm_team_for_odds(name: str) -> str:
     try:
         s = str(name or '')
@@ -571,24 +613,7 @@ def _build_lines_index(df):
                 ht = row['homeTeam']
                 at = row['awayTeam']
                 key = (y, w, ht, at)
-                odds_str = row.get('lines','')
-                odds = []
-                # Robustly parse odds stored as JSON or Python literal strings
-                if isinstance(odds_str, str):
-                    parsed = None
-                    try:
-                        parsed = json.loads(odds_str)
-                    except Exception:
-                        try:
-                            parsed = ast.literal_eval(odds_str)
-                        except Exception:
-                            parsed = None
-                    if isinstance(parsed, list):
-                        odds = parsed
-                    else:
-                        odds = []
-                else:
-                    odds = odds_str if isinstance(odds_str, list) else []
+                odds = _parse_lines_field(row.get('lines', ''))
                 idx[key] = odds
                 # normalized fallback keys (raw-normalized and canonical-normalized)
                 n_ht = _norm_team_for_odds(ht)
@@ -2307,6 +2332,31 @@ def debug_missing_odds():
     except Exception as e:
         return {'error': str(e)}, 500
 
+@app.route('/api/debug-has-odds')
+def debug_has_odds():
+    """List games that have at least one real bookmaker odds entry. Accepts ?season=&week=."""
+    try:
+        season = request.args.get('season', default=2025, type=int)
+        week = request.args.get('week', default=None, type=int)
+        df = pred_df[pred_df.get('season', 0) == season].copy()
+        if week is not None:
+            df = df[df.get('week', 0) == week]
+        out = []
+        for _, r in df.iterrows():
+            lines = get_betting_lines(r['season'], r['week'], r['home_team'], r['away_team'])
+            real = [l for l in lines if not l.get('synthetic')]
+            if real:
+                out.append({
+                    'season': int(r['season']),
+                    'week': int(r['week']),
+                    'home': r['home_team'],
+                    'away': r['away_team'],
+                    'providers': [l.get('provider') for l in real if l.get('provider')],
+                })
+        return {'count': len(out), 'games': out[:1000]}, 200
+    except Exception as e:
+        return {'error': str(e)}, 500
+
 
 def compute_recommendations(
     week=None,
@@ -3261,7 +3311,7 @@ def index():
         </div>
 
         {% if game_info['betting_lines'] and game_info['betting_lines']|length > 0 %}
-        <div class="odds-toggle"><button type="button" class="toggleOddsBtn">Show Odds</button></div>
+        <div class="odds-toggle"><button type="button" class="toggleOddsBtn">Show Odds ({{ game_info['betting_lines']|length }})</button></div>
         <div class="odds" style="display:none;">
             <table class="odds-table">
                 <tr><th>Provider</th><th>Spread</th><th>Over/Under</th><th>Home ML</th><th>Away ML</th></tr>

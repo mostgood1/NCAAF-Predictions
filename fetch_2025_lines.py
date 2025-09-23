@@ -358,9 +358,14 @@ def _rows_to_index(rows: List[Dict[str, Any]]) -> dict[tuple[str,str], Dict[str,
             continue
     return idx
 
-def _merge_h2h_only_rows(base_rows: List[Dict[str, Any]], h2h_rows: List[Dict[str, Any]]):
+def _merge_provider_entries(base_rows: List[Dict[str, Any]], new_rows: List[Dict[str, Any]]):
+    """Merge provider lines, filling in missing markets (spread/total/ML) per provider.
+
+    - Adds entirely new game rows when absent in base_rows.
+    - When provider exists for a game, only fills missing fields from new_rows (does not overwrite existing values).
+    """
     base_idx = _rows_to_index(base_rows)
-    for r in h2h_rows:
+    for r in new_rows:
         k = (r['homeTeam'], r['awayTeam'])
         if k not in base_idx:
             base_rows.append(r)
@@ -376,6 +381,12 @@ def _merge_h2h_only_rows(base_rows: List[Dict[str, Any]], h2h_rows: List[Dict[st
                     continue
                 if pname in prov_map:
                     pl = prov_map[pname]
+                    # Fill missing spread/total/ML values
+                    if (pl.get('spread') is None or pl.get('spread')=='') and nl.get('spread') is not None:
+                        pl['spread'] = nl.get('spread')
+                        pl['formattedSpread'] = nl.get('formattedSpread', pl.get('formattedSpread',''))
+                    if (pl.get('overUnder') is None or pl.get('overUnder')=='') and nl.get('overUnder') is not None:
+                        pl['overUnder'] = nl.get('overUnder')
                     if (pl.get('homeMoneyline') is None or pl.get('homeMoneyline')=='') and nl.get('homeMoneyline') is not None:
                         pl['homeMoneyline'] = nl.get('homeMoneyline')
                     if (pl.get('awayMoneyline') is None or pl.get('awayMoneyline')=='') and nl.get('awayMoneyline') is not None:
@@ -444,7 +455,8 @@ def main():
         return 3
 
     sport = os.environ.get('ODDS_API_SPORT', 'americanfootball_ncaaf')
-    regions = os.environ.get('ODDS_API_REGIONS', 'us,us2')  # broaden coverage for additional US books (e.g., Bovada)
+    # Broaden default regions to include additional books which may post earlier (can override via env)
+    regions = os.environ.get('ODDS_API_REGIONS', 'us,us2,eu,uk')
     markets = os.environ.get('ODDS_API_MARKETS', 'h2h,spreads,totals')
     odds_format = os.environ.get('ODDS_API_ODDS_FORMAT', 'american')
 
@@ -454,6 +466,11 @@ def main():
     except Exception as e:
         print(f"[error] fetch failed: {e}", file=sys.stderr)
         return 4
+    if args.debug:
+        try:
+            print(f"[info] fetched events count: {len(events)}", file=sys.stderr)
+        except Exception:
+            pass
     rows = build_lines_rows(week, events, debug=args.debug)
     # Attempt second-pass h2h fetch if FBS vs FBS moneylines missing
     try:
@@ -481,18 +498,57 @@ def main():
             try:
                 h2h_events = fetch_odds(api_key, sport, extra_regions, 'h2h', odds_format)
                 h2h_rows = build_lines_rows(week, h2h_events, debug=args.debug)
-                _merge_h2h_only_rows(rows, h2h_rows)
+                _merge_provider_entries(rows, h2h_rows)
             except Exception as e:
                 if args.debug:
                     print(f"[warn] second-pass h2h fetch failed: {e}", file=sys.stderr)
     except Exception as e:
         if args.debug:
             print(f"[warn] ML enhancement logic failed: {e}", file=sys.stderr)
+    # Optional second pass for spreads/totals if many games lack those markets
+    try:
+        need_market_fill = []
+        rows_idx2 = _rows_to_index(rows)
+        for (ht, at), r in rows_idx2.items():
+            try:
+                line_list = json.loads(r['lines']) if isinstance(r['lines'], str) else r['lines']
+            except Exception:
+                line_list = []
+            has_spread = any(pl.get('spread') is not None for pl in line_list)
+            has_total = any(pl.get('overUnder') is not None for pl in line_list)
+            if not (has_spread and has_total):
+                need_market_fill.append((ht, at))
+        if need_market_fill:
+            extra_regions_st = os.environ.get('ODDS_API_SPREADS_TOTALS_EXTRA_REGIONS', 'us,us2,eu,uk')
+            if args.debug:
+                print(f"[info] Second-pass spreads/totals fetch for games missing markets: {len(need_market_fill)} regions={extra_regions_st}", file=sys.stderr)
+            try:
+                st_events = fetch_odds(api_key, sport, extra_regions_st, 'spreads,totals', odds_format)
+                st_rows = build_lines_rows(week, st_events, debug=args.debug)
+                _merge_provider_entries(rows, st_rows)
+            except Exception as e:
+                if args.debug:
+                    print(f"[warn] second-pass spreads/totals fetch failed: {e}", file=sys.stderr)
+    except Exception as e:
+        if args.debug:
+            print(f"[warn] spreads/totals enhancement logic failed: {e}", file=sys.stderr)
     if not rows:
         print('[warn] No rows matched schedule / produced provider lines; nothing written.')
         return 0
     res = merge_and_write(rows, week)
-    print(json.dumps({'status':'ok','week':week, **res}, indent=2))
+    # Print compact stats to aid coverage diagnostics
+    try:
+        total_games = len(_select_predictions_frame(week))
+    except Exception:
+        total_games = None
+    stats = {
+        'status': 'ok',
+        'week': week,
+        **res,
+        'matched_games': len(rows),
+        'pred_games_in_week': total_games,
+    }
+    print(json.dumps(stats, indent=2))
     return 0
 
 if __name__ == '__main__':
