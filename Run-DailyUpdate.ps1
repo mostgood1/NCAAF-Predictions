@@ -15,7 +15,9 @@ param(
     [string]$OpenWeatherKeyFile,
     [string]$EnvFile,
     [string]$OddsApiKey,
-    [string]$OddsApiKeyFile
+    [string]$OddsApiKeyFile,
+    [switch]$DisableGitPush,
+    [string]$GitCommitMessage
 )
 
 $ErrorActionPreference = 'Stop'
@@ -202,6 +204,50 @@ try {
         }
     }
     Write-Host "Log: $log" -ForegroundColor Green
+
+    # --- Optional: auto git commit & push of newly generated data/code changes ---
+    $doGit = $true
+    if($DisableGitPush){ $doGit = $false }
+    if($env:DAILY_UPDATE_DISABLE_GIT -and $env:DAILY_UPDATE_DISABLE_GIT -eq '1'){ $doGit = $false }
+    if($doGit){
+        try {
+            $gitCmd = Get-Command git -ErrorAction SilentlyContinue
+            if(-not $gitCmd){ Write-Host "[git] git not found in PATH; skipping auto push." -ForegroundColor Yellow }
+            else {
+                $inside = git rev-parse --is-inside-work-tree 2>$null
+                if($LASTEXITCODE -ne 0){ Write-Host "[git] Not inside a git work tree; skipping." -ForegroundColor Yellow }
+                else {
+                    # Stage only tracked modifications and key data artifacts; avoid committing logs & secrets.
+                    # First stage tracked modified/deleted files.
+                    git add -u 2>$null
+                    # Then explicitly add updated prediction / odds data artifacts if untracked (rare)
+                    foreach($pat in @('data/*.csv','data/*.json','recommendations_*.json')){ git add $pat 2>$null }
+                    # Exclude logs (in case someone previously tracked) by resetting them.
+                    if(Test-Path .git){
+                        foreach($l in (git ls-files logs 2>$null)) { git restore --staged $l 2>$null }
+                    }
+                    # Check if there is anything to commit
+                    git diff --cached --quiet 2>$null
+                    if($LASTEXITCODE -eq 0){
+                        Write-Host "[git] No staged changes to commit." -ForegroundColor DarkGray
+                    } else {
+                        if(-not $GitCommitMessage -or [string]::IsNullOrWhiteSpace($GitCommitMessage)){
+                            $GitCommitMessage = "daily update auto-commit: $stamp"
+                        }
+                        git commit -m "$GitCommitMessage" | Out-Null
+                        if($LASTEXITCODE -ne 0){ throw "Commit failed (exit $LASTEXITCODE)" }
+                        git push 2>&1 | ForEach-Object { Write-Host "[git] $_" }
+                        if($LASTEXITCODE -ne 0){ throw "Push failed (exit $LASTEXITCODE)" }
+                        Write-Host "[git] Auto push complete." -ForegroundColor Green
+                    }
+                }
+            }
+        } catch {
+            Write-Host "[git] Auto push encountered an error: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "[git] Auto push disabled (switch or env var)." -ForegroundColor DarkGray
+    }
 }
 finally {
     if($hasLock){ $mutex.ReleaseMutex() | Out-Null }
