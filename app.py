@@ -1352,15 +1352,45 @@ def _get_conf_std_for_game(row):
     return 14.0  # reasonable default std for margin
 
 RECS_PATH = os.path.join(DATA_DIR, "recommendations_2025.csv")
+RECS_COLUMNS = [
+    'timestamp','season','week','home_team','away_team','market','side','price_american','line','provider',
+    'model_prob','implied_prob','edge','kelly_f','bankroll','stake','status','result','pnl'
+]
 
 
 def _ensure_recs_file():
     if not os.path.exists(RECS_PATH):
-        cols = [
-            'timestamp','season','week','home_team','away_team','market','side','price_american','line','provider',
-            'model_prob','implied_prob','edge','kelly_f','bankroll','stake','status','result','pnl'
-        ]
-        pd.DataFrame(columns=cols).to_csv(RECS_PATH, index=False)
+        pd.DataFrame(columns=RECS_COLUMNS).to_csv(RECS_PATH, index=False)
+
+def _append_recommendations(rows: list[dict]) -> int:
+    if not rows:
+        return 0
+    try:
+        os.makedirs(os.path.dirname(RECS_PATH), exist_ok=True)
+    except Exception:
+        pass
+    header = True
+    try:
+        if os.path.exists(RECS_PATH) and os.path.getsize(RECS_PATH) > 0:
+            header = False
+    except Exception:
+        header = not os.path.exists(RECS_PATH)
+    try:
+        df = pd.DataFrame(rows)
+        known = [c for c in RECS_COLUMNS if c in df.columns]
+        extras = [c for c in df.columns if c not in known]
+        ordered = known + extras
+        df.to_csv(RECS_PATH, mode='a', index=False, header=header, columns=ordered)
+        return len(rows)
+    except Exception:
+        try:
+            existing = pd.read_csv(RECS_PATH) if os.path.exists(RECS_PATH) else pd.DataFrame(columns=RECS_COLUMNS)
+            new_df = pd.DataFrame(rows)
+            all_df = pd.concat([existing, new_df], ignore_index=True)
+            all_df.to_csv(RECS_PATH, index=False)
+            return len(rows)
+        except Exception:
+            return 0
 
 def log_recommendations_cli(week: int | None = None, bankroll: float = 1000.0, kelly_factor: float = 0.5, ev_threshold: float = 0.02) -> dict:
     """Compute top recommendations and append them to RECS_PATH, returning a small summary.
@@ -1384,11 +1414,8 @@ def log_recommendations_cli(week: int | None = None, bankroll: float = 1000.0, k
                 'kelly_f': r['kelly_f'], 'bankroll': bankroll, 'stake': r['stake'],
                 'status': 'open', 'result': 'pending', 'pnl': 0.0
             })
-        existing = pd.read_csv(RECS_PATH) if os.path.exists(RECS_PATH) else pd.DataFrame()
-        new_df = pd.DataFrame(rows)
-        all_df = pd.concat([existing, new_df], ignore_index=True)
-        all_df.to_csv(RECS_PATH, index=False)
-        return {"count": len(top), "logged": len(rows), "path": RECS_PATH}
+        wrote = _append_recommendations(rows)
+        return {"count": len(top), "logged": wrote, "path": RECS_PATH}
     except Exception as e:
         return {"error": str(e)}
 
@@ -4764,13 +4791,7 @@ def recommendations_simple():
                 'kelly_f': r['kelly_f'], 'bankroll': bankroll, 'stake': r['stake'],
                 'status': 'open', 'result': 'pending', 'pnl': 0.0
             })
-        try:
-            existing = pd.read_csv(RECS_PATH) if os.path.exists(RECS_PATH) else pd.DataFrame()
-            new_df = pd.DataFrame(out)
-            all_df = pd.concat([existing, new_df], ignore_index=True)
-            all_df.to_csv(RECS_PATH, index=False)
-        except Exception:
-            pass
+        _append_recommendations(out)
 
     return {'count': len(top), 'recommendations': top}, 200
 

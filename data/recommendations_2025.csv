@@ -1599,3 +1599,203 @@ timestamp,season,week,home_team,away_team,market,side,price_american,line,provid
 2025-09-25T15:20:55.478820+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,410,,Marathon Bet,0.9895,0.1961,4.0466,0.025,1000.0,12.5,open,pending,0.0
 2025-09-25T15:20:55.478820+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,410,,Bovada,0.9895,0.1961,4.0466,0.025,1000.0,12.5,open,pending,0.0
 2025-09-25T15:20:55.478820+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,410,,Nordic Bet,0.9895,0.1961,4.0466,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,1042,,MyBookie.ag,0.995,0.0876,10.3629,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,1000,,Hard Rock Bet,0.995,0.0909,9.945,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,900,,Ladbrokes,0.995,0.1,8.95,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,900,,BetMGM,0.995,0.1,8.95,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,900,,Coral,0.995,0.1,8.95,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,900,,ESPN BET,0.995,0.1,8.95,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,874,,LowVig.ag,0.995,0.1027,8.6913,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,874,,BetOnline.ag,0.995,0.1027,8.6913,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,870,,Marathon Bet,0.995,0.1031,8.6515,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,860,,GTbets,0.995,0.1042,8.552,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,850,,DraftKings,0.995,0.1053,8.4525,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,850,,BetUS,0.995,0.1053,8.4525,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,830,,Fliff,0.995,0.1075,8.2535,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,828,,Pinnacle,0.995,0.1078,8.2336,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,810,,FanDuel,0.995,0.1099,8.0545,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,775,,Bovada,0.995,0.1143,7.7062,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,775,,Everygame,0.995,0.1143,7.7062,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,770,,Coolbet,0.995,0.1149,7.6565,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,755,,Betsson,0.995,0.117,7.5073,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,755,,Nordic Bet,0.995,0.117,7.5073,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,700,,Paddy Power,0.995,0.125,6.96,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,700,,BetRivers,0.995,0.125,6.96,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,700,,Unibet (SE),0.995,0.125,6.96,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,700,,Bally Bet,0.995,0.125,6.96,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,700,,betPARX,0.995,0.125,6.96,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,700,,LeoVegas,0.995,0.125,6.96,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,700,,Unibet,0.995,0.125,6.96,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,700,,Unibet (NL),0.995,0.125,6.96,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,650,,LeoVegas (SE),0.995,0.1333,6.4625,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oklahoma State,Baylor,ML,Home,650,,Unibet (IT),0.995,0.1333,6.4625,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,540,,BetUS,0.9524,0.1562,5.0954,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,534,,LowVig.ag,0.9524,0.1577,5.0382,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,534,,BetOnline.ag,0.9524,0.1577,5.0382,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,525,,BetMGM,0.9524,0.16,4.9525,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,525,,Marathon Bet,0.9524,0.16,4.9525,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,520,,FanDuel,0.9524,0.1613,4.9049,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,520,,GTbets,0.9524,0.1613,4.9049,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,500,,DraftKings,0.9524,0.1667,4.7144,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,500,,Ladbrokes,0.9524,0.1667,4.7144,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,500,,Coral,0.9524,0.1667,4.7144,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,500,,Coolbet,0.9524,0.1667,4.7144,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,500,,Everygame,0.9524,0.1667,4.7144,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,New Mexico,New Mexico State,ML,Home,475,,Hard Rock Bet,0.9852,0.1739,4.6652,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,490,,Bally Bet,0.9524,0.1695,4.6192,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,490,,LeoVegas,0.9524,0.1695,4.6192,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,490,,betPARX,0.9524,0.1695,4.6192,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,485,,Fliff,0.9524,0.1709,4.5715,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,480,,MyBookie.ag,0.9524,0.1724,4.5239,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,480,,Unibet (SE),0.9524,0.1724,4.5239,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,480,,Unibet,0.9524,0.1724,4.5239,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,480,,Unibet (NL),0.9524,0.1724,4.5239,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,480,,BetRivers,0.9524,0.1724,4.5239,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,New Mexico,New Mexico State,ML,Home,460,,MyBookie.ag,0.9852,0.1786,4.5174,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,475,,Bovada,0.9524,0.1739,4.4763,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,475,,Hard Rock Bet,0.9524,0.1739,4.4763,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,475,,LeoVegas (SE),0.9524,0.1739,4.4763,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,475,,Unibet (IT),0.9524,0.1739,4.4763,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,475,,Nordic Bet,0.9524,0.1739,4.4763,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,475,,Betsson,0.9524,0.1739,4.4763,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,475,,ESPN BET,0.9524,0.1739,4.4763,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,450,,Hard Rock Bet,0.9895,0.1818,4.4424,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,450,,BetUS,0.9895,0.1818,4.4424,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,450,,Betfair,0.9895,0.1818,4.4424,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,450,,Betfair,0.9895,0.1818,4.4424,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,New Mexico,New Mexico State,ML,Home,450,,Marathon Bet,0.9852,0.1818,4.4189,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,464,,Pinnacle,0.9524,0.1773,4.3715,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,440,,FanDuel,0.9895,0.1852,4.3435,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,440,,DraftKings,0.9895,0.1852,4.3435,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,New Mexico,New Mexico State,ML,Home,440,,DraftKings,0.9852,0.1852,4.3203,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,New Mexico,New Mexico State,ML,Home,440,,FanDuel,0.9852,0.1852,4.3203,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,435,,GTbets,0.9895,0.1869,4.294,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,434,,LowVig.ag,0.9895,0.1873,4.2841,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,434,,BetOnline.ag,0.9895,0.1873,4.2841,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,430,,Coolbet,0.9895,0.1887,4.2445,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,430,,Nordic Bet,0.9895,0.1887,4.2445,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,430,,Betsson,0.9895,0.1887,4.2445,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,430,,Matchbook,0.9895,0.1887,4.2445,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Tulsa,Tulane,ML,Home,450,,Paddy Power,0.9524,0.1818,4.2382,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,New Mexico,New Mexico State,ML,Home,430,,BetUS,0.9852,0.1887,4.2218,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,New Mexico,New Mexico State,ML,Home,430,,Coolbet,0.9852,0.1887,4.2218,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,425,,BetMGM,0.9895,0.1905,4.195,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,425,,Coral,0.9895,0.1905,4.195,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,425,,Ladbrokes,0.9895,0.1905,4.195,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,425,,ESPN BET,0.9895,0.1905,4.195,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,New Mexico,New Mexico State,ML,Home,426,,Pinnacle,0.9852,0.1901,4.1824,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,New Mexico,New Mexico State,ML,Home,425,,Fliff,0.9852,0.1905,4.1726,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,New Mexico,New Mexico State,ML,Home,425,,Ladbrokes,0.9852,0.1905,4.1726,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,New Mexico,New Mexico State,ML,Home,425,,BetMGM,0.9852,0.1905,4.1726,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,New Mexico,New Mexico State,ML,Home,425,,Coral,0.9852,0.1905,4.1726,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,New Mexico,New Mexico State,ML,Home,425,,Bovada,0.9852,0.1905,4.1726,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,New Mexico,New Mexico State,ML,Home,425,,ESPN BET,0.9852,0.1905,4.1726,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,New Mexico,New Mexico State,ML,Home,425,,Everygame,0.9852,0.1905,4.1726,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,420,,Paddy Power,0.9895,0.1923,4.1456,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,420,,Betfair Sportsbook,0.9895,0.1923,4.1456,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,420,,Everygame,0.9895,0.1923,4.1456,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,419,,MyBookie.ag,0.9895,0.1927,4.1357,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,New Mexico,New Mexico State,ML,Home,421,,LowVig.ag,0.9852,0.1919,4.1331,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,New Mexico,New Mexico State,ML,Home,421,,BetOnline.ag,0.9852,0.1919,4.1331,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,New Mexico,New Mexico State,ML,Home,420,,Paddy Power,0.9852,0.1923,4.1233,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:20:56.118099+00:00,2025,5,Oregon State,Houston,ML,Home,417,,BetUS,0.9826,0.1934,4.08,0.025,1000.0,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,1042,,MyBookie.ag,0.995,0.0876,10.3629,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,1000,,Hard Rock Bet,0.995,0.0909,9.945,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,900,,Ladbrokes,0.995,0.1,8.95,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,900,,BetMGM,0.995,0.1,8.95,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,900,,Coral,0.995,0.1,8.95,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,900,,ESPN BET,0.995,0.1,8.95,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,874,,LowVig.ag,0.995,0.1027,8.6913,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,874,,BetOnline.ag,0.995,0.1027,8.6913,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,870,,Marathon Bet,0.995,0.1031,8.6515,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,860,,GTbets,0.995,0.1042,8.552,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,850,,DraftKings,0.995,0.1053,8.4525,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,850,,BetUS,0.995,0.1053,8.4525,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,850,,Coolbet,0.995,0.1053,8.4525,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,830,,Fliff,0.995,0.1075,8.2535,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,828,,Pinnacle,0.995,0.1078,8.2336,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,810,,FanDuel,0.995,0.1099,8.0545,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,775,,Everygame,0.995,0.1143,7.7062,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,755,,Betsson,0.995,0.117,7.5073,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,755,,Nordic Bet,0.995,0.117,7.5073,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,700,,Paddy Power,0.995,0.125,6.96,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,700,,BetRivers,0.995,0.125,6.96,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,700,,Unibet (SE),0.995,0.125,6.96,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,700,,Bally Bet,0.995,0.125,6.96,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,700,,betPARX,0.995,0.125,6.96,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,700,,LeoVegas,0.995,0.125,6.96,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,700,,Unibet,0.995,0.125,6.96,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,700,,Unibet (NL),0.995,0.125,6.96,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,650,,LeoVegas (SE),0.995,0.1333,6.4625,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oklahoma State,Baylor,ML,Home,650,,Unibet (IT),0.995,0.1333,6.4625,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,540,,BetUS,0.9524,0.1562,5.0954,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,534,,LowVig.ag,0.9524,0.1577,5.0382,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,534,,BetOnline.ag,0.9524,0.1577,5.0382,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,525,,BetMGM,0.9524,0.16,4.9525,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,525,,Marathon Bet,0.9524,0.16,4.9525,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,520,,FanDuel,0.9524,0.1613,4.9049,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,520,,GTbets,0.9524,0.1613,4.9049,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,500,,DraftKings,0.9524,0.1667,4.7144,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,500,,Ladbrokes,0.9524,0.1667,4.7144,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,500,,Coral,0.9524,0.1667,4.7144,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,500,,Coolbet,0.9524,0.1667,4.7144,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,500,,Nordic Bet,0.9524,0.1667,4.7144,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,500,,Betsson,0.9524,0.1667,4.7144,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,500,,Everygame,0.9524,0.1667,4.7144,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,New Mexico,New Mexico State,ML,Home,475,,Hard Rock Bet,0.9852,0.1739,4.6652,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,490,,Bally Bet,0.9524,0.1695,4.6192,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,490,,LeoVegas,0.9524,0.1695,4.6192,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,490,,betPARX,0.9524,0.1695,4.6192,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,485,,Fliff,0.9524,0.1709,4.5715,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,480,,MyBookie.ag,0.9524,0.1724,4.5239,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,480,,Unibet (SE),0.9524,0.1724,4.5239,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,480,,Unibet,0.9524,0.1724,4.5239,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,480,,Unibet (NL),0.9524,0.1724,4.5239,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,480,,BetRivers,0.9524,0.1724,4.5239,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,475,,Hard Rock Bet,0.9524,0.1739,4.4763,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,475,,LeoVegas (SE),0.9524,0.1739,4.4763,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,475,,Unibet (IT),0.9524,0.1739,4.4763,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,475,,ESPN BET,0.9524,0.1739,4.4763,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,450,,Hard Rock Bet,0.9895,0.1818,4.4424,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,450,,BetUS,0.9895,0.1818,4.4424,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,New Mexico,New Mexico State,ML,Home,450,,Marathon Bet,0.9852,0.1818,4.4189,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,New Mexico,New Mexico State,ML,Home,449,,MyBookie.ag,0.9852,0.1821,4.409,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,464,,Pinnacle,0.9524,0.1773,4.3715,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,440,,FanDuel,0.9895,0.1852,4.3435,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,440,,DraftKings,0.9895,0.1852,4.3435,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,New Mexico,New Mexico State,ML,Home,440,,DraftKings,0.9852,0.1852,4.3203,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,435,,GTbets,0.9895,0.1869,4.294,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,434,,LowVig.ag,0.9895,0.1873,4.2841,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,434,,BetOnline.ag,0.9895,0.1873,4.2841,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,430,,Coolbet,0.9895,0.1887,4.2445,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,430,,Matchbook,0.9895,0.1887,4.2445,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Tulsa,Tulane,ML,Home,450,,Paddy Power,0.9524,0.1818,4.2382,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,New Mexico,New Mexico State,ML,Home,430,,FanDuel,0.9852,0.1887,4.2218,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,New Mexico,New Mexico State,ML,Home,430,,BetUS,0.9852,0.1887,4.2218,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,425,,BetMGM,0.9895,0.1905,4.195,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,425,,Coral,0.9895,0.1905,4.195,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,425,,Ladbrokes,0.9895,0.1905,4.195,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,425,,ESPN BET,0.9895,0.1905,4.195,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,New Mexico,New Mexico State,ML,Home,426,,Pinnacle,0.9852,0.1901,4.1824,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,New Mexico,New Mexico State,ML,Home,425,,Fliff,0.9852,0.1905,4.1726,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,New Mexico,New Mexico State,ML,Home,425,,Ladbrokes,0.9852,0.1905,4.1726,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,New Mexico,New Mexico State,ML,Home,425,,BetMGM,0.9852,0.1905,4.1726,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,New Mexico,New Mexico State,ML,Home,425,,Coral,0.9852,0.1905,4.1726,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,New Mexico,New Mexico State,ML,Home,425,,ESPN BET,0.9852,0.1905,4.1726,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,New Mexico,New Mexico State,ML,Home,425,,Everygame,0.9852,0.1905,4.1726,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oregon State,Houston,ML,Home,425,,BetUS,0.9826,0.1905,4.1586,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,420,,Paddy Power,0.9895,0.1923,4.1456,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,420,,Betfair Sportsbook,0.9895,0.1923,4.1456,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,420,,Everygame,0.9895,0.1923,4.1456,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,420,,Betfair,0.9895,0.1923,4.1456,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,420,,Betfair,0.9895,0.1923,4.1456,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,419,,MyBookie.ag,0.9895,0.1927,4.1357,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,New Mexico,New Mexico State,ML,Home,421,,LowVig.ag,0.9852,0.1919,4.1331,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,New Mexico,New Mexico State,ML,Home,421,,BetOnline.ag,0.9852,0.1919,4.1331,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,412,,Pinnacle,0.9895,0.1953,4.0664,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oregon State,Houston,ML,Home,415,,LowVig.ag,0.9826,0.1942,4.0604,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Oregon State,Houston,ML,Home,415,,BetOnline.ag,0.9826,0.1942,4.0604,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,410,,Fliff,0.9895,0.1961,4.0466,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,410,,Marathon Bet,0.9895,0.1961,4.0466,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,410,,Bovada,0.9895,0.1961,4.0466,0.025,1000,12.5,open,pending,0.0
+2025-09-25T15:40:23.454000+00:00,2025,5,Wake Forest,Georgia Tech,ML,Home,410,,Nordic Bet,0.9895,0.1961,4.0466,0.025,1000,12.5,open,pending,0.0
