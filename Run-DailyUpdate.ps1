@@ -184,19 +184,28 @@ try {
     if($LASTEXITCODE -ne 0){ Write-Host "weekly_update.py failed (exit $LASTEXITCODE). Skipping rec logging." -ForegroundColor Yellow }
     elseif($LogRecommendations){
         try {
-            $recUrl = "http://127.0.0.1:5051/api/recommendations/simple?log=true&bankroll=$Bankroll&kelly_factor=$KellyFactor&ev_threshold=$EvThreshold"
+            # Use configured PORT if present; default to 5051
+            $svcPort = if($env:PORT){ $env:PORT } else { 5051 }
+            $recUrl = "http://127.0.0.1:$svcPort/api/recommendations/simple?log=true&bankroll=$Bankroll&kelly_factor=$KellyFactor&ev_threshold=$EvThreshold"
             if($LogWeek){ $recUrl += "&week=$LogWeek" }
             Write-Host "Attempting to log recommendations via $recUrl" -ForegroundColor Cyan
-            # Use PowerShell-native web cmdlets to avoid alias issues
-            try {
-                Invoke-RestMethod -Method GET -Uri $recUrl -TimeoutSec 5 -ErrorAction Stop | Out-Null
-            } catch {
+            # Use PowerShell-native web cmdlets; add small retry with longer timeout for heavier computations
+            $ok = $false
+            $attempts = 3
+            for($i=1; $i -le $attempts; $i++){
                 try {
-                    Invoke-WebRequest -Uri $recUrl -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop | Out-Null
+                    Invoke-RestMethod -Method GET -Uri $recUrl -TimeoutSec 20 -ErrorAction Stop | Out-Null
+                    $ok = $true; break
                 } catch {
-                    throw
+                    try {
+                        Invoke-WebRequest -Uri $recUrl -UseBasicParsing -TimeoutSec 20 -ErrorAction Stop | Out-Null
+                        $ok = $true; break
+                    } catch {
+                        if($i -lt $attempts){ Start-Sleep -Seconds 2 }
+                    }
                 }
             }
+            if(-not $ok){ throw "recommendations logging request timed out after $attempts attempts" }
             Write-Host "Recommendations logging request sent." -ForegroundColor Green
         }
         catch {
@@ -239,8 +248,11 @@ try {
                         }
                         git commit -m "$GitCommitMessage" | Out-Null
                         if($LASTEXITCODE -ne 0){ throw "Commit failed (exit $LASTEXITCODE)" }
-                        git push 2>&1 | ForEach-Object { Write-Host "[git] $_" }
-                        if($LASTEXITCODE -ne 0){ throw "Push failed (exit $LASTEXITCODE)" }
+                        # Capture push output explicitly to avoid NativeCommandError throwing under ErrorActionPreference=Stop
+                        $pushOut = & git push 2>&1
+                        $pushCode = $LASTEXITCODE
+                        if($pushOut){ $pushOut | ForEach-Object { Write-Host "[git] $_" } }
+                        if($pushCode -ne 0){ throw "Push failed (exit $pushCode)" }
                         Write-Host "[git] Auto push complete." -ForegroundColor Green
                     }
                 }
