@@ -209,7 +209,19 @@ try {
             Write-Host "Recommendations logging request sent." -ForegroundColor Green
         }
         catch {
-            Write-Host "Failed to log recommendations: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "Failed to log recommendations: $($_.Exception.Message)" -ForegroundColor Yellow
+            # Fallback: call Python helper directly to append recommendations without HTTP
+            try {
+                $py = Join-Path $root '.venv\Scripts\python.exe'
+                if(!(Test-Path $py)) { $py = 'python' }
+                $weekLiteral = if($LogWeek){ [string]$LogWeek } else { 'None' }
+                $code = "import app, json; print(json.dumps(app.log_recommendations_cli(week=$weekLiteral, bankroll=$Bankroll, kelly_factor=$KellyFactor, ev_threshold=$EvThreshold)))"
+                Write-Host "Attempting CLI fallback to log recommendations..." -ForegroundColor Cyan
+                & $py @('-c', $code) | Tee-Object -FilePath $log -Append
+                Write-Host "CLI fallback executed." -ForegroundColor Green
+            } catch {
+                Write-Host "CLI fallback failed: $($_.Exception.Message)" -ForegroundColor Red
+            }
         }
     }
     Write-Host "Log: $log" -ForegroundColor Green
@@ -249,7 +261,8 @@ try {
                         git commit -m "$GitCommitMessage" | Out-Null
                         if($LASTEXITCODE -ne 0){ throw "Commit failed (exit $LASTEXITCODE)" }
                         # Capture push output explicitly to avoid NativeCommandError throwing under ErrorActionPreference=Stop
-                        $pushOut = & git push 2>&1
+                        # Use cmd /c to avoid PowerShell NativeCommandError behavior and capture output reliably
+                        $pushOut = & cmd /c "git push 2>&1"
                         $pushCode = $LASTEXITCODE
                         if($pushOut){ $pushOut | ForEach-Object { Write-Host "[git] $_" } }
                         if($pushCode -ne 0){ throw "Push failed (exit $pushCode)" }

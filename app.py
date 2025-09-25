@@ -1362,6 +1362,36 @@ def _ensure_recs_file():
         ]
         pd.DataFrame(columns=cols).to_csv(RECS_PATH, index=False)
 
+def log_recommendations_cli(week: int | None = None, bankroll: float = 1000.0, kelly_factor: float = 0.5, ev_threshold: float = 0.02) -> dict:
+    """Compute top recommendations and append them to RECS_PATH, returning a small summary.
+    This mirrors /api/recommendations/simple?log=true behavior without HTTP.
+    """
+    try:
+        recs = compute_recommendations(week=week, bankroll=bankroll, kelly_factor=kelly_factor, ev_threshold=ev_threshold)
+        top = recs[:100]
+        if not top:
+            return {"count": 0, "logged": 0}
+        _ensure_recs_file()
+        ts = datetime.now(timezone.utc).isoformat()
+        rows = []
+        for r in top:
+            rows.append({
+                'timestamp': ts,
+                'season': r['season'], 'week': r['week'], 'home_team': r['home_team'], 'away_team': r['away_team'],
+                'market': r['market'], 'side': r['side'], 'price_american': r['price_american'], 'provider': r.get('provider'),
+                'line': r.get('line', None),
+                'model_prob': r['model_prob'], 'implied_prob': r['implied_prob'], 'edge': r['edge'],
+                'kelly_f': r['kelly_f'], 'bankroll': bankroll, 'stake': r['stake'],
+                'status': 'open', 'result': 'pending', 'pnl': 0.0
+            })
+        existing = pd.read_csv(RECS_PATH) if os.path.exists(RECS_PATH) else pd.DataFrame()
+        new_df = pd.DataFrame(rows)
+        all_df = pd.concat([existing, new_df], ignore_index=True)
+        all_df.to_csv(RECS_PATH, index=False)
+        return {"count": len(top), "logged": len(rows), "path": RECS_PATH}
+    except Exception as e:
+        return {"error": str(e)}
+
 # -------------------- Auto Refresh Infrastructure --------------------
 _AUTO_REFRESH_LAST_MTIME = None
 _AUTO_REFRESH_LOCK = threading.Lock()
