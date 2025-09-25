@@ -221,7 +221,10 @@ try {
                     # First stage tracked modified/deleted files.
                     git add -u 2>$null
                     # Then explicitly add updated prediction / odds data artifacts if untracked (rare)
-                    foreach($pat in @('data/*.csv','data/*.json','recommendations_*.json')){ git add $pat 2>$null }
+                    # Only add patterns that actually match files to avoid fatal pathspec errors
+                    foreach($pat in @('data/*.csv','data/*.json','recommendations_*.json')){
+                        if(Test-Path $pat){ git add $pat 2>$null }
+                    }
                     # Exclude logs (in case someone previously tracked) by resetting them.
                     if(Test-Path .git){
                         foreach($l in (git ls-files logs 2>$null)) { git restore --staged $l 2>$null }
