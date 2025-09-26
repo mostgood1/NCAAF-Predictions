@@ -915,40 +915,13 @@ def _build_game_card(game_row: pd.Series) -> dict:
     display_time_fallback = val_sd or val_api or ''
     start_iso = ''
     sort_ts = None
-    # Parse both API and local start_date to UTC and reconcile
-    def _parse_to_utc(s_val: str | None):
-        if not s_val:
-            return None
-        try:
-            s = s_val
-            if 'T' not in s and ' ' in s:
-                s = s.replace(' ', 'T')
-            try:
-                if s.endswith('Z'):
-                    dt_obj = datetime.fromisoformat(s.replace('Z', '+00:00'))
-                else:
-                    dt_obj = datetime.fromisoformat(s)
-            except Exception:
-                try:
-                    dt_obj = pd.to_datetime(s_val, errors='coerce').to_pydatetime()
-                except Exception:
-                    dt_obj = None
-            if not dt_obj:
-                return None
-            if getattr(dt_obj, 'tzinfo', None) is None:
-                # Assume naive schedule times are published in US Eastern
-                try:
-                    eastern = pytz.timezone('America/New_York')
-                    dt_obj = eastern.localize(dt_obj)
-                except Exception:
-                    # Fallback to UTC if localization fails
-                    return dt_obj.replace(tzinfo=pytz.UTC)
-            return dt_obj.astimezone(pytz.UTC)
-        except Exception:
-            return None
-
-    dt_api_utc = _parse_to_utc(val_api)
-    dt_sd_utc = _parse_to_utc(val_sd)
+    # Parse both API and local start_date to UTC and reconcile; from week 5 onward, treat naive as UTC
+    try:
+        week_val_for_time = int(game_row.get('week', 0))
+    except Exception:
+        week_val_for_time = None
+    dt_api_utc = _parse_to_utc_with_context(val_api, assume_naive='eastern', week=week_val_for_time)
+    dt_sd_utc = _parse_to_utc_with_context(val_sd, assume_naive='eastern', week=week_val_for_time)
     # Prefer API kickoff time when present; fallback to start_date otherwise
     chosen_dt = dt_api_utc or dt_sd_utc
 
@@ -2335,6 +2308,22 @@ def debug_pred_source():
         return {'error': str(e), 'pred_source': PRED_SOURCE}, 500
 
 
+@app.route('/api/normalize-kickoffs', methods=['POST'])
+def normalize_kickoffs():
+    """Re-pull kickoff times for 2025 and reload predictions.
+    Populates start_date_api in UTC; helps fix naive time misinterpretation from specific weeks.
+    """
+    try:
+        res = _refresh_schedule_kickoffs(week=None, overwrite=True)
+        try:
+            _reload_predictions()
+        except Exception:
+            pass
+        return {'message': 'Kickoff times refreshed (start_date_api updated where available).', 'result': res}, 200
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+
 @app.route('/api/debug-week-counts')
 def debug_week_counts():
     try:
@@ -2623,6 +2612,53 @@ def _confidence_tier(edge: float | None, kelly_f: float | None, model_prob: floa
         tier = 'Medium'
     return tier, score
 
+def _parse_to_utc_with_context(s_val: str | None, *, assume_naive: str = 'eastern', week: int | None = None) -> datetime | None:
+    """Parse an ISO-like string to a timezone-aware UTC datetime.
+    - If s_val has explicit tz (Z or offset), respect it.
+    - If naive and assume_naive == 'eastern', localize to America/New_York.
+    - If naive and assume_naive == 'utc', treat as UTC.
+    - If week is provided and >= START_DATE_NAIVE_IS_UTC_FROM_WEEK, override naive behavior to UTC.
+    """
+    if not s_val:
+        return None
+    try:
+        s = s_val.strip()
+        if 'T' not in s and ' ' in s:
+            s = s.replace(' ', 'T')
+        dt_obj = None
+        try:
+            if s.endswith('Z'):
+                dt_obj = datetime.fromisoformat(s.replace('Z', '+00:00'))
+            else:
+                dt_obj = datetime.fromisoformat(s)
+        except Exception:
+            try:
+                dt_obj = pd.to_datetime(s, errors='coerce').to_pydatetime()
+            except Exception:
+                dt_obj = None
+        if not dt_obj:
+            return None
+        # If naive, decide how to localize
+        if getattr(dt_obj, 'tzinfo', None) is None:
+            # From week threshold onward, treat naive as UTC to match data export behavior
+            try:
+                thresh = int(os.environ.get('START_DATE_NAIVE_IS_UTC_FROM_WEEK', '5'))
+            except Exception:
+                thresh = 5
+            if week is not None and week >= thresh:
+                return dt_obj.replace(tzinfo=pytz.UTC).astimezone(pytz.UTC)
+            if assume_naive == 'utc':
+                return dt_obj.replace(tzinfo=pytz.UTC).astimezone(pytz.UTC)
+            # default: eastern
+            try:
+                eastern = pytz.timezone('America/New_York')
+                dt_obj = eastern.localize(dt_obj)
+            except Exception:
+                return dt_obj.replace(tzinfo=pytz.UTC)
+        return dt_obj.astimezone(pytz.UTC)
+    except Exception:
+        return None
+
 def _parse_start_ts(row: pd.Series) -> tuple[str, float | None, str]:
     """Return (start_iso, sort_ts, display_time) from a predictions row."""
     # Local helper matches logic in _build_game_card for robust parsing
@@ -2646,34 +2682,18 @@ def _parse_start_ts(row: pd.Series) -> tuple[str, float | None, str]:
     start_iso = ''
     sort_ts = None
     candidates = [c for c in [val_api, val_sd] if c]
+    # attempt parse with context; from week threshold onward, treat naive as UTC
+    # First pass: use API then start_date
     for c in candidates:
         try:
-            s = c
-            if 'T' not in s and ' ' in s:
-                s = s.replace(' ', 'T')
-            dt_obj = None
+            wk = None
             try:
-                if s.endswith('Z'):
-                    dt_obj = datetime.fromisoformat(s.replace('Z', '+00:00'))
-                else:
-                    dt_obj = datetime.fromisoformat(s)
+                wk = int(row.get('week'))
             except Exception:
-                try:
-                    dt_obj = pd.to_datetime(c, errors='coerce').to_pydatetime() if c else None
-                except Exception:
-                    dt_obj = None
-            if not dt_obj:
+                wk = None
+            dt_utc = _parse_to_utc_with_context(c, assume_naive='eastern', week=wk)
+            if not dt_utc:
                 continue
-            # Ensure timezone-aware UTC; assume naive times are Eastern
-            if getattr(dt_obj, 'tzinfo', None) is None:
-                try:
-                    eastern = pytz.timezone('America/New_York')
-                    dt_obj = eastern.localize(dt_obj)
-                except Exception:
-                    dt_obj = dt_obj.replace(tzinfo=pytz.UTC)
-                dt_utc = dt_obj.astimezone(pytz.UTC)
-            else:
-                dt_utc = dt_obj.astimezone(pytz.UTC)
             sort_ts = dt_utc.timestamp()
             start_iso = dt_utc.isoformat().replace('+00:00', 'Z')
             try:
