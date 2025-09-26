@@ -202,6 +202,20 @@ def _calibrate_win_prob(p):
     except Exception:
         return None
 
+# --- Win probability tuning knobs (env-overridable) ---
+try:
+    _SIGMA_MARGIN_MIN = float(os.environ.get('SIGMA_MARGIN_MIN', 12.0))
+    _SIGMA_MARGIN_MAX = float(os.environ.get('SIGMA_MARGIN_MAX', 28.0))
+    _Z_TEMPERATURE_EARLY = float(os.environ.get('Z_TEMPERATURE_EARLY', 1.5))   # weeks <= 5
+    _Z_TEMPERATURE_LATE = float(os.environ.get('Z_TEMPERATURE_LATE', 1.25))   # weeks > 5
+    _Z_CLAMP = float(os.environ.get('Z_CLAMP', 2.75))
+except Exception:
+    _SIGMA_MARGIN_MIN = 12.0
+    _SIGMA_MARGIN_MAX = 28.0
+    _Z_TEMPERATURE_EARLY = 1.5
+    _Z_TEMPERATURE_LATE = 1.25
+    _Z_CLAMP = 2.75
+
 # Optional: Conference-level sigma overrides for margin
 _CONF_SIGMA = None
 try:
@@ -1231,28 +1245,41 @@ def _compute_home_win_prob(row: pd.Series) -> float | None:
     - Clamp final p to [0.005, 0.995] so UI never shows 0.0%/100.0% from rounding.
     """
     try:
-        # Margin: model_margin -> predicted_win_margin -> model pts -> predicted pts
+        # Margin: prefer point-difference first (model -> predicted), then fall back to margin fields
         def _f(x):
             return _safe_float(row.get(x))
-        margin = _f('model_margin')
-        if margin is None:
-            margin = _safe_float(row.get('predicted_win_margin'))
-        if margin is None:
-            mh = _safe_float(row.get('model_home_points'))
-            ma = _safe_float(row.get('model_away_points'))
-            if mh is not None and ma is not None:
-                margin = mh - ma
-        if margin is None:
-            ph = _safe_float(row.get('predicted_home_points'))
-            pa = _safe_float(row.get('predicted_away_points'))
-            if ph is not None and pa is not None:
-                margin = ph - pa
+        mh = _f('model_home_points'); ma = _f('model_away_points')
+        ph = _f('predicted_home_points'); pa = _f('predicted_away_points')
+        margin = None
+        if mh is not None and ma is not None:
+            margin = mh - ma
+        elif ph is not None and pa is not None:
+            margin = ph - pa
+        else:
+            margin = _f('model_margin')
+            if margin is None:
+                margin = _f('predicted_win_margin')
         if margin is None:
             return None
         sigma = _get_conf_std_for_game(row)
-        if sigma is None or sigma <= 0:
-            sigma = 14.0
-        p_margin = _phi(margin / sigma)
+        # Enforce sane sigma bounds so z doesn't explode
+        if sigma is None or not math.isfinite(sigma) or sigma <= 0:
+            sigma = _SIGMA_MARGIN_MIN
+        else:
+            sigma = max(_SIGMA_MARGIN_MIN, min(_SIGMA_MARGIN_MAX, float(sigma)))
+        # Apply a temperature to z to reduce early-season certainty and clamp extremes
+        wk_raw = row.get('week', None)
+        try:
+            wk = int(wk_raw) if wk_raw is not None and str(wk_raw) != 'nan' else None
+        except Exception:
+            wk = None
+        temp = _Z_TEMPERATURE_EARLY if (wk is None or wk <= 5) else _Z_TEMPERATURE_LATE
+        z = (margin / sigma) / temp
+        if z > _Z_CLAMP:
+            z = _Z_CLAMP
+        elif z < -_Z_CLAMP:
+            z = -_Z_CLAMP
+        p_margin = _phi(z)
         p_file = _safe_float(row.get('model_home_win_prob'))
         # If file prob is valid and not wildly off, blend slightly; else trust p_margin.
         if p_file is not None and 0.0 <= p_file <= 1.0:
@@ -1264,11 +1291,11 @@ def _compute_home_win_prob(row: pd.Series) -> float | None:
             p = p_margin
         # Optional calibration hook (currently identity/clamp)
         p = _calibrate_win_prob(p) or p
-        # Hard clamp to avoid 0/100% display after rounding
-        if p < 0.005:
-            p = 0.005
-        elif p > 0.995:
-            p = 0.995
+        # Hard clamp to avoid 0/100% display after rounding, but leave headroom from extremes
+        if p < 0.01:
+            p = 0.01
+        elif p > 0.99:
+            p = 0.99
         return float(p)
     except Exception:
         return None
@@ -1315,7 +1342,15 @@ def _get_conf_std_for_game(row):
             if not sel.empty:
                 val = _safe_float(sel.iloc[0].get('conf_std', None))
                 if val and val > 0:
-                    return val
+                    try:
+                        v = float(val)
+                        if not math.isfinite(v) or v <= 0:
+                            raise ValueError()
+                        # Clamp to global bounds
+                        v = max(_SIGMA_MARGIN_MIN, min(_SIGMA_MARGIN_MAX, v))
+                        return v
+                    except Exception:
+                        pass
     except Exception:
         pass
     # Conference-level override (average home/away conf sigma if available)
@@ -1331,10 +1366,13 @@ def _get_conf_std_for_game(row):
             if vals:
                 v = float(sum(vals) / len(vals))
                 if v > 4.0:  # sanity lower bound
+                    # Clamp to global bounds
+                    v = max(_SIGMA_MARGIN_MIN, min(_SIGMA_MARGIN_MAX, v))
                     return v
     except Exception:
         pass
-    return 14.0  # reasonable default std for margin
+    # reasonable default std for margin, clamped
+    return max(_SIGMA_MARGIN_MIN, min(_SIGMA_MARGIN_MAX, 14.0))
 
 RECS_PATH = os.path.join(DATA_DIR, "recommendations_2025.csv")
 RECS_COLUMNS = [
