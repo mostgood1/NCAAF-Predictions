@@ -4648,7 +4648,8 @@ def recommendations_page():
     min_prob = float(min_prob) if str(min_prob).strip() not in ('', 'None') else None
     max_sigma_margin = request.args.get('max_sigma_margin') or request.form.get('max_sigma_margin') or ''
     max_sigma_margin = float(max_sigma_margin) if str(max_sigma_margin).strip() not in ('', 'None') else None
-    allowed_conferences = request.args.get('allowed_conferences') or request.form.get('allowed_conferences') or 'Big Ten'
+    # With filters hidden, default to all conferences
+    allowed_conferences = request.args.get('allowed_conferences') or request.form.get('allowed_conferences') or ''
     # Determine selected week (optional). If blank => auto upcoming similar to API
     sel_week = int(week_q) if (week_q and week_q.isdigit()) else None
     recs = compute_recommendations(
@@ -4846,35 +4847,7 @@ def recommendations_page():
             <div class="tcard"><h4>Low</h4><div class="metric">Acc {{fmt_pct(tier_stats['Low'].acc)}}</div><div class="metric">ROI {{fmt_pct(tier_stats['Low'].roi)}}</div><div class="metric">Picks {{tier_stats['Low'].count}}</div></div>
         </div>
         <div class="meta-bar">Moneyline, spread (-110 assumed if price missing) and totals included.</div>
-        <div class="filters">
-            <form method="GET">
-                <label>Week
-                    <select name="week">
-                        <option value="">(auto)</option>
-                        {% for w in weeks %}<option value="{{w}}" {% if sel_week==w %}selected{% endif %}>Week {{w}}</option>{% endfor %}
-                    </select>
-                </label>
-                <label>Sort
-                    <select name="sort">
-                        <option value="confidence_then_edge" {% if sort_q=='confidence_then_edge' %}selected{% endif %}>Confidence→Edge</option>
-                        <option value="edge_desc" {% if sort_q=='edge_desc' %}selected{% endif %}>Edge ↓</option>
-                        <option value="time" {% if sort_q=='time' %}selected{% endif %}>Start Time ↑</option>
-                        <option value="market" {% if sort_q=='market' %}selected{% endif %}>Market A→Z</option>
-                    </select>
-                </label>
-                <label>Bankroll <input type="number" step="1" name="bankroll" value="{{bankroll}}" style="width:90px"/></label>
-                <label>Kelly <input type="number" step="0.05" name="kelly" value="{{kelly_factor}}" style="width:70px"/></label>
-                <label>Min EV <input type="number" step="0.01" name="ev" value="{{ev_threshold}}" style="width:70px"/></label>
-                <label>Min Spread Δ <input type="number" step="0.5" name="min_spread_edge_pts" value="{{min_spread_edge_pts}}" style="width:80px" title="abs(model_margin - spread) ≥ this many points"/></label>
-                <label>Min Total Δ <input type="number" step="0.5" name="min_total_edge_pts" value="{{min_total_edge_pts}}" style="width:80px" title="abs(model_total - O/U) ≥ this many points"/></label>
-                <label>Min Prob <input type="number" step="0.01" name="min_prob" value="{{min_prob if min_prob is not none else ''}}" style="width:70px" placeholder="0.55" title="ML side must be ≥ this probability"/></label>
-                <label>Max σ(margin) <input type="number" step="0.5" name="max_sigma_margin" value="{{max_sigma_margin if max_sigma_margin is not none else ''}}" style="width:90px" placeholder="" title="Exclude high-uncertainty games"/></label>
-                <label>Conferences <input type="text" name="allowed_conferences" value="{{allowed_conferences}}" style="min-width:180px" placeholder="SEC, Big Ten" title="Comma-separated list"/></label>
-                <button type="submit">Apply</button>
-                <a href="/recommendations" style="margin-left:6px; text-decoration:none;"><button type="button" class="secondary">Reset</button></a>
-            </form>
-        </div>
-        <div class="rec-header"><div><span class="pill">{% if sel_week is not none %}Week {{sel_week}}{% else %}Auto Week{% endif %}</span></div><div class="meta-bar">{{high|length + medium|length + low|length}} recommendations shown</div></div>
+
         <h2>High confidence</h2>
         {% if high %}
         <table class="conf-high"><tr><th>Matchup</th><th>Market</th><th>Recommendation</th><th>Price</th><th>Edge</th><th>Stake</th><th>Model p</th><th>Date</th></tr>
