@@ -133,6 +133,10 @@ _REFRESH_LOCK = threading.Lock()
 
 # Simple in-memory cache for game cards API (invalidated on prediction reload)
 GAME_CARDS_CACHE = {}
+_RECOMMENDATIONS_CACHE = {
+    # keys: ('compute', week) -> {'ts': float, 'enriched': list}
+    #       ('log', week)     -> {'mtime': float, 'enriched': list}
+}
 
 # Dynamic total-points uncertainty (std) estimated from completed games
 _TOTAL_POINTS_STD_2025 = None
@@ -4941,7 +4945,15 @@ def recommendations_performance():
 @app.route('/recommendations', methods=['GET', 'POST'])
 def recommendations_page():
     # Server-rendered grouped layout mimicking external recommendations page
-    weeks = sorted(pred_df['week'].dropna().unique())
+    # Build weeks list robustly even if column is missing or mixed type
+    try:
+        if isinstance(pred_df, pd.DataFrame) and 'week' in pred_df.columns:
+            _wser = pd.to_numeric(pred_df['week'], errors='coerce').dropna().unique().tolist()
+            weeks = sorted(int(w) for w in _wser if pd.notna(w))
+        else:
+            weeks = []
+    except Exception:
+        weeks = []
     # Inputs
     week_q = request.args.get('week') or request.form.get('week')
     sort_q = request.args.get('sort') or request.form.get('sort') or 'confidence_then_edge'
@@ -4961,29 +4973,116 @@ def recommendations_page():
     sel_week = int(week_q) if (week_q and week_q.isdigit()) else None
     if sel_week is None:
         sel_week = _infer_current_week()
-    recs = compute_recommendations(
-        week=sel_week,
-        bankroll=bankroll,
-        kelly_factor=kelly_factor,
-        ev_threshold=ev_threshold,
-        min_spread_edge_pts=min_spread_edge_pts,
-        min_total_edge_pts=min_total_edge_pts,
-        min_prob=min_prob,
-        max_sigma_margin=max_sigma_margin,
-        allowed_conferences=allowed_conferences,
-    )
+    # Decide data source: for past weeks with logged picks, prefer log; else compute fresh
+    now_ts = time.time()
+    try:
+        current_wk = _infer_current_week()
+    except Exception:
+        current_wk = None
+    use_log = False
+    recs = []
+    recs_source = 'compute'
+    # If RECS file has entries for the selected week (typically past weeks), load from there
+    try:
+        if sel_week is not None and os.path.exists(RECS_PATH):
+            df_log = pd.read_csv(RECS_PATH)
+            if 'week' in df_log.columns and 'season' in df_log.columns:
+                rows_wk = df_log[(pd.to_numeric(df_log['season'], errors='coerce') == 2025) & (pd.to_numeric(df_log['week'], errors='coerce') == int(sel_week))]
+                if not rows_wk.empty:
+                    use_log = True
+    except Exception:
+        use_log = False
+
+    enriched = None
+    cache_ttl = float(os.environ.get('RECOMMENDATIONS_CACHE_TTL_SEC', '60'))
+    if use_log:
+        recs_source = 'log'
+        try:
+            mtime = os.path.getmtime(RECS_PATH)
+        except Exception:
+            mtime = None
+        cache_key = ('log', int(sel_week))
+        cached = _RECOMMENDATIONS_CACHE.get(cache_key)
+        if cached and cached.get('mtime') == mtime and isinstance(cached.get('enriched'), list):
+            enriched = cached['enriched']
+        else:
+            # Build recs from log for selected week
+            try:
+                # Use only essential columns if present
+                cols = ['season','week','home_team','away_team','market','side','price_american','line','model_prob','implied_prob','edge','kelly_f','stake','provider','status','result']
+                df_log = pd.read_csv(RECS_PATH, usecols=[c for c in cols if c in pd.read_csv(RECS_PATH, nrows=1).columns]) if os.path.exists(RECS_PATH) else pd.DataFrame()
+            except Exception:
+                df_log = pd.read_csv(RECS_PATH) if os.path.exists(RECS_PATH) else pd.DataFrame()
+            df_wk = df_log[(pd.to_numeric(df_log.get('season'), errors='coerce') == 2025) & (pd.to_numeric(df_log.get('week'), errors='coerce') == int(sel_week))] if not df_log.empty else pd.DataFrame()
+            # Convert to list of rec dicts compatible with enrichment
+            recs = []
+            if not df_wk.empty:
+                for _, r in df_wk.iterrows():
+                    recs.append({
+                        'season': int(_safe_float(r.get('season'), 2025) or 2025),
+                        'week': int(_safe_float(r.get('week'), sel_week) or sel_week or 0),
+                        'home_team': str(r.get('home_team')),
+                        'away_team': str(r.get('away_team')),
+                        'market': r.get('market'),
+                        'side': r.get('side'),
+                        'price_american': _safe_float(r.get('price_american')),
+                        'line': _safe_float(r.get('line')),
+                        'model_prob': _safe_float(r.get('model_prob')),
+                        'implied_prob': _safe_float(r.get('implied_prob')),
+                        'edge': _safe_float(r.get('edge')),
+                        'kelly_f': _safe_float(r.get('kelly_f')),
+                        'stake': _safe_float(r.get('stake')),
+                        'provider': r.get('provider'),
+                        'status': r.get('status'),
+                        'result': r.get('result'),
+                    })
+    else:
+        # Compute fresh recommendations (use cache when available)
+        wk_key = int(sel_week) if sel_week is not None else -1
+        cache_key = ('compute', wk_key, bankroll, kelly_factor, ev_threshold, min_spread_edge_pts, min_total_edge_pts, float(min_prob) if min_prob is not None else None, float(max_sigma_margin) if max_sigma_margin is not None else None, str(allowed_conferences or ''))
+        cached = _RECOMMENDATIONS_CACHE.get(cache_key)
+        if cached and isinstance(cached.get('enriched'), list) and (now_ts - cached.get('ts', 0) <= cache_ttl):
+            enriched = cached['enriched']
+        else:
+            recs = compute_recommendations(
+                week=sel_week,
+                bankroll=bankroll,
+                kelly_factor=kelly_factor,
+                ev_threshold=ev_threshold,
+                min_spread_edge_pts=min_spread_edge_pts,
+                min_total_edge_pts=min_total_edge_pts,
+                min_prob=min_prob,
+                max_sigma_margin=max_sigma_margin,
+                allowed_conferences=allowed_conferences,
+            )
     # Attach confidence + timing like API (limit to selected week for speed)
     idx = {}
     try:
-        base = pred_df[(pred_df.get('season',0)==2025)].copy()
-        if sel_week is not None:
-            base = base[base['week']==int(sel_week)]
-        for _, r in base.iterrows():
-            idx[(int(r['season']), int(r['week']), str(r['home_team']), str(r['away_team']))] = r
+        # Build a narrow base index with only required fields for enrichment
+        if isinstance(pred_df, pd.DataFrame):
+            base_cols = [c for c in ['season','week','home_team','away_team','start_date','start_date_api','actual_home_points','actual_away_points'] if c in pred_df.columns]
+            base = pred_df[base_cols].copy() if base_cols else pred_df.copy()
+            if 'season' in base.columns:
+                try:
+                    base = base[pd.to_numeric(base['season'], errors='coerce') == 2025]
+                except Exception:
+                    pass
+            if sel_week is not None and 'week' in base.columns:
+                try:
+                    base = base[pd.to_numeric(base['week'], errors='coerce') == int(sel_week)]
+                except Exception:
+                    pass
+            if not base.empty:
+                for _, r in base.iterrows():
+                    try:
+                        idx[(int(r['season']), int(r['week']), str(r['home_team']), str(r['away_team']))] = r
+                    except Exception:
+                        continue
     except Exception:
         pass
-    # Build enrichment and compute result text when actuals exist
-    enriched = []
+    # Build enrichment and compute result text when actuals exist (unless provided by cache)
+    if enriched is None:
+        enriched = []
     for rec in recs:
         key = (rec['season'], rec['week'], rec['home_team'], rec['away_team'])
         row = idx.get(key)
@@ -5030,6 +5129,14 @@ def recommendations_page():
         except Exception:
             display_date = display_time or ''
         enriched.append({**rec, 'confidence': tier, 'confidence_score': score, 'start_iso': start_iso, 'display_time': display_time, 'display_date': display_date, 'sort_ts': sort_ts, 'result_txt': result_txt})
+    # Write to cache
+    try:
+        if recs_source == 'log':
+            _RECOMMENDATIONS_CACHE[('log', int(sel_week))] = {'mtime': os.path.getmtime(RECS_PATH) if os.path.exists(RECS_PATH) else None, 'enriched': enriched}
+        else:
+            _RECOMMENDATIONS_CACHE[cache_key] = {'ts': now_ts, 'enriched': enriched}
+    except Exception:
+        pass
     # Deduplicate recommendations (server page) by (season,week,home,away,market,side) keeping highest edge
     dedup_page = {}
     for r in enriched:
