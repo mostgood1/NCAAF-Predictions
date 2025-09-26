@@ -3248,12 +3248,12 @@ def index():
     <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
     <style>
         html, body { height:100%; }
-        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6fa; margin: 0; padding: 0 0 40px; -webkit-font-smoothing: antialiased; }
-        .container { max-width: 1100px; margin: 8px auto 0; background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); padding: 16px 18px 24px; }
+        body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background: #f5f8fc; margin: 0; padding: 0 0 40px; -webkit-font-smoothing: antialiased; }
+        .container { max-width: 1100px; margin: 8px auto 0; background: #fff; border-radius: 14px; box-shadow: 0 6px 18px rgba(0,0,0,0.08); padding: 16px 18px 24px; }
         h2 { text-align: center; color: #2c3e50; margin-bottom: 24px; }
         form { display: flex; flex-direction: column; gap: 16px; margin-bottom: 32px; }
         /* Centered filter bar */
-        .filterbar { position: static; z-index: 1; background: #fff; margin: 4px auto 12px; padding: 8px 10px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; flex-direction: row; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: center; max-width: 1000px; }
+    .filterbar { position: static; z-index: 1; background: #fff; margin: 4px auto 12px; padding: 10px 12px; border-radius: 12px; box-shadow: 0 6px 18px rgba(0,0,0,0.08); display: flex; flex-direction: row; flex-wrap: wrap; gap: 10px 14px; align-items: center; justify-content: center; max-width: 1000px; }
         label { font-weight: 500; color: #34495e; }
         select, button { padding: 8px 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 1em; }
         button { background: #2980b9; color: #fff; border: none; cursor: pointer; transition: background 0.2s; }
@@ -3297,7 +3297,14 @@ def index():
         .no-odds { color: #888; font-style: italic; }
 
         .topbar { position: sticky; top: 0; z-index: 120; display:flex; justify-content: space-between; align-items:center; margin-bottom: 10px; padding: 10px 8px; background: rgba(255,255,255,0.92); border-bottom: 1px solid #eee; backdrop-filter: saturate(180%) blur(8px); border-top-left-radius: 12px; border-top-right-radius: 12px; }
-        .links a { color:#2980b9; margin-left:12px; text-decoration: underline; }
+    .links a { color:#1b4d91; margin-left:12px; text-decoration: none; }
+    body.dark { background:#0f172a; color:#e2e8f0; }
+    body.dark .container { background:#0b1220; box-shadow: 0 8px 20px rgba(0,0,0,0.5); }
+    body.dark .card { background:#0f1a2b; box-shadow: 0 1px 6px rgba(0,0,0,0.6); }
+    body.dark .row { background:#0b1220; border-color:#223; }
+    body.dark .odds-table th { background:#13223a; }
+    body.dark .odds-table tr:nth-child(even) { background:#0b1220; }
+    body.dark a { color:#8ab4ff; }
         .summary { display:flex; gap:16px; justify-content:center; color:#2c3e50; font-weight:600; margin:10px 0 16px; }
 
         /* Responsive grid for cards */
@@ -3338,8 +3345,10 @@ def index():
     <div class="topbar">
             <div class="links">
                 <a href="/recommendations">Recommendations</a>
-    <a href="/recommendations/performance">Performance</a>
-        <a href="/analysis">Analysis</a>
+                <a href="/recommendations/performance">Performance</a>
+                <a href="/api/game-cards" title="Predictions JSON">API</a>
+                <a href="/health">Health</a>
+                <a href="/analysis">Analysis</a>
                 <a href="/win-totals">Win Totals</a>
                 <a href="/conference-records">Conference Records</a>
                 <a href="/team-schedules">Team Schedules</a>
@@ -3358,6 +3367,7 @@ def index():
         </div>
     {% endif %}
     </div> <!-- end topbar -->
+        <h1 style="margin:8px 4px 14px; font-size:1.4rem;">NCAAF Betting – Cards</h1>
     <div class="banner">
         Week {{selected_week}}:
         <strong>{{finals_count_week}}</strong> finals / {{total_games_week}} games ({{finals_pct_week}} complete)
@@ -3573,6 +3583,9 @@ def index():
     </div>
     {% endfor %}
     </div>
+    </div>
+    <div style="margin:20px 0 10px; text-align:center; font-size:.85rem; color:#667;">
+        <a href="/">Cards</a> | <a href="/recommendations">Recommendations</a> | <a href="/recommendations/performance">Performance</a> | <a href="/api/game-cards">API</a> | <a href="/health">Health</a>
     </div>
     <button id="backToTop" title="Back to top">Top</button>
         <script>
@@ -5246,7 +5259,7 @@ def recommendations_page():
             return "$0"
     return render_template_string('''
     <style>
-        body { font-family: 'Segoe UI', Arial, sans-serif; background:#f4f6f9; margin:0; }
+        body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background:#f5f8fc; margin:0; }
         h1 { font-size:1.6rem; margin:0 0 10px; }
         h2 { margin:28px 0 8px; font-size:1.25rem; }
         .wrap { max-width:1200px; margin:18px auto 60px; background:#fff; padding:26px 30px 34px; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,.08);} 
@@ -5254,14 +5267,14 @@ def recommendations_page():
         th,td { border:1px solid #e1e5ec; padding:6px 8px; font-size:.92rem; text-align:center; }
         th { background:#f0f4f9; }
         .nav { font-size:.85rem; margin-bottom:12px; text-align:right; }
-        .nav a { color:#1b4d91; text-decoration:none; margin-left:10px; }
+    .nav a { color:#1b4d91; text-decoration:none; margin-left:10px; }
         .summary { background:#f8fafc; border:1px solid #e0e7ef; padding:10px 14px; border-radius:10px; font-size:.85rem; line-height:1.5; }
         .kpi-line { margin:8px 0 4px; }
         .section-empty { font-size:.85rem; color:#777; margin:4px 0 14px; }
         .filters form { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:12px 0 4px; }
         select, input[type=number] { padding:4px 6px; }
-        button { padding:6px 12px; border:1px solid #2d6cdf; background:#2d6cdf; color:#fff; border-radius:6px; cursor:pointer; }
-        button.secondary { background:#fff; color:#2d6cdf; }
+    button { padding:6px 12px; border:1px solid #2d6cdf; background:#2d6cdf; color:#fff; border-radius:6px; cursor:pointer; }
+    button.secondary { background:#fff; color:#2d6cdf; }
         .conf-high { background:#eaf7ef; }
         .conf-medium { background:#fff7e6; }
         .conf-low { background:#fdecee; }
@@ -5270,7 +5283,7 @@ def recommendations_page():
         @media (max-width:900px){ th,td { font-size:.72rem; padding:4px; } }
     </style>
     <div class="wrap">
-        <div class="nav"><a href="/">Cards</a> | <a href="/recommendations">Recommendations</a> | <a href="/recommendations/performance">Performance</a></div>
+    <div class="nav"><a href="/">Cards</a> | <a href="/recommendations">Recommendations</a> | <a href="/recommendations/performance">Performance</a> | <a href="/api/game-cards">API</a> | <a href="/health">Health</a></div>
         <h1>NCAAF Betting – Recommendations</h1>
         <div class="summary">
             <div class="kpi-line"><b>OVERALL</b> {{fmt_pct(overall_stats.acc)}} Accuracy {{overall_stats.wins}}W-{{overall_stats.losses}}L{% if overall_stats.pushes %}-{{overall_stats.pushes}}P{% endif %} / {{overall_stats.wins + overall_stats.losses + overall_stats.pushes}} settled ROI: {{fmt_pct(overall_stats.roi)}} Stake: {{fmt_money(overall_stats.stake)}} | P/L: {{fmt_money(overall_stats.pnl)}} Total picks: {{overall_stats.count}}</div>
