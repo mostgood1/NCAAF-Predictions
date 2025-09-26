@@ -559,6 +559,54 @@ def get_team_asset(team_name):
         }
     return {'logo': '', 'color': '', 'alt_color': ''}
 
+# --- Color utilities for safe contrast on team-name chips ---
+def _normalize_hex_color(s: str | None) -> str | None:
+    try:
+        if not s:
+            return None
+        val = str(s).strip().lower()
+        if val in ('none', 'null', 'nan'):
+            return None
+        # Accept forms like '#abc', 'abc', '#aabbcc', 'aabbcc'
+        if val.startswith('#'):
+            val = val[1:]
+        if len(val) not in (3, 6) or any(ch not in '0123456789abcdef' for ch in val):
+            return None
+        if len(val) == 3:
+            val = ''.join(ch * 2 for ch in val)
+        return f"#{val}"
+    except Exception:
+        return None
+
+def _hex_to_rgb(hex_color: str) -> tuple[int, int, int] | None:
+    try:
+        h = hex_color.lstrip('#')
+        if len(h) == 3:
+            h = ''.join(ch * 2 for ch in h)
+        if len(h) != 6:
+            return None
+        r = int(h[0:2], 16); g = int(h[2:4], 16); b = int(h[4:6], 16)
+        return (r, g, b)
+    except Exception:
+        return None
+
+def _ideal_text_color_for_bg(bg_hex: str | None) -> str:
+    """Return '#fff' or '#111' depending on background brightness using YIQ.
+    Uses threshold ~186 on [0,255] scale. Falls back to dark text.
+    """
+    try:
+        if not bg_hex:
+            return '#111'
+        rgb = _hex_to_rgb(bg_hex)
+        if not rgb:
+            return '#111'
+        r, g, b = rgb
+        yiq = (r * 299 + g * 587 + b * 114) / 1000.0
+        # If very close to mid (e.g., golds), prefer darker text for legibility
+        return '#111' if yiq >= 170 else '#fff'
+    except Exception:
+        return '#111'
+
 # Load betting lines
 lines_df = pd.read_csv(os.path.join(DATA_DIR, "college_football_betting_lines_last_15_years.csv")) if os.path.exists(os.path.join(DATA_DIR, "college_football_betting_lines_last_15_years.csv")) else pd.DataFrame(columns=['year','week','homeTeam','awayTeam','lines'])
 lines_index = {}
@@ -882,6 +930,11 @@ def _build_game_card(game_row: pd.Series) -> dict:
             return val
     home_asset = get_team_asset(game_row['home_team'])
     away_asset = get_team_asset(game_row['away_team'])
+    # Normalize alt colors and compute foreground text colors for better contrast
+    h_bg = _normalize_hex_color(home_asset.get('alt_color')) or _normalize_hex_color(home_asset.get('color')) or '#e5e7eb'
+    a_bg = _normalize_hex_color(away_asset.get('alt_color')) or _normalize_hex_color(away_asset.get('color')) or '#e5e7eb'
+    h_fg = _ideal_text_color_for_bg(h_bg)
+    a_fg = _ideal_text_color_for_bg(a_bg)
     # Matchup classification (FBS vs FBS or FBS vs Non-FBS)
     try:
         _fbs_conf_set = {
@@ -1225,12 +1278,14 @@ def _build_game_card(game_row: pd.Series) -> dict:
         'win_margin_conf_lower': conf_lower,
         'win_margin_conf_upper': conf_upper,
         'win_margin_conf_std': conf_std,
-        'home_logo': home_asset['logo'],
-        'home_color': home_asset['color'],
-        'home_alt_color': home_asset['alt_color'],
-        'away_logo': away_asset['logo'],
-        'away_color': away_asset['color'],
-        'away_alt_color': away_asset['alt_color'],
+    'home_logo': home_asset['logo'],
+    'home_color': _normalize_hex_color(home_asset.get('color')) or '',
+    'home_alt_color': h_bg,
+    'home_text_color': h_fg,
+    'away_logo': away_asset['logo'],
+    'away_color': _normalize_hex_color(away_asset.get('color')) or '',
+    'away_alt_color': a_bg,
+    'away_text_color': a_fg,
         'betting_lines': betting_lines,
         'ou_line': r2(ou_line) if ou_line is not None else None,
         'ou_model_lean': ou_model_lean,
@@ -3169,28 +3224,29 @@ def index():
         button:hover { background: #3498db; }
 
     .banner { background:#e8f1ff; border:1px solid #b6d3ff; padding:10px 14px; border-radius:8px; font-size:0.98em; color:#0f2a4a; margin: 8px 0 14px; }
-    .card { background: #ffffff; border-radius: 12px; box-shadow: 0 1px 6px rgba(0,0,0,0.08); padding: 12px 14px 12px; margin: 10px 0 0; border-left: 6px solid #9aa3ad; }
-        .card-header { display:flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .card { background: #ffffff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.10); padding: 14px 16px 14px; margin: 8px 0 0; border-left: 5px solid #9aa3ad; transition: box-shadow .15s ease, transform .15s ease; }
+        .card:hover { box-shadow: 0 6px 18px rgba(0,0,0,0.12); transform: translateY(-1px); }
+    .card-header { display:flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom:8px; border-bottom: 1px dashed #e5e7eb; }
         .status { font-weight: 800; font-size: 0.85em; padding: 4px 10px; border-radius: 12px; letter-spacing:.2px; }
         .status.final { background:#e6f7ee; color:#166534; border:1px solid #b8e6cc; }
         .status.upcoming { background:#e8eef5; color:#1f2937; border:1px solid #cbd5e1; }
         .when { color:#1f2937; font-size: 0.95em; }
 
-        .teams { display: grid; grid-template-columns: 1fr 60px 1fr; align-items: center; gap: 10px; }
+    .teams { display: grid; grid-template-columns: 1fr 60px 1fr; align-items: center; gap: 12px; }
         .team { text-align: center; }
-        .team-logo { height: 52px; margin-bottom: 6px; }
-        .team-name { font-weight: 700; font-size: 1.05em; padding: 4px 10px; border-radius: 6px; display: inline-block; margin-top: 2px; }
-        .vs { font-size: 1.8em; color: #888; font-weight: 700; }
+    .team-logo { height: 64px; margin-bottom: 6px; }
+    .team-name { font-weight: 800; font-size: 1.06em; padding: 5px 12px; border-radius: 8px; display: inline-block; margin-top: 2px; }
+    .vs { font-size: 1.9em; color: #888; font-weight: 800; }
 
     .score-block { margin-top: 6px; }
-    .score { font-size: 1.6em; font-weight: 800; color: #0f172a; letter-spacing:.2px; }
+    .score { font-size: 1.7em; font-weight: 900; color: #0f172a; letter-spacing:.2px; }
     .pred { font-size: 0.95em; color: #5b6470; }
 
-    .rows { display:grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin-top: 10px; }
-        .row { background:#fff; border:1px solid #d9dee7; border-radius:8px; padding:9px 10px; font-size:1.0em; color:#0f172a; }
+    .rows { display:grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-top: 12px; }
+        .row { background:#fff; border:1px solid #d9dee7; border-radius:10px; padding:10px 12px; font-size:1.0em; color:#0f172a; }
         .row b { color:#0f172a; }
         .badges { display:flex; flex-wrap:wrap; gap:6px; }
-        .badge { padding:2px 8px; border-radius:12px; font-size:0.85em; font-weight:800; letter-spacing:.2px; }
+    .badge { padding:2px 8px; border-radius:12px; font-size:0.84em; font-weight:800; letter-spacing:.2px; }
         .ok { background:#e6f7ee; color:#166534; border:1px solid #b8e6cc; }
         .err { background:#fde7e9; color:#b91c1c; border:1px solid #f5b5bb; }
         .push { background:#eef2f7; color:#374151; border:1px solid #d1d5db; }
@@ -3209,7 +3265,7 @@ def index():
     .links a { color:#1b4d91; margin-left:12px; text-decoration: none; font-weight:600; }
     body.dark { background:#0f172a; color:#ffffff; }
     body.dark .container { background:#0b1220; box-shadow: 0 8px 20px rgba(0,0,0,0.5); }
-    body.dark .card { background:#0f1a2b; box-shadow: 0 1px 6px rgba(0,0,0,0.6); }
+    body.dark .card { background:#0f1a2b; box-shadow: 0 2px 10px rgba(0,0,0,0.6); }
     body.dark .row { background:#0b1220; border-color:#334155; }
     body.dark .row b { color:#ffffff; }
     body.dark .odds-table th { background:#1d2a44; color:#e5e7eb; }
@@ -3221,6 +3277,17 @@ def index():
     body.dark .team-name { text-shadow: 0 1px 1px rgba(0,0,0,0.6); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12); }
     /* Dark mode contrast improvements */
     body.dark .topbar { background: rgba(15,23,42,0.96); border-bottom-color:#334155; }
+    /* Sticky subheader with date chips */
+    .subheader { position: sticky; top: 52px; z-index: 110; background: rgba(255,255,255,0.96); border-bottom:1px solid #e5e7eb; backdrop-filter:saturate(180%) blur(8px); padding: 8px 6px; margin: 0 -6px 10px; border-radius: 10px; }
+    .date-chips { display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:center; }
+    .chip { padding:6px 10px; border-radius:999px; border:1px solid #cbd5e1; background:#f8fafc; color:#0f172a; font-weight:700; font-size:0.9rem; cursor:pointer; user-select:none; }
+    .chip.active { background:#2d6cdf; border-color:#2d6cdf; color:#fff; }
+    .chip.clear { background:#eef2f7; border-color:#cbd5e1; color:#111827; }
+    .date-divider { grid-column: 1 / -1; font-weight:800; color:#334155; margin: 6px 0 -6px; padding: 6px 10px; border-left:4px solid #94a3b8; background:#f1f5f9; border-radius:8px; }
+    body.dark .subheader { background: rgba(15,23,42,0.96); border-bottom-color:#334155; }
+    body.dark .chip { background:#1e293b; border-color:#475569; color:#e2e8f0; }
+    body.dark .chip.active { background:#4f46e5; border-color:#4f46e5; color:#fff; }
+    body.dark .date-divider { background:#0b1220; color:#e2e8f0; border-left-color:#475569; }
     body.dark .banner { background:#0f1a2b; border-color:#334155; color:#e2e8f0; }
     body.dark .vs { color:#cbd5e1; }
     body.dark .score { color:#ffffff; }
@@ -3238,13 +3305,12 @@ def index():
     body.dark .when { color:#ffffff; }
     body.dark .row { color:#ffffff; }
     body.dark .summary { color:#ffffff; }
-    body.dark .team-name { color:#ffffff !important; }
+    /* Allow computed contrast colors even in dark mode (do not force white) */
     .summary { display:flex; gap:16px; justify-content:center; color:#0f172a; font-weight:700; margin:10px 0 16px; }
 
         /* Responsive grid for cards */
-    .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
     @media (min-width: 660px) { .grid { grid-template-columns: 1fr 1fr; } }
-    @media (min-width: 1150px) { .grid { grid-template-columns: 1fr 1fr 1fr; } }
 
     /* Mobile tweaks */
     @media (max-width: 660px) {
@@ -3254,11 +3320,11 @@ def index():
         .links { overflow-x:auto; white-space:nowrap; width:100%; font-size:0.85rem; }
         .links a { display:inline-block; padding:4px 6px; }
         .summary { flex-direction:column; gap:4px; font-size:0.9rem; }
-        .teams { grid-template-columns: 1fr 40px 1fr; }
-        .team-logo { height:42px; }
+    .teams { grid-template-columns: 1fr 40px 1fr; }
+    .team-logo { height:48px; }
         .team-name { font-size:0.9rem; padding:3px 6px; }
         .score { font-size:1.2rem; }
-        .card { padding:10px 10px 10px; }
+    .card { padding:12px 12px 12px; }
         .rows { grid-template-columns:1fr; }
         .odds-table th, .odds-table td { padding:8px 6px; font-size:0.8rem; }
         button, select { font-size:0.9rem; }
@@ -3302,6 +3368,12 @@ def index():
         • Odds coverage: <strong>{{odds_with_lines_week}}</strong> / {{total_games_week}} games with lines
     </div>
         <h2>2025 NCAA Football Predictions</h2>
+        <div class="subheader">
+            <div class="date-chips" id="dateChips">
+                <span class="chip clear" data-date="">All Dates</span>
+                {% for d in all_dates %}<span class="chip" data-date="{{d}}">{{d}}</span>{% endfor %}
+            </div>
+        </div>
         <div class="summary">
             <div class="muted" style="align-self:center;">This view</div>
             <div class="muted" style="align-self:center;"><span id="sum-count-shown">{{ game_cards|length }}</span> shown</div>
@@ -3392,7 +3464,7 @@ def index():
         <div class="teams">
             <div class="team">
                 <img src="{{game_info['away_logo']}}" alt="{{game_info['away_team']}} logo" class="team-logo" onerror="this.onerror=null;this.src='';"><br>
-                <span class="team-name" style="background:{{game_info['away_alt_color']}};color:{% if game_info['away_alt_color'] in ['#000','#111','#222','#333','#444','#1a1a1a','#232323','#2c3e50','#34495e'] %}#fff{% else %}#222{% endif %};">{{game_info['away_team']}}</span>
+                <span class="team-name" style="background:{{game_info['away_alt_color']}};color:{{game_info['away_text_color']}};">{{game_info['away_team']}}</span>
                 <div class="score-block">
             {% if game_info['is_final'] %}
                         <div class="score">{{game_info['actual_away_points']}}</div>
@@ -3406,7 +3478,7 @@ def index():
             <div class="vs">@</div>
             <div class="team">
                 <img src="{{game_info['home_logo']}}" alt="{{game_info['home_team']}} logo" class="team-logo" onerror="this.onerror=null;this.src='';"><br>
-                <span class="team-name" style="background:{{game_info['home_alt_color']}};color:{% if game_info['home_alt_color'] in ['#000','#111','#222','#333','#444','#1a1a1a','#232323','#2c3e50','#34495e'] %}#fff{% else %}#222{% endif %};">{{game_info['home_team']}}</span>
+                <span class="team-name" style="background:{{game_info['home_alt_color']}};color:{{game_info['home_text_color']}};">{{game_info['home_team']}}</span>
                 <div class="score-block">
                     {% if game_info['is_final'] %}
                         <div class="score">{{game_info['actual_home_points']}}</div>
@@ -3653,9 +3725,10 @@ def index():
                 }
                 applyLocalTimes(document);
 
-                // Build Date dropdown from cards (local dates)
+                // Build Date dropdown & sticky chips from cards (local dates) and add day dividers
                 try {
                     const dateSel = document.getElementById('date');
+                    const chipsWrap = document.getElementById('dateChips');
                     const hideUnknownChk = document.getElementById('hideBothUnknown');
                     const grid = document.querySelector('.grid');
                     const dOpts = new Map(); // key: yyyy-mm-dd (local), val: Label
@@ -3674,9 +3747,31 @@ def index():
                         const label = d.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'2-digit', year:'numeric' });
                         dOpts.set(key, label);
                         c.setAttribute('data-local-date', key);
+                        c.setAttribute('data-local-date-label', label);
                         // Ensure time is rendered in local zone for this card
                         applyLocalTimes(c);
                     });
+                    // Insert date dividers before the first card of each day (time-sorted in DOM already)
+                    if(grid && cards.length){
+                        // remove existing dividers
+                        Array.from(grid.querySelectorAll('.date-divider')).forEach(el=>el.remove());
+                        const seen = new Set();
+                        const ordered = Array.from(cards).sort((a,b)=>{
+                            const ta = parseFloat(a.getAttribute('data-sort-ts')||'0');
+                            const tb = parseFloat(b.getAttribute('data-sort-ts')||'0');
+                            return (isNaN(ta)?0:ta) - (isNaN(tb)?0:tb);
+                        });
+                        ordered.forEach(c=>{
+                            const key = c.getAttribute('data-local-date');
+                            if(!key || seen.has(key)) return;
+                            seen.add(key);
+                            const div = document.createElement('div');
+                            div.className = 'date-divider';
+                            div.setAttribute('data-date', key);
+                            div.textContent = dOpts.get(key) || key;
+                            grid.insertBefore(div, c);
+                        });
+                    }
                     function recalcSummary(){
                         try{
                             const visCards = Array.from(document.querySelectorAll('.grid .card')).filter(c=>c.style.display !== 'none');
@@ -3713,6 +3808,33 @@ def index():
                         }catch(e){ /* no-op */ }
                     }
 
+                    function rebuildDateDividers(){
+                        if(!grid) return;
+                        // remove old dividers
+                        Array.from(grid.querySelectorAll('.date-divider')).forEach(el=>el.remove());
+                        // insert new ones based on visible cards in DOM order
+                        const seen = new Set();
+                        const visCards = Array.from(grid.querySelectorAll('.card')).filter(c=>c.style.display !== 'none');
+                        visCards.forEach(c=>{
+                            const key = c.getAttribute('data-local-date');
+                            const label = c.getAttribute('data-local-date-label') || (dOpts.get(key) || key);
+                            if(!key || seen.has(key)) return;
+                            seen.add(key);
+                            const div = document.createElement('div');
+                            div.className = 'date-divider';
+                            div.setAttribute('data-date', key);
+                            div.textContent = label;
+                            grid.insertBefore(div, c);
+                        });
+                        // hide any divider that is not followed by any visible card of same date
+                        Array.from(grid.querySelectorAll('.date-divider')).forEach(div=>{
+                            const k = div.getAttribute('data-date');
+                            const nextCard = Array.from(grid.querySelectorAll('.card')).find(c=>c.style.display !== 'none' && c.getAttribute('data-local-date')===k);
+                            div.style.display = nextCard ? '' : 'none';
+                        });
+                    }
+                    try { window._rebuildDateDividers = rebuildDateDividers; } catch(_) {}
+
                     function applyCombinedFilters(){
                         const cardsAll = Array.from(document.querySelectorAll('.grid .card'));
                         const dateVal = (dateSel && dateSel.value) ? dateSel.value : '';
@@ -3726,6 +3848,7 @@ def index():
                             c.style.display = (dateOk && confOk) ? '' : 'none';
                         });
                         recalcSummary();
+                        rebuildDateDividers();
                     }
 
                     if(dateSel && dOpts.size){
@@ -3751,6 +3874,47 @@ def index():
                         });
                         if(hideUnknownChk){ hideUnknownChk.addEventListener('change', (ev)=>{ ev.preventDefault(); applyCombinedFilters(); }); }
                         applyCombinedFilters();
+                    }
+
+                    // Build sticky date chips and bind interactions
+                    if(chipsWrap && dOpts.size){
+                        // If server pre-rendered chips, sync active state with current selection
+                        const chips = Array.from(chipsWrap.querySelectorAll('.chip'));
+                        if(chips.length <= 1){
+                            chipsWrap.innerHTML = '';
+                            const mkChip = (k, label)=>{
+                                const s = document.createElement('span');
+                                s.className = 'chip' + (k===''?' clear':'');
+                                s.setAttribute('data-date', k);
+                                s.textContent = label;
+                                return s;
+                            };
+                            chipsWrap.appendChild(mkChip('', 'All Dates'));
+                            Array.from(dOpts.keys()).sort().forEach(k=> chipsWrap.appendChild(mkChip(k, dOpts.get(k))));
+                        }
+                        function setActive(dateKey){
+                            Array.from(chipsWrap.querySelectorAll('.chip')).forEach(c=>{
+                                if((c.getAttribute('data-date')||'')=== (dateKey||'')) c.classList.add('active');
+                                else c.classList.remove('active');
+                            });
+                        }
+                        function scrollToDay(dateKey){
+                            const target = grid && grid.querySelector(`.date-divider[data-date="${dateKey}"]`);
+                            if(target){ target.scrollIntoView({behavior:'smooth', block:'start'}); }
+                        }
+                        const selected = sessionStorage.getItem('selectedLocalDate') || '';
+                        setActive(selected);
+                        chipsWrap.addEventListener('click', (ev)=>{
+                            const el = ev.target.closest('.chip'); if(!el) return;
+                            const k = el.getAttribute('data-date') || '';
+                            // reflect to dropdown and session
+                            if(dateSel){ dateSel.value = k; }
+                            sessionStorage.setItem('selectedLocalDate', k);
+                            applyCombinedFilters();
+                            // only scroll when selecting a specific day
+                            if(k){ scrollToDay(k); }
+                            setActive(k);
+                        });
                     }
                 } catch(e) { /* no-op */ }
 
@@ -3782,6 +3946,7 @@ def index():
                         }
                     });
                     cards.forEach(c => grid.appendChild(c));
+                    rebuildDateDividers();
                 }
                 if(sortSelect){
                     sortSelect.addEventListener('change', function(ev){
