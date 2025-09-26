@@ -2974,6 +2974,8 @@ def index():
     page_html = render_template_string('''
     <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
     <style>
+        :root { --neutral-text: #1f2937; }
+        body.dark { --neutral-text: #e5e7eb; }
         html, body { height:100%; }
         body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background: #f5f8fc; margin: 0; padding: 0 0 40px; -webkit-font-smoothing: antialiased; color:#0f172a; line-height:1.5; }
         .container { max-width: 1100px; margin: 8px auto 0; background: #fff; border-radius: 14px; box-shadow: 0 6px 18px rgba(0,0,0,0.10); padding: 18px 20px 26px; }
@@ -3029,6 +3031,7 @@ def index():
     body.dark .container { background:#0b1220; box-shadow: 0 8px 20px rgba(0,0,0,0.5); }
     body.dark .card { background:#0f1a2b; box-shadow: 0 1px 6px rgba(0,0,0,0.6); }
     body.dark .row { background:#0b1220; border-color:#334155; }
+    body.dark .row b { color:#ffffff; }
     body.dark .odds-table th { background:#1d2a44; color:#e5e7eb; }
     body.dark .odds-table tr:nth-child(even) { background:#0b1220; }
     body.dark a { color:#8ab4ff; }
@@ -3245,7 +3248,7 @@ def index():
                     {% if game_info['actual_total_points'] is not none %}
                         <br><b>Total (actual):</b> {{game_info['actual_total_points']}}
                         {% if game_info['total_points_diff'] is not none %}
-                            <br><b>Diff:</b> <span style="font-weight:700; color:{% if game_info['total_points_diff']|float > 0 %}#0b84ff{% elif game_info['total_points_diff']|float < 0 %}#ff7f0e{% else %}#2c3e50{% endif %};">{{game_info['total_points_diff']}}</span>
+                            <br><b>Diff:</b> <span class="diff-val" style="font-weight:800; color:{% if game_info['total_points_diff']|float > 0 %}#0b84ff{% elif game_info['total_points_diff']|float < 0 %}#ff7f0e{% else %}var(--neutral-text){% endif %};">{{game_info['total_points_diff']}}</span>
                         {% endif %}
                     {% endif %}
                 {% endif %}
