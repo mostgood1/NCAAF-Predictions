@@ -1,0 +1,189 @@
+season,week,home_team,away_team,has_odds,provider_count,providers
+2025,1,Norfolk State,Towson,True,1,ESPN Bet
+2025,1,San Diego State,Stony Brook,True,2,"Bovada,ESPN Bet"
+2025,1,Central Washington,Colorado Mesa,False,0,
+2025,1,South Florida,Boise State,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Bowling Green,Lafayette,True,2,"Bovada,ESPN Bet"
+2025,1,Clarion,Wheeling,False,0,
+2025,1,Indiana State,McKendree,False,0,
+2025,1,Marian College,Indianapolis,False,0,
+2025,1,Michigan Tech,Bemidji State,False,0,
+2025,1,Rutgers,Ohio,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Saginaw Valley State,Northeastern State,False,0,
+2025,1,Youngstown State,Mercyhurst,True,1,ESPN Bet
+2025,1,Akron,Wyoming,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Delaware,Delaware State,True,2,"Bovada,ESPN Bet"
+2025,1,Delta State,Central Missouri,False,0,
+2025,1,Drake,Upper Iowa University,False,0,
+2025,1,Eastern Illinois,Dayton,True,1,ESPN Bet
+2025,1,Ferris State,Pittsburg St,False,0,
+2025,1,Minnesota State Mankato,Northwest Missouri St,False,0,
+2025,1,NC State,East Carolina,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Northern Michigan,Minnesota State Moorhead,False,0,
+2025,1,Seton Hill,Fairmont State,False,0,
+2025,1,St. Thomas (MN),Lindenwood,True,1,ESPN Bet
+2025,1,UCF,Jacksonville State,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,UL Monroe,St. Francis (PA),True,2,"Bovada,ESPN Bet"
+2025,1,University Of Charleston (WV),Livingstone,False,0,
+2025,1,Walsh,West Liberty,False,0,
+2025,1,Wayne State (NE),Nebraska-Kearney,False,0,
+2025,1,Wilson,Virginia St,False,0,
+2025,1,East Stroudsburg University,Edinboro University,False,0,
+2025,1,Duke,Elon,True,2,"Bovada,ESPN Bet"
+2025,1,Missouri,Central Arkansas,True,2,"Bovada,ESPN Bet"
+2025,1,Oklahoma State,UT Martin,True,2,"Bovada,ESPN Bet"
+2025,1,Quincy,Concordia University St Paul,False,0,
+2025,1,Samford,West Georgia,True,1,ESPN Bet
+2025,1,University of Mary,Midland Lutheran College,False,0,
+2025,1,Black Hills State,Sioux Falls,False,0,
+2025,1,CSU Pueblo,South Dakota Mines,False,0,
+2025,1,Eastern New Mexico,New Mexico Highlands,False,0,
+2025,1,Emporia State University,Minot State,False,0,
+2025,1,Fort Hays State,Angelo State,False,0,
+2025,1,Houston,Stephen F. Austin,True,2,"Bovada,ESPN Bet"
+2025,1,Minnesota,Buffalo,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Northwestern State,Alcorn State,True,1,ESPN Bet
+2025,1,Western Colorado,West Texas A&M,False,0,
+2025,1,Winona State,Minnesota Duluth,False,0,
+2025,1,UAB,Alabama State,True,2,"Bovada,ESPN Bet"
+2025,1,Cincinnati,Nebraska,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Wisconsin,Miami (OH),True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Army,Tarleton State,True,2,"Bovada,ESPN Bet"
+2025,1,Rhode Island,Campbell,False,0,
+2025,1,Charlotte,App State,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Colgate,Monmouth,False,0,
+2025,1,Florida International,Bethune-Cookman,True,1,ESPN Bet
+2025,1,Marist,New Haven,False,0,
+2025,1,Michigan State,Western Michigan,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Wake Forest,Kennesaw State,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,West Florida,Lenoir-Rhyne,False,0,
+2025,1,Illinois,Western Illinois,True,2,"Bovada,ESPN Bet"
+2025,1,Kansas,Wagner,True,2,"Bovada,ESPN Bet"
+2025,1,Baylor,Auburn,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Colorado,Georgia Tech,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Sam Houston,UNLV,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,San José State,Central Michigan,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,East Tennessee State,Murray State,False,0,
+2025,1,Furman,William & Mary,False,0,
+2025,1,Glenville State,Emory & Henry College,False,0,
+2025,1,Jackson State,Hampton,False,0,
+2025,1,Mississippi Valley State,Southern,False,0,
+2025,1,North Carolina Central,New Hampshire,False,0,
+2025,1,Northern Colorado,Chadron St,False,0,
+2025,1,South Dakota State,Sacramento State,False,0,
+2025,1,Tennessee State,North Carolina A&T,False,0,
+2025,1,UT Rio Grande Valley,Sul Ross State,False,0,
+2025,1,Carson-Newman College,West Virginia State,False,0,
+2025,1,Gannon,Davenport,False,0,
+2025,1,Kent State,Merrimack,False,0,
+2025,1,Lehigh,Richmond,False,0,
+2025,1,Maryland,Florida Atlantic,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Navy,VMI,False,0,
+2025,1,Ohio State,Texas,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Pittsburgh,Duquesne,False,0,
+2025,1,Purdue,Ball State,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Shorter,Anderson (Sc),False,0,
+2025,1,Southern Miss,Mississippi State,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Syracuse,Tennessee,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,The Citadel,North Dakota State,False,0,
+2025,1,Tulane,Northwestern,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Kentucky,Toledo,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Central State (OH),Kentucky State,False,0,
+2025,1,Clark Atlanta,Valdosta State,False,0,
+2025,1,Davidson,Georgetown,False,0,
+2025,1,Grand Valley State University,Lincoln (PA),False,0,
+2025,1,Post University,West Virginia Wesleyan,False,0,
+2025,1,Shaw,Albany State GA,False,0,
+2025,1,Augustana University (SD),Missouri Western,False,0,
+2025,1,Boston College,Fordham,True,1,ESPN Bet
+2025,1,Fort Lewis,William Jewell,False,0,
+2025,1,Northern Iowa,Butler,False,0,
+2025,1,UConn,Central Connecticut,False,0,
+2025,1,Valparaiso,Virginia University Of Lynchburg,False,0,
+2025,1,Washburn,Truman State,False,0,
+2025,1,West Virginia,Robert Morris,True,1,ESPN Bet
+2025,1,Indiana,Old Dominion,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Tennessee Tech,Cumberland (TN),False,0,
+2025,1,Louisville,Eastern Kentucky,False,0,
+2025,1,Morehouse College,Johnson C Smith,False,0,
+2025,1,Air Force,Bucknell,True,1,ESPN Bet
+2025,1,Florida State,Alabama,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Georgia,Marshall,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Iowa State,South Dakota,True,1,ESPN Bet
+2025,1,Massachusetts,Temple,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Northern Illinois,Holy Cross,True,1,ESPN Bet
+2025,1,Penn State,Nevada,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Florida A&M,Howard,False,0,
+2025,1,Liberty,Maine,True,1,ESPN Bet
+2025,1,Oregon,Montana State,True,1,ESPN Bet
+2025,1,Arkansas,Alabama A&M,False,0,
+2025,1,Memphis,Chattanooga,True,1,ESPN Bet
+2025,1,Benedict College,Fayetteville State,False,0,
+2025,1,Pace,St. Anselm,False,0,
+2025,1,Catawba,Ferrum,False,0,
+2025,1,Chowan,Elizabeth City State,False,0,
+2025,1,Frostburg State,Shepherd,False,0,
+2025,1,Iowa,UAlbany,True,1,ESPN Bet
+2025,1,James Madison,Weber State,True,1,ESPN Bet
+2025,1,Mercer,Presbyterian,False,0,
+2025,1,Morehead State,Allen,False,0,
+2025,1,Oklahoma,Illinois State,True,1,ESPN Bet
+2025,1,Sacred Heart,Stonehill,False,0,
+2025,1,Savannah St,Edward Waters,False,0,
+2025,1,South Carolina State,Wofford,False,0,
+2025,1,Stetson,Webber International,False,0,
+2025,1,UVA Wise,Concord University,False,0,
+2025,1,Virginia,Coastal Carolina,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Western Carolina,Gardner-Webb,False,0,
+2025,1,Wingate,UNC Pembroke,False,0,
+2025,1,West Alabama,Fort Valley State,False,0,
+2025,1,Lincoln (MO),Lincoln (CA),False,0,
+2025,1,Arkansas State,Southeast Missouri State,True,1,ESPN Bet
+2025,1,Bluefield State,Greeneville,False,0,
+2025,1,Florida,Long Island University,False,0,
+2025,1,Grambling,Langston University,False,0,
+2025,1,Incarnate Word,Eastern Washington,False,0,
+2025,1,Kansas State,North Dakota,True,1,ESPN Bet
+2025,1,McNeese,Louisiana College,False,0,
+2025,1,Middle Tennessee,Austin Peay,True,1,ESPN Bet
+2025,1,Missouri S&T,Central Methodist,False,0,
+2025,1,South Alabama,Morgan State,True,1,ESPN Bet
+2025,1,Southern Illinois,Thomas More College,False,0,
+2025,1,Texas A&M,UTSA,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Troy,Nicholls,True,1,ESPN Bet
+2025,1,UT Permian Basin,Central Oklahoma,False,0,
+2025,1,Vanderbilt,Charleston Southern,True,1,ESPN Bet
+2025,1,Western Kentucky,North Alabama,True,1,ESPN Bet
+2025,1,Clemson,LSU,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Houston Christian,Little Rock,False,0,
+2025,1,Louisiana Tech,SE Louisiana,True,1,ESPN Bet
+2025,1,Michigan,New Mexico,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Texas Tech,Arkansas-Pine Bluff,False,0,
+2025,1,USC,Missouri State,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Utah State,UTEP,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Ole Miss,Georgia State,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,BYU,Portland State,True,1,ESPN Bet
+2025,1,Louisiana,Rice,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Missouri Southern State,Midwestern State,False,0,
+2025,1,North Texas,Lamar,False,0,
+2025,1,San Diego,Cal Poly,False,0,
+2025,1,Texas Southern,Prairie View A&M,False,0,
+2025,1,Texas State,Eastern Michigan,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Tulsa,Abilene Christian,False,0,
+2025,1,Western New Mexico,Adams State,False,0,
+2025,1,Southern Utah,Idaho State,False,0,
+2025,1,New Mexico State,Bryant,True,1,ESPN Bet
+2025,1,SMU,East Texas A&M,True,1,ESPN Bet
+2025,1,Fresno State,Georgia Southern,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Arizona State,Northern Arizona,True,1,ESPN Bet
+2025,1,Utah Tech,UC Davis,False,0,
+2025,1,Washington State,Idaho,True,1,ESPN Bet
+2025,1,Arizona,Hawai'i,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Oregon State,California,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,UCLA,Utah,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Washington,Colorado State,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,South Carolina,Virginia Tech,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,Virginia Union,Miles College,False,0,
+2025,1,Tuskegee,Winston-Salem,False,0,
+2025,1,Miami,Notre Dame,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,1,North Carolina,TCU,True,3,"Bovada,DraftKings,ESPN Bet"

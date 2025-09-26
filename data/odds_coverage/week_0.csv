@@ -1,0 +1,10 @@
+season,week,home_team,away_team,has_odds,provider_count,providers
+2025,0,Kansas State,Iowa State,True,1,BookA
+2025,0,Nicholls,Incarnate Word,True,2,"Bovada,ESPN Bet"
+2025,0,UNLV,Idaho State,True,1,BookB
+2025,0,Portland State,Tarleton State,True,2,"Bovada,ESPN Bet"
+2025,0,Kansas,Fresno State,True,1,BookC
+2025,0,Mercer,UC Davis,False,0,
+2025,0,Western Kentucky,Sam Houston,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,0,Hawai'i,Stanford,True,3,"Bovada,DraftKings,ESPN Bet"
+2025,0,Southern,North Carolina Central,True,1,ESPN Bet

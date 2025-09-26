@@ -1,0 +1,15 @@
+season,week,home_team,away_team,market,side,provider,price_american,line,model_prob,implied_prob,edge,kelly_f,stake,start_iso,display_date,result_txt
+2025,7,Illinois,Ohio State,ML,Home,ESPN Bet,400,,0.4118,0.2,1.0588,0.025,12.5,2025-10-11T04:00:00Z,2025-10-11,—
+2025,7,Oregon,Indiana,Spread,Home,DraftKings,-110,-14.5,0.9999,0.5238,0.909,0.1,50.0,2025-10-11T04:00:00Z,2025-10-11,—
+2025,7,Utah,Arizona State,Spread,Home,DraftKings,-110,-2.5,0.9987,0.5238,0.9066,0.1,50.0,2025-10-11T04:00:00Z,2025-10-11,—
+2025,7,Texas,Oklahoma,Spread,Home,DraftKings,-110,-9.5,0.994,0.5238,0.8977,0.1,50.0,2025-10-11T19:30:00Z,2025-10-11,—
+2025,7,USC,Michigan,Spread,Home,DraftKings,-110,1.5,0.9885,0.5238,0.8872,0.1,50.0,2025-10-11T04:00:00Z,2025-10-11,—
+2025,7,Auburn,Georgia,Spread,Home,ESPN Bet,-110,6.0,0.909,0.5238,0.7354,0.1,50.0,2025-10-11T04:00:00Z,2025-10-11,—
+2025,7,Auburn,Georgia,ML,Home,ESPN Bet,180,,0.5589,0.3571,0.565,0.1,50.0,2025-10-11T04:00:00Z,2025-10-11,—
+2025,7,Texas,Oklahoma,ML,Away,ESPN Bet,230,,0.472,0.303,0.5578,0.1,50.0,2025-10-11T19:30:00Z,2025-10-11,—
+2025,7,Illinois,Ohio State,Spread,Home,ESPN Bet,-110,13.5,0.8063,0.5238,0.5394,0.1,50.0,2025-10-11T04:00:00Z,2025-10-11,—
+2025,7,Texas,Oklahoma,Total,Under,ESPN Bet,-110,56.5,0.7216,0.5238,0.3777,0.1,50.0,2025-10-11T19:30:00Z,2025-10-11,—
+2025,7,Oregon,Indiana,Total,Under,ESPN Bet,-110,55.5,0.6851,0.5238,0.3079,0.1,50.0,2025-10-11T04:00:00Z,2025-10-11,—
+2025,7,Illinois,Ohio State,Total,Over,ESPN Bet,-110,50.5,0.666,0.5238,0.2715,0.1,50.0,2025-10-11T04:00:00Z,2025-10-11,—
+2025,7,Auburn,Georgia,Total,Under,ESPN Bet,-110,50.5,0.6356,0.5238,0.2134,0.1,50.0,2025-10-11T04:00:00Z,2025-10-11,—
+2025,7,Oregon,Indiana,ML,Home,ESPN Bet,-550,,0.9648,0.8462,0.1402,0.1,50.0,2025-10-11T04:00:00Z,2025-10-11,—

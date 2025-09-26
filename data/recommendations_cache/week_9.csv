@@ -1,0 +1,10 @@
+season,week,home_team,away_team,market,side,provider,price_american,line,model_prob,implied_prob,edge,kelly_f,stake,start_iso,display_date,result_txt
+2025,9,Michigan State,Michigan,ML,Home,ESPN Bet,240,,0.6855,0.2941,1.3306,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Utah,Colorado,Spread,Home,ESPN Bet,-110,-8.5,0.9991,0.5238,0.9073,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,LSU,Texas A&M,Spread,Home,DraftKings,-110,-5.5,0.9981,0.5238,0.9054,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,South Carolina,Alabama,Spread,Home,DraftKings,-110,7.5,0.9441,0.5238,0.8025,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Michigan State,Michigan,Spread,Home,ESPN Bet,-110,8.0,0.9299,0.5238,0.7752,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Kansas,Kansas State,Spread,Home,DraftKings,-110,4.0,0.8955,0.5238,0.7097,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,LSU,Texas A&M,ML,Home,ESPN Bet,-190,,0.8794,0.6552,0.3423,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Kansas,Kansas State,Total,Under,ESPN Bet,-110,53.5,0.6112,0.5238,0.1668,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Utah,Colorado,ML,Home,ESPN Bet,-300,,0.7906,0.75,0.0541,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—

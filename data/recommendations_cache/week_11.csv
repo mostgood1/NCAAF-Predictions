@@ -1,0 +1,9 @@
+season,week,home_team,away_team,market,side,provider,price_american,line,model_prob,implied_prob,edge,kelly_f,stake,start_iso,display_date,result_txt
+2025,11,Clemson,Florida State,Spread,Home,DraftKings,-110,-16.5,1.0,0.5238,0.9091,0.1,50.0,2025-11-08T05:00:00Z,2025-11-08,—
+2025,11,Penn State,Indiana,Spread,Home,ESPN Bet,-110,-16.0,1.0,0.5238,0.909,0.1,50.0,2025-11-08T05:00:00Z,2025-11-08,—
+2025,11,Alabama,LSU,Spread,Home,ESPN Bet,-110,-6.0,0.9992,0.5238,0.9075,0.1,50.0,2025-11-08T05:00:00Z,2025-11-08,—
+2025,11,Penn State,Indiana,Total,Over,ESPN Bet,-110,53.5,0.739,0.5238,0.4109,0.1,50.0,2025-11-08T05:00:00Z,2025-11-08,—
+2025,11,Alabama,LSU,ML,Home,ESPN Bet,-210,,0.9551,0.6774,0.4099,0.1,50.0,2025-11-08T05:00:00Z,2025-11-08,—
+2025,11,Alabama,LSU,Total,Under,ESPN Bet,-110,54.5,0.704,0.5238,0.3441,0.1,50.0,2025-11-08T05:00:00Z,2025-11-08,—
+2025,11,Clemson,Florida State,Total,Over,DraftKings,-110,55.5,0.6555,0.5238,0.2514,0.1,50.0,2025-11-08T05:00:00Z,2025-11-08,—
+2025,11,Clemson,Florida State,ML,Home,DraftKings,-800,,0.9409,0.8889,0.0585,0.1,50.0,2025-11-08T05:00:00Z,2025-11-08,—

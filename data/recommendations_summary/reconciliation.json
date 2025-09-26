@@ -1,0 +1,126 @@
+{
+  "generated_at": "2025-09-26T20:09:43.694743Z",
+  "weeks": [
+    {
+      "count": 50,
+      "wins": 10,
+      "losses": 40,
+      "pushes": 0,
+      "acc": 0.2,
+      "stake": 625.0,
+      "pnl": 25.0,
+      "roi": 0.04,
+      "week": 1
+    },
+    {
+      "count": 4,
+      "wins": 4,
+      "losses": 0,
+      "pushes": 0,
+      "acc": 1.0,
+      "stake": 200.0,
+      "pnl": 181.8,
+      "roi": 0.909,
+      "week": 3
+    },
+    {
+      "count": 2,
+      "wins": 2,
+      "losses": 0,
+      "pushes": 0,
+      "acc": 1.0,
+      "stake": 100.0,
+      "pnl": 90.9,
+      "roi": 0.909,
+      "week": 4
+    },
+    {
+      "count": 1708,
+      "wins": 0,
+      "losses": 0,
+      "pushes": 0,
+      "acc": 0.0,
+      "stake": 21650.0,
+      "pnl": 0.0,
+      "roi": 0.0,
+      "week": 5
+    },
+    {
+      "count": 4,
+      "wins": 0,
+      "losses": 0,
+      "pushes": 0,
+      "acc": 0.0,
+      "stake": 200.0,
+      "pnl": 0.0,
+      "roi": 0.0,
+      "week": 6
+    },
+    {
+      "count": 8,
+      "wins": 0,
+      "losses": 0,
+      "pushes": 0,
+      "acc": 0.0,
+      "stake": 400.0,
+      "pnl": 0.0,
+      "roi": 0.0,
+      "week": 7
+    },
+    {
+      "count": 4,
+      "wins": 0,
+      "losses": 0,
+      "pushes": 0,
+      "acc": 0.0,
+      "stake": 200.0,
+      "pnl": 0.0,
+      "roi": 0.0,
+      "week": 8
+    },
+    {
+      "count": 6,
+      "wins": 0,
+      "losses": 0,
+      "pushes": 0,
+      "acc": 0.0,
+      "stake": 300.0,
+      "pnl": 0.0,
+      "roi": 0.0,
+      "week": 9
+    },
+    {
+      "count": 6,
+      "wins": 0,
+      "losses": 0,
+      "pushes": 0,
+      "acc": 0.0,
+      "stake": 300.0,
+      "pnl": 0.0,
+      "roi": 0.0,
+      "week": 11
+    },
+    {
+      "count": 4,
+      "wins": 0,
+      "losses": 0,
+      "pushes": 0,
+      "acc": 0.0,
+      "stake": 50.0,
+      "pnl": 0.0,
+      "roi": 0.0,
+      "week": 12
+    },
+    {
+      "count": 4,
+      "wins": 0,
+      "losses": 0,
+      "pushes": 0,
+      "acc": 0.0,
+      "stake": 200.0,
+      "pnl": 0.0,
+      "roi": 0.0,
+      "week": 14
+    }
+  ]
+}

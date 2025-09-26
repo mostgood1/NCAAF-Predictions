@@ -1,0 +1,10 @@
+season,week,home_team,away_team,market,side,provider,price_american,line,model_prob,implied_prob,edge,kelly_f,stake,start_iso,display_date,result_txt
+2025,10,Florida,Georgia,ML,Home,ESPN Bet,200,,0.6577,0.3333,0.9732,0.1,50.0,2025-11-01T19:30:00Z,2025-11-01,—
+2025,10,Kansas State,Texas Tech,Spread,Home,DraftKings,-110,-4.5,0.9997,0.5238,0.9086,0.1,50.0,2025-11-01T04:00:00Z,2025-11-01,—
+2025,10,Ohio State,Penn State,Spread,Home,DraftKings,-110,-4.0,0.9991,0.5238,0.9074,0.1,50.0,2025-11-01T04:00:00Z,2025-11-01,—
+2025,10,SMU,Miami,Spread,Home,DraftKings,-110,1.5,0.9904,0.5238,0.8908,0.1,50.0,2025-11-01T04:00:00Z,2025-11-01,—
+2025,10,Florida,Georgia,Spread,Home,ESPN Bet,-110,7.0,0.9649,0.5238,0.8421,0.1,50.0,2025-11-01T19:30:00Z,2025-11-01,—
+2025,10,Ohio State,Penn State,ML,Home,ESPN Bet,-165,,0.9476,0.6226,0.5218,0.1,50.0,2025-11-01T04:00:00Z,2025-11-01,—
+2025,10,Kansas State,Texas Tech,ML,Home,ESPN Bet,-185,,0.9521,0.6491,0.4667,0.1,50.0,2025-11-01T04:00:00Z,2025-11-01,—
+2025,10,Florida,Georgia,Total,Over,ESPN Bet,-110,51.5,0.7149,0.5238,0.3648,0.1,50.0,2025-11-01T19:30:00Z,2025-11-01,—
+2025,10,Ohio State,Penn State,Total,Over,ESPN Bet,-110,50.5,0.6158,0.5238,0.1757,0.1,50.0,2025-11-01T04:00:00Z,2025-11-01,—

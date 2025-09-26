@@ -1,0 +1,8 @@
+season,week,home_team,away_team,market,side,provider,price_american,line,model_prob,implied_prob,edge,kelly_f,stake,start_iso,display_date,result_txt
+2025,12,Alabama,Oklahoma,Spread,Home,DraftKings,-110,-12.5,0.9995,0.5238,0.9082,0.1,50.0,2025-11-15T05:00:00Z,2025-11-15,—
+2025,12,Georgia,Texas,Spread,Home,DraftKings,-110,-2.5,0.9987,0.5238,0.9067,0.1,50.0,2025-11-15T05:00:00Z,2025-11-15,—
+2025,12,Louisville,Clemson,Total,Under,DraftKings,-110,60.5,0.9676,0.5238,0.8472,0.1,50.0,2025-11-15T00:30:00Z,2025-11-15,—
+2025,12,Louisville,Clemson,Spread,Home,ESPN Bet,-110,6.0,0.8435,0.5238,0.6103,0.1,50.0,2025-11-15T00:30:00Z,2025-11-15,—
+2025,12,Georgia,Texas,ML,Home,ESPN Bet,-130,,0.9092,0.5652,0.6086,0.1,50.0,2025-11-15T05:00:00Z,2025-11-15,—
+2025,12,Georgia,Texas,Total,Over,ESPN Bet,-110,51.5,0.7616,0.5238,0.4539,0.1,50.0,2025-11-15T05:00:00Z,2025-11-15,—
+2025,12,Louisville,Clemson,ML,Home,DraftKings,180,,0.4904,0.3571,0.3732,0.1,50.0,2025-11-15T00:30:00Z,2025-11-15,—

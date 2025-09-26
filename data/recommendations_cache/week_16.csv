@@ -1,0 +1,4 @@
+season,week,home_team,away_team,market,side,provider,price_american,line,model_prob,implied_prob,edge,kelly_f,stake,start_iso,display_date,result_txt
+2025,16,Navy,Army,Spread,Home,ESPN Bet,-110,-3.5,0.9933,0.5238,0.8962,0.1,50.0,2025-12-13T20:00:00Z,2025-12-13,—
+2025,16,Navy,Army,Total,Over,ESPN Bet,-110,39.5,0.8087,0.5238,0.5438,0.1,50.0,2025-12-13T20:00:00Z,2025-12-13,—
+2025,16,Navy,Army,ML,Home,ESPN Bet,-145,,0.7768,0.5918,0.3125,0.1,50.0,2025-12-13T20:00:00Z,2025-12-13,—

@@ -1,0 +1,11 @@
+season,week,home_team,away_team,market,side,provider,price_american,line,model_prob,implied_prob,edge,kelly_f,stake,start_iso,display_date,result_txt
+2025,13,Oregon,USC,Spread,Home,DraftKings,-110,-13.5,0.9999,0.5238,0.909,0.1,50.0,2025-11-22T05:00:00Z,2025-11-22,—
+2025,13,Florida,Tennessee,Spread,Home,DraftKings,-110,-4.0,0.9987,0.5238,0.9067,0.1,50.0,2025-11-22T05:00:00Z,2025-11-22,—
+2025,13,Utah,Kansas State,Spread,Home,ESPN Bet,-110,-1.5,0.9966,0.5238,0.9025,0.1,50.0,2025-11-22T05:00:00Z,2025-11-22,—
+2025,13,Oklahoma,Missouri,Spread,Home,ESPN Bet,-110,-7.5,0.9962,0.5238,0.9018,0.1,50.0,2025-11-22T17:00:00Z,2025-11-22,—
+2025,13,North Carolina,Duke,Spread,Home,DraftKings,-110,-1.5,0.995,0.5238,0.8996,0.1,50.0,2025-11-22T05:00:00Z,2025-11-22,—
+2025,13,Colorado,Arizona State,Spread,Home,DraftKings,-110,4.5,0.976,0.5238,0.8633,0.1,50.0,2025-11-22T05:00:00Z,2025-11-22,—
+2025,13,Utah,Kansas State,ML,Home,ESPN Bet,-110,,0.9289,0.5238,0.7734,0.1,50.0,2025-11-22T05:00:00Z,2025-11-22,—
+2025,13,Utah,Kansas State,Total,Under,ESPN Bet,-110,54.5,0.6805,0.5238,0.2992,0.1,50.0,2025-11-22T05:00:00Z,2025-11-22,—
+2025,13,Oregon,USC,ML,Home,ESPN Bet,-450,,0.9478,0.8182,0.1585,0.1,50.0,2025-11-22T05:00:00Z,2025-11-22,—
+2025,13,Oklahoma,Missouri,ML,Away,ESPN Bet,215,,0.3264,0.3175,0.0283,0.0132,6.58,2025-11-22T17:00:00Z,2025-11-22,—
