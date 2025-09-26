@@ -241,7 +241,10 @@ try {
                     # Stage only tracked modifications and key data artifacts; avoid committing logs & secrets.
                     # First stage tracked modified/deleted files.
                     git add -u 2>$null
-                    # Then explicitly add updated prediction / odds data artifacts if untracked (rare)
+                    # Then explicitly add updated prediction / odds data artifacts including offline caches
+                    if(Test-Path 'data/recommendations_cache'){ git add 'data/recommendations_cache' 2>$null }
+                    if(Test-Path 'data/odds_coverage'){ git add 'data/odds_coverage' 2>$null }
+                    if(Test-Path 'data/recommendations_summary'){ git add 'data/recommendations_summary' 2>$null }
                     # Only add patterns that actually match files to avoid fatal pathspec errors
                     foreach($pat in @('data/*.csv','data/*.json','recommendations_*.json')){
                         if(Test-Path $pat){ git add $pat 2>$null }

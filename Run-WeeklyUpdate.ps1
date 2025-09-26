@@ -46,6 +46,10 @@ if($doGit){
             else {
                 # Stage only tracked modifications and key data artifacts; avoid committing logs & secrets.
                 git add -u 2>$null
+                # Explicitly add offline artifact directories (recursive) and top-level data files.
+                if(Test-Path 'data/recommendations_cache'){ git add 'data/recommendations_cache' 2>$null }
+                if(Test-Path 'data/odds_coverage'){ git add 'data/odds_coverage' 2>$null }
+                if(Test-Path 'data/recommendations_summary'){ git add 'data/recommendations_summary' 2>$null }
                 foreach($pat in @('data/*.csv','data/*.json','recommendations_*.json')){
                     if(Test-Path $pat){ git add $pat 2>$null }
                 }
