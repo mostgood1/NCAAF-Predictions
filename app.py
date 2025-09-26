@@ -3366,6 +3366,10 @@ def index():
             <button type="button" id="normalizeKickoffsBtn" title="Re-pull kickoff times from APIs (start_date_api)">Normalize Kickoffs</button>
         </div>
     {% endif %}
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-left:auto;">
+            <button type="button" id="toggleAllOddsBtn" title="Toggle all odds for all games">Show All Odds</button>
+            <button type="button" id="toggleThemeBtn" title="Toggle light/dark theme">Dark Theme</button>
+        </div>
     </div> <!-- end topbar -->
         <h1 style="margin:8px 4px 14px; font-size:1.4rem;">NCAAF Betting – Cards</h1>
     <div class="banner">
@@ -3908,6 +3912,57 @@ def index():
                         }
                     });
                 });
+
+                // Global: Toggle all odds
+                (function(){
+                    const allBtn = document.getElementById('toggleAllOddsBtn');
+                    function setAll(state){ // state: 'shown' | 'hidden'
+                        const showAll = (state === 'shown');
+                        document.querySelectorAll('.card').forEach(card=>{
+                            const odds = card.querySelector('.odds');
+                            const btn = card.querySelector('.toggleOddsBtn');
+                            if(!odds || !btn) return;
+                            odds.style.display = showAll ? '' : 'none';
+                            btn.textContent = showAll ? 'Hide Odds' : 'Show Odds';
+                        });
+                        sessionStorage.setItem('allOddsState', state);
+                        if(allBtn) allBtn.textContent = showAll ? 'Hide All Odds' : 'Show All Odds';
+                    }
+                    // init from sessionStorage
+                    const saved = sessionStorage.getItem('allOddsState');
+                    if(saved === 'shown' || saved === 'hidden'){
+                        setAll(saved);
+                    } else {
+                        setAll('hidden'); // default
+                    }
+                    if(allBtn){
+                        allBtn.addEventListener('click', ()=>{
+                            const cur = sessionStorage.getItem('allOddsState') || 'hidden';
+                            setAll(cur === 'shown' ? 'hidden' : 'shown');
+                        });
+                    }
+                })();
+
+                // Theme toggle (persist in localStorage)
+                (function(){
+                    const btn = document.getElementById('toggleThemeBtn');
+                    function applyTheme(theme){
+                        const b = document.body;
+                        if(theme === 'dark'){ b.classList.add('dark'); }
+                        else { b.classList.remove('dark'); }
+                        if(btn) btn.textContent = (theme === 'dark') ? 'Light Theme' : 'Dark Theme';
+                    }
+                    const saved = (localStorage.getItem('theme') || '').toLowerCase();
+                    applyTheme(saved === 'dark' ? 'dark' : 'light');
+                    if(btn){
+                        btn.addEventListener('click', ()=>{
+                            const isDark = document.body.classList.contains('dark');
+                            const next = isDark ? 'light' : 'dark';
+                            localStorage.setItem('theme', next);
+                            applyTheme(next);
+                        });
+                    }
+                })();
 
                 // Back to top behavior
                 const topBtn = document.getElementById('backToTop');
@@ -5281,9 +5336,15 @@ def recommendations_page():
         caption { text-align:left; font-weight:600; margin:12px 0 4px; }
         .meta-bar { font-size:.75rem; color:#555; margin-top:4px; }
         @media (max-width:900px){ th,td { font-size:.72rem; padding:4px; } }
+        /* Dark theme variants */
+        body.dark { background:#0f172a; color:#e2e8f0; }
+        body.dark .wrap { background:#0b1220; box-shadow:0 8px 20px rgba(0,0,0,.5); }
+        body.dark th { background:#13223a; }
+        body.dark .summary { background:#0f1a2b; border-color:#223; }
+        body.dark a, body.dark .nav a { color:#8ab4ff; }
     </style>
     <div class="wrap">
-    <div class="nav"><a href="/">Cards</a> | <a href="/recommendations">Recommendations</a> | <a href="/recommendations/performance">Performance</a> | <a href="/api/game-cards">API</a> | <a href="/health">Health</a></div>
+    <div class="nav"><a href="/">Cards</a> | <a href="/recommendations">Recommendations</a> | <a href="/recommendations/performance">Performance</a> | <a href="/api/game-cards">API</a> | <a href="/health">Health</a> | <button type="button" id="toggleThemeBtn" style="margin-left:10px; padding:4px 8px; border-radius:6px;">Dark Theme</button></div>
         <h1>NCAAF Betting – Recommendations</h1>
         <div class="summary">
             <div class="kpi-line"><b>OVERALL</b> {{fmt_pct(overall_stats.acc)}} Accuracy {{overall_stats.wins}}W-{{overall_stats.losses}}L{% if overall_stats.pushes %}-{{overall_stats.pushes}}P{% endif %} / {{overall_stats.wins + overall_stats.losses + overall_stats.pushes}} settled ROI: {{fmt_pct(overall_stats.roi)}} Stake: {{fmt_money(overall_stats.stake)}} | P/L: {{fmt_money(overall_stats.pnl)}} Total picks: {{overall_stats.count}}</div>
@@ -5391,6 +5452,25 @@ def recommendations_page():
         <div style="margin-top:30px; font-size:.75rem; color:#666;">Generated at {{now}}. Edge = model EV (expected value) using American odds. Kelly stake capped & scaled. Times shown in original schedule timezone if available.</div>
         <div style="margin-top:6px; font-size:.7rem; color:#777;">Build {{ BUILD_TIME }} • Commit {{ BUILD_COMMIT[:8] if BUILD_COMMIT else 'unknown' }}</div>
     </div>
+    <script>
+    // Minimal theme toggle for this page
+    (function(){
+        const btn = document.getElementById('toggleThemeBtn');
+        function applyTheme(theme){
+            if(theme==='dark') document.body.classList.add('dark'); else document.body.classList.remove('dark');
+            if(btn) btn.textContent = (theme==='dark') ? 'Light Theme' : 'Dark Theme';
+        }
+        const saved = (localStorage.getItem('theme')||'').toLowerCase();
+        applyTheme(saved==='dark' ? 'dark' : 'light');
+        if(btn){
+            btn.addEventListener('click', ()=>{
+                const next = document.body.classList.contains('dark') ? 'light' : 'dark';
+                localStorage.setItem('theme', next);
+                applyTheme(next);
+            });
+        }
+    })();
+    </script>
      ''', weeks=weeks, sel_week=sel_week, sort_q=sort_q, bankroll=bankroll, kelly_factor=kelly_factor, ev_threshold=ev_threshold,
        high=high, medium=medium, low=low, other=other,
          overall_stats=overall_stats, tier_stats=tier_stats, fmt_pct=fmt_pct, fmt_money=fmt_money, now=datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'), BUILD_TIME=BUILD_TIME, BUILD_COMMIT=BUILD_COMMIT,
