@@ -65,10 +65,7 @@ def _filtered_add_url_rule(rule, endpoint=None, view_func=None, provide_automati
         return None
 app.add_url_rule = _filtered_add_url_rule
 
-# --- Early trivial health route to test server wiring even if later code errors ---
-@app.route('/api/ping')
-def api_ping():  # pragma: no cover
-    return {'pong': True, 'commit': BUILD_COMMIT, 'build_time': BUILD_TIME}
+# Removed: /api/ping
 
 # Resolve paths relative to this file, so it works from any working directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -3320,6 +3317,10 @@ def index():
     body.dark .odds-table th { background:#13223a; }
     body.dark .odds-table tr:nth-child(even) { background:#0b1220; }
     body.dark a { color:#8ab4ff; }
+    body.dark select, body.dark button { background:#1e293b; color:#e2e8f0; border:1px solid #334155; }
+    body.dark .odds-toggle button { background:#4f46e5; border-color:#4f46e5; }
+    body.dark .filterbar { background:#0b1220; }
+    body.dark .team-name { text-shadow: 0 1px 1px rgba(0,0,0,0.6); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12); }
     /* Dark mode contrast improvements */
     body.dark .topbar { background: rgba(15,23,42,0.92); border-bottom-color:#1f2937; }
     body.dark .banner { background:#0b1220; border-color:#223; color:#cbd5e1; }
@@ -5365,9 +5366,12 @@ def recommendations_page():
         select, input[type=number] { padding:4px 6px; }
     button { padding:6px 12px; border:1px solid #2d6cdf; background:#2d6cdf; color:#fff; border-radius:6px; cursor:pointer; }
     button.secondary { background:#fff; color:#2d6cdf; }
-        .conf-high { background:#eaf7ef; }
-        .conf-medium { background:#fff7e6; }
-        .conf-low { background:#fdecee; }
+    .conf-high { background:#eaf7ef; }
+    .conf-medium { background:#fff7e6; }
+    .conf-low { background:#fdecee; }
+    body.dark .conf-high { background:#0f2d1c; }
+    body.dark .conf-medium { background:#2a1f0a; }
+    body.dark .conf-low { background:#3b0f14; }
         caption { text-align:left; font-weight:600; margin:12px 0 4px; }
         .meta-bar { font-size:.75rem; color:#555; margin-top:4px; }
         @media (max-width:900px){ th,td { font-size:.72rem; padding:4px; } }
