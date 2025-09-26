@@ -4979,7 +4979,9 @@ def recommendations_page():
         current_wk = _infer_current_week()
     except Exception:
         current_wk = None
-    use_log = False
+    # Optional override via query: source=log|compute
+    src_override = (request.args.get('source') or request.form.get('source') or '').strip().lower()
+    use_log = (src_override == 'log')
     recs = []
     recs_source = 'compute'
     # If RECS file has entries for the selected week (typically past weeks), load from there
@@ -4988,8 +4990,11 @@ def recommendations_page():
             df_log = pd.read_csv(RECS_PATH)
             if 'week' in df_log.columns and 'season' in df_log.columns:
                 rows_wk = df_log[(pd.to_numeric(df_log['season'], errors='coerce') == 2025) & (pd.to_numeric(df_log['week'], errors='coerce') == int(sel_week))]
-                if not rows_wk.empty:
+                # Use log only for past weeks unless explicitly overridden
+                if not rows_wk.empty and (use_log or (current_wk is not None and int(sel_week) < int(current_wk))):
                     use_log = True
+                else:
+                    use_log = False
     except Exception:
         use_log = False
 
