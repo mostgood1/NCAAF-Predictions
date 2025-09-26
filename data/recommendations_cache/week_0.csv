@@ -1,1 +1,21 @@
-
+season,week,home_team,away_team,market,side,provider,price_american,line,model_prob,implied_prob,edge,kelly_f,stake,start_iso,display_date,result_txt
+2025,0,Portland State,Tarleton State,ML,Home,Bovada,550,,0.3125,0.1538,1.0315,0.025,12.5,2025-08-23T20:30:00Z,2025-08-23,Loss
+2025,0,Western Kentucky,Sam Houston,Spread,Home,ESPN Bet,-110,-10.5,0.9996,0.5238,0.9084,0.1,50.0,2025-08-23T23:00:00Z,2025-08-23,Win
+2025,0,UNLV,Idaho State,Spread,Home,BookB,-110,-10.5,0.9992,0.5238,0.9076,0.1,50.0,2025-08-23T20:00:00Z,2025-08-23,Win
+2025,0,Kansas State,Iowa State,Spread,Home,BookA,-110,-1.5,0.9944,0.5238,0.8984,0.1,50.0,2025-08-23T16:00:00Z,2025-08-23,Loss
+2025,0,Kansas,Fresno State,Spread,Home,BookC,-110,-3.0,0.9896,0.5238,0.8893,0.1,50.0,2025-08-23T22:30:00Z,2025-08-23,Win
+2025,0,Hawai'i,Stanford,Spread,Home,Bovada,-110,-2.0,0.9706,0.5238,0.8529,0.1,50.0,2025-08-23T23:30:00Z,2025-08-23,Win
+2025,0,Nicholls,Incarnate Word,Total,Under,Bovada,-110,51.5,0.9631,0.5238,0.8386,0.1,50.0,2025-08-23T17:00:00Z,2025-08-23,Win
+2025,0,Southern,North Carolina Central,Spread,Home,ESPN Bet,-110,10.5,0.8511,0.5238,0.6248,0.1,50.0,2025-08-23T23:30:00Z,2025-08-23,Loss
+2025,0,Kansas,Fresno State,Total,Under,BookC,-110,51.0,0.815,0.5238,0.5558,0.1,50.0,2025-08-23T22:30:00Z,2025-08-23,Win
+2025,0,Hawai'i,Stanford,Total,Under,DraftKings,-110,53.5,0.7992,0.5238,0.5257,0.1,50.0,2025-08-23T23:30:00Z,2025-08-23,Win
+2025,0,UNLV,Idaho State,ML,Away,BookB,320,,0.3551,0.2381,0.4915,0.025,12.5,2025-08-23T20:00:00Z,2025-08-23,Loss
+2025,0,Portland State,Tarleton State,Total,Under,Bovada,-110,60.5,0.7495,0.5238,0.4308,0.1,50.0,2025-08-23T20:30:00Z,2025-08-23,Win
+2025,0,Nicholls,Incarnate Word,Spread,Home,Bovada,-110,13.5,0.7287,0.5238,0.3911,0.1,50.0,2025-08-23T17:00:00Z,2025-08-23,Win
+2025,0,Kansas State,Iowa State,ML,Home,BookA,-120,,0.7501,0.5455,0.3751,0.1,50.0,2025-08-23T16:00:00Z,2025-08-23,Loss
+2025,0,Kansas,Fresno State,ML,Home,BookC,-150,,0.796,0.6,0.3267,0.1,50.0,2025-08-23T22:30:00Z,2025-08-23,Win
+2025,0,UNLV,Idaho State,Total,Over,BookB,-110,54.5,0.6796,0.5238,0.2974,0.1,50.0,2025-08-23T20:00:00Z,2025-08-23,Win
+2025,0,Kansas State,Iowa State,Total,Over,BookA,-110,49.5,0.6579,0.5238,0.2559,0.1,50.0,2025-08-23T16:00:00Z,2025-08-23,Loss
+2025,0,Hawai'i,Stanford,ML,Home,Bovada,115,,0.5833,0.4651,0.254,0.1,50.0,2025-08-23T23:30:00Z,2025-08-23,Win
+2025,0,Western Kentucky,Sam Houston,Total,Under,DraftKings,-110,60.5,0.6462,0.5238,0.2337,0.1,50.0,2025-08-23T23:00:00Z,2025-08-23,Loss
+2025,0,Portland State,Tarleton State,Spread,Home,ESPN Bet,-110,16.5,0.6397,0.5238,0.2212,0.1,50.0,2025-08-23T20:30:00Z,2025-08-23,Loss

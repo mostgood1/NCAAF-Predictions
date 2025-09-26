@@ -47,6 +47,7 @@ season,week,home_team,away_team,market,side,provider,price_american,line,model_p
 2025,5,Georgia,Alabama,Spread,Home,Nordic Bet,-110,-3.5,0.9886,0.5238,0.8873,0.1,50.0,2025-09-27T23:30:00Z,2025-09-27,—
 2025,5,South Carolina,Kentucky,Spread,Home,Bovada,-110,-6.5,0.9885,0.5238,0.8871,0.1,50.0,2025-09-27T23:45:00Z,2025-09-27,—
 2025,5,NC State,Virginia Tech,Spread,Home,Fliff,-110,-10.5,0.9877,0.5238,0.8857,0.1,50.0,2025-09-27T23:00:00Z,2025-09-27,—
+2025,5,East Carolina,Army,Spread,Home,Bovada,-110,-5.0,0.9843,0.5238,0.8791,0.1,50.0,2025-09-25T23:30:00Z,2025-09-25,Win
 2025,5,Colorado State,Washington State,Spread,Home,LowVig.ag,-110,-6.0,0.9843,0.5238,0.8791,0.1,50.0,2025-09-27T23:30:00Z,2025-09-27,—
 2025,5,Ole Miss,LSU,Spread,Home,MyBookie.ag,-110,-2.0,0.9841,0.5238,0.8787,0.1,50.0,2025-09-27T19:30:00Z,2025-09-27,—
 2025,5,Northern Illinois,San Diego State,Spread,Home,LowVig.ag,-110,2.0,0.9836,0.5238,0.8777,0.1,50.0,2025-09-27T19:30:00Z,2025-09-27,—
@@ -79,6 +80,7 @@ season,week,home_team,away_team,market,side,provider,price_american,line,model_p
 2025,5,Boise State,App State,Total,Under,FanDuel,-110,61.5,0.8601,0.5238,0.642,0.1,50.0,2025-09-27T23:30:00Z,2025-09-27,—
 2025,5,Tulsa,Tulane,Total,Under,Bovada,-110,53.0,0.8583,0.5238,0.6385,0.1,50.0,2025-09-27T20:00:00Z,2025-09-27,—
 2025,5,Colorado,BYU,Spread,Home,FanDuel,-110,6.5,0.8572,0.5238,0.6365,0.1,50.0,2025-09-28T02:15:00Z,2025-09-28,—
+2025,5,East Carolina,Army,Total,Under,Coral,-110,56.5,0.8461,0.5238,0.6153,0.1,50.0,2025-09-25T23:30:00Z,2025-09-25,Win
 2025,5,Washington,Ohio State,Spread,Home,Fliff,-110,7.5,0.8402,0.5238,0.6039,0.1,50.0,2025-09-27T19:30:00Z,2025-09-27,—
 2025,5,Virginia,Florida State,ML,Home,Bovada,230,,0.4845,0.303,0.5988,0.1,50.0,2025-09-26T23:00:00Z,2025-09-26,—
 2025,5,Old Dominion,Liberty,Total,Under,ESPN BET,-110,52.5,0.8342,0.5238,0.5925,0.1,50.0,2025-09-27T22:00:00Z,2025-09-27,—
@@ -132,6 +134,7 @@ season,week,home_team,away_team,market,side,provider,price_american,line,model_p
 2025,5,Central Michigan,Eastern Michigan,ML,Home,Marathon Bet,-200,,0.7728,0.6667,0.1592,0.1,50.0,2025-09-27T17:00:00Z,2025-09-27,—
 2025,5,Arkansas,Notre Dame,ML,Away,Bovada,-175,,0.7339,0.6364,0.1533,0.1,50.0,2025-09-27T16:00:00Z,2025-09-27,—
 2025,5,Northwestern,UCLA,ML,Home,Bally Bet,-215,,0.7773,0.6825,0.1388,0.1,50.0,2025-09-27T19:30:00Z,2025-09-27,—
+2025,5,East Carolina,Army,ML,Away,Bovada,175,,0.4112,0.3636,0.1307,0.0747,37.35,2025-09-25T23:30:00Z,2025-09-25,Loss
 2025,5,Western Michigan,Rhode Island,ML,Home,FanDuel,-295,,0.8345,0.7468,0.1174,0.1,50.0,2025-09-27T22:30:00Z,2025-09-27,—
 2025,5,Kansas,Cincinnati,ML,Home,Matchbook,-185,,0.7219,0.6491,0.1121,0.1,50.0,2025-09-27T16:00:00Z,2025-09-27,—
 2025,5,Ohio,Bowling Green,ML,Home,LowVig.ag,-280,,0.8102,0.7368,0.0996,0.1,50.0,2025-09-27T16:00:00Z,2025-09-27,—
