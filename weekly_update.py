@@ -197,6 +197,21 @@ def weekly_update(prior_week: int | None, upcoming_week: int | None) -> dict:
     except Exception as e:
         results['recommendations_snapshot'] = {'error': str(e)}
 
+    # Build offline artifacts for easy reconciliation (CSV/JSON caches)
+    try:
+        builder = os.path.join(base, 'scripts', 'offline_recommendations_artifacts.py')
+        if os.path.exists(builder) and upcoming_week is not None:
+            out = subprocess.run([sys.executable, builder, '--week', str(upcoming_week)], capture_output=True, text=True, check=False)
+            results['offline_artifacts'] = {
+                'returncode': out.returncode,
+                'stdout': out.stdout[-2000:],
+                'stderr': out.stderr[-2000:],
+            }
+        else:
+            results['offline_artifacts'] = {'skipped': 'builder_missing_or_no_week'}
+    except Exception as e:
+        results['offline_artifacts'] = {'error': str(e)}
+
     return results
 
 
@@ -233,6 +248,8 @@ def main():
         print(line('reload', res.get('reload', {})))
         if 'recommendations_snapshot' in res:
             print(line('recommendations_snapshot', res.get('recommendations_snapshot', {})))
+        if 'offline_artifacts' in res:
+            print(line('offline_artifacts', res.get('offline_artifacts', {})))
 
 
 if __name__ == '__main__':
