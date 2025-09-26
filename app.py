@@ -51,6 +51,20 @@ import glob
 
 app = Flask(__name__)
 
+# Only allow registering the two public routes; skip all others
+_orig_add_url_rule = app.add_url_rule
+def _filtered_add_url_rule(rule, endpoint=None, view_func=None, provide_automatic_options=None, **options):
+    try:
+        if rule in ('/', '/recommendations') or rule.startswith('/static') or rule == '/favicon.ico':
+            return _orig_add_url_rule(rule, endpoint=endpoint, view_func=view_func,
+                                      provide_automatic_options=provide_automatic_options, **options)
+        # Skip registration for all other routes
+        return None
+    except Exception:
+        # If anything goes wrong, default to skipping to avoid exposing routes
+        return None
+app.add_url_rule = _filtered_add_url_rule
+
 # --- Early trivial health route to test server wiring even if later code errors ---
 @app.route('/api/ping')
 def api_ping():  # pragma: no cover
@@ -3306,6 +3320,20 @@ def index():
     body.dark .odds-table th { background:#13223a; }
     body.dark .odds-table tr:nth-child(even) { background:#0b1220; }
     body.dark a { color:#8ab4ff; }
+    /* Dark mode contrast improvements */
+    body.dark .topbar { background: rgba(15,23,42,0.92); border-bottom-color:#1f2937; }
+    body.dark .banner { background:#0b1220; border-color:#223; color:#cbd5e1; }
+    body.dark .vs { color:#cbd5e1; }
+    body.dark .score { color:#e2e8f0; }
+    body.dark .pred { color:#94a3b8; }
+    body.dark .muted { color:#94a3b8; }
+    body.dark .odds-table td { background:#0f172a; color:#e2e8f0; border-color:#223; }
+    body.dark .status.upcoming { background:#1e293b; color:#cbd5e1; }
+    body.dark .status.final { background:#0f2d1c; color:#34d399; }
+    body.dark .ok { background:#0f2d1c; color:#34d399; }
+    body.dark .err { background:#3b0f14; color:#f87171; }
+    body.dark .push { background:#1f2937; color:#cbd5e1; }
+    body.dark .team-logo { filter: drop-shadow(0 0 0.5px rgba(255,255,255,0.2)); }
         .summary { display:flex; gap:16px; justify-content:center; color:#2c3e50; font-weight:600; margin:10px 0 16px; }
 
         /* Responsive grid for cards */
@@ -5346,9 +5374,11 @@ def recommendations_page():
         /* Dark theme variants */
         body.dark { background:#0f172a; color:#e2e8f0; }
         body.dark .wrap { background:#0b1220; box-shadow:0 8px 20px rgba(0,0,0,.5); }
-        body.dark th { background:#13223a; }
+    body.dark th { background:#13223a; color:#e2e8f0; }
+    body.dark td { background:#0f172a; color:#e2e8f0; border-color:#223; }
         body.dark .summary { background:#0f1a2b; border-color:#223; }
-        body.dark a, body.dark .nav a { color:#8ab4ff; }
+    body.dark a, body.dark .nav a { color:#8ab4ff; }
+    body.dark .nav { color:#cbd5e1; }
     </style>
     <div class="wrap">
     <div class="nav"><a href="/">Cards</a> | <a href="/recommendations">Recommendations</a> | <button type="button" id="toggleThemeBtn" style="margin-left:10px; padding:4px 8px; border-radius:6px;">Dark Theme</button></div>
