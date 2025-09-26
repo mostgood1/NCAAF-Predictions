@@ -4708,7 +4708,17 @@ def recommendations_page():
                         result_txt = 'Win' if total < line else ('Loss' if total > line else 'Push')
         except Exception:
             result_txt = '—'
-        enriched.append({**rec, 'confidence': tier, 'confidence_score': score, 'start_iso': start_iso, 'display_time': display_time, 'sort_ts': sort_ts, 'result_txt': result_txt})
+        # Derive a date-only string like the NFL page (YYYY-MM-DD)
+        display_date = ''
+        try:
+            if start_iso:
+                ds = pd.to_datetime(start_iso)
+                display_date = ds.strftime('%Y-%m-%d')
+            elif display_time:
+                display_date = str(display_time).split(' ')[0]
+        except Exception:
+            display_date = display_time or ''
+        enriched.append({**rec, 'confidence': tier, 'confidence_score': score, 'start_iso': start_iso, 'display_time': display_time, 'display_date': display_date, 'sort_ts': sort_ts, 'result_txt': result_txt})
     # Deduplicate recommendations (server page) by (season,week,home,away,market,side) keeping highest edge
     dedup_page = {}
     for r in enriched:
@@ -4827,9 +4837,12 @@ def recommendations_page():
         th { background:#f0f4f9; }
         .nav { font-size:.85rem; margin-bottom:12px; text-align:right; }
     .nav a { color:#1b4d91; text-decoration:none; margin-left:10px; }
-        .summary-block { background:#f8fafc; border:1px solid #e0e7ef; padding:12px 14px; border-radius:10px; font-size:.95rem; line-height:1.65; }
-        .summary-title { font-weight:700; margin-top:10px; }
-        .kpi-line { margin:4px 0; }
+    .cards { display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin:10px 0 14px; }
+    .card { background:#f8fafc; border:1px solid #e3eaf2; border-radius:12px; padding:12px 14px; }
+    .card h3 { margin:0 0 6px; font-size:.9rem; color:#334155; }
+    .card .big { font-size:1.35rem; font-weight:700; color:#0f172a; }
+    .card .sub { font-size:.8rem; color:#64748b; margin-top:2px; }
+    .kpi-line { margin:4px 0; }
         .section-empty { font-size:.85rem; color:#777; margin:4px 0 14px; }
         .filters form { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:10px 0 8px; }
         select { padding:4px 6px; }
@@ -4842,46 +4855,26 @@ def recommendations_page():
     body.dark .conf-medium { background:#2a1f0a; }
     body.dark .conf-low { background:#3b0f14; }
         caption { text-align:left; font-weight:600; margin:12px 0 4px; }
-        .meta-bar { font-size:.85rem; color:#555; margin-top:10px; }
+    .meta-bar { font-size:.85rem; color:#555; margin-top:10px; }
+    .pill { display:inline-block; padding:3px 8px; border-radius:999px; background:#eef2ff; color:#1e3a8a; font-size:.8rem; border:1px solid #c7d2fe; margin-left:6px; }
         @media (max-width:900px){ th,td { font-size:.72rem; padding:4px; } }
         /* Dark theme variants */
         body.dark { background:#0f172a; color:#e2e8f0; }
         body.dark .wrap { background:#0b1220; box-shadow:0 8px 20px rgba(0,0,0,.5); }
     body.dark th { background:#13223a; color:#e2e8f0; }
     body.dark td { background:#0f172a; color:#e2e8f0; border-color:#223; }
-        body.dark .summary-block { background:#0f1a2b; border-color:#223; }
+        body.dark .card { background:#0f1a2b; border-color:#223; }
     body.dark a, body.dark .nav a { color:#8ab4ff; }
     body.dark .nav { color:#cbd5e1; }
     </style>
     <div class="wrap">
     <div class="nav"><a href="/">Cards</a> | <a href="/recommendations">Recommendations</a> | <button type="button" id="toggleThemeBtn" style="margin-left:10px; padding:4px 8px; border-radius:6px;">Dark Theme</button></div>
         <h1>NCAAF Betting – Recommendations</h1>
-        <div class="summary-block">
-            <div class="summary-title">Overall</div>
-            <div class="kpi-line">{{fmt_pct(overall_stats.acc)}} Accuracy</div>
-            <div class="kpi-line">{{overall_stats.wins}}W-{{overall_stats.losses}}L{% if overall_stats.pushes %} / {{overall_stats.wins + overall_stats.losses + overall_stats.pushes}} settled{% else %}{% if overall_stats.wins + overall_stats.losses > 0 %} / {{overall_stats.wins + overall_stats.losses}} settled{% endif %}{% endif %}</div>
-            <div class="kpi-line">ROI: {{fmt_pct(overall_stats.roi)}}</div>
-            <div class="kpi-line">Stake: {{fmt_money(overall_stats.stake)}} | P/L: {{fmt_money(overall_stats.pnl)}}</div>
-            <div class="kpi-line">Total picks: {{overall_stats.count}}</div>
-            <div class="summary-title">High</div>
-            <div class="kpi-line">{% set hw = tier_stats['High'].wins %}{% set hl = tier_stats['High'].losses %}{% set hp = tier_stats['High'].pushes %}{% if (hw+hl)==0 %}— Acc{% else %}{{fmt_pct(tier_stats['High'].acc)}} Acc{% endif %}</div>
-            <div class="kpi-line">{{hw}}W-{{hl}}L / {{hw+hl+hp}}</div>
-            <div class="kpi-line">ROI: {% if tier_stats['High'].stake==0 %}—{% else %}{{fmt_pct(tier_stats['High'].roi)}}{% endif %}</div>
-            <div class="kpi-line">Stake: {{fmt_money(tier_stats['High'].stake)}} | P/L: {{fmt_money(tier_stats['High'].pnl)}}
-                <br/>Picks: {{tier_stats['High'].count}}</div>
-            <div class="summary-title">Medium</div>
-            <div class="kpi-line">{% set mw = tier_stats['Medium'].wins %}{% set ml = tier_stats['Medium'].losses %}{% set mp = tier_stats['Medium'].pushes %}{% if (mw+ml)==0 %}— Acc{% else %}{{fmt_pct(tier_stats['Medium'].acc)}} Acc{% endif %}</div>
-            <div class="kpi-line">{{mw}}W-{{ml}}L / {{mw+ml+mp}}</div>
-            <div class="kpi-line">ROI: {% if tier_stats['Medium'].stake==0 %}—{% else %}{{fmt_pct(tier_stats['Medium'].roi)}}{% endif %}</div>
-            <div class="kpi-line">Stake: {{fmt_money(tier_stats['Medium'].stake)}} | P/L: {{fmt_money(tier_stats['Medium'].pnl)}}
-                <br/>Picks: {{tier_stats['Medium'].count}}</div>
-            <div class="summary-title">Low</div>
-            <div class="kpi-line">{% set lw = tier_stats['Low'].wins %}{% set ll = tier_stats['Low'].losses %}{% set lp = tier_stats['Low'].pushes %}{% if (lw+ll)==0 %}—{% else %}{{fmt_pct(tier_stats['Low'].acc)}} Acc{% endif %}</div>
-            <div class="kpi-line">{{lw}}W-{{ll}}L / {{lw+ll+lp}}</div>
-            <div class="kpi-line">ROI: {% if tier_stats['Low'].stake==0 %}—{% else %}{{fmt_pct(tier_stats['Low'].roi)}}{% endif %}</div>
-            <div class="kpi-line">Stake: {{fmt_money(tier_stats['Low'].stake)}} | P/L: {{fmt_money(tier_stats['Low'].pnl)}}
-                <br/>Picks: {{tier_stats['Low'].count}}</div>
-            <div class="meta-bar">Sorted by {{ 'confidence then EV' if sort_q!='edge_desc' else 'EV descending' }}. Odds assumed -110 for spread/total when book odds are not present.</div>
+        <div class="cards">
+            <div class="card"><h3>Accuracy</h3><div class="big">{{fmt_pct(overall_stats.acc)}}</div><div class="sub">{{overall_stats.wins}}W-{{overall_stats.losses}}L{% if overall_stats.pushes %} / {{overall_stats.wins + overall_stats.losses + overall_stats.pushes}} settled{% endif %}</div></div>
+            <div class="card"><h3>ROI</h3><div class="big">{{fmt_pct(overall_stats.roi)}}</div><div class="sub">Stake {{fmt_money(overall_stats.stake)}}</div></div>
+            <div class="card"><h3>Profit/Loss</h3><div class="big">{{fmt_money(overall_stats.pnl)}}</div><div class="sub">Total picks: {{overall_stats.count}}</div></div>
+            <div class="card"><h3>High/Med/Low</h3><div class="sub">High: {{tier_stats['High'].count}} • Med: {{tier_stats['Medium'].count}} • Low: {{tier_stats['Low'].count}}</div><div class="sub">Sorted by {{ 'confidence then EV' if sort_q!='edge_desc' else 'EV descending' }}</div></div>
         </div>
         <div class="filters">
             <form method="GET">
@@ -4909,11 +4902,11 @@ def recommendations_page():
             <tr>
                 <td>{{r.away_team}} @ {{r.home_team}}</td>
                 <td>{{ 'MONEYLINE' if r.market=='ML' else (r.market|upper) }}</td>
-                <td>{% if r.market=='ML' %}{{ (r.home_team ~ ' ML High') if r.side=='Home' else (r.away_team ~ ' ML High') }}{% elif r.market=='Spread' %}{{ (r.home_team if r.side=='Home' else r.away_team) }} {% if r.line is not none %}{{ '%+g' % r.line if r.side=='Home' else '%+g' % (-r.line) }}{% endif %} High{% else %}{{ r.side }} {% if r.line is not none %}{{ r.line }}{% endif %} High{% endif %}</td>
+                <td>{% if r.market=='ML' %}{{ (r.home_team ~ ' ML') if r.side=='Home' else (r.away_team ~ ' ML') }}<span class="pill">High</span>{% elif r.market=='Spread' %}{{ (r.home_team if r.side=='Home' else r.away_team) }} {% if r.line is not none %}{{ '%+g' % r.line if r.side=='Home' else '%+g' % (-r.line) }}{% endif %} <span class="pill">High</span>{% else %}{{ r.side }} {% if r.line is not none %}{{ r.line }}{% endif %} <span class="pill">High</span>{% endif %}</td>
                 <td>{{r.price_american}}</td>
                 <td>{{'%0.1f'%(r.edge*100) if r.edge is not none else ''}}%</td>
                 <td>{{r.result_txt}}</td>
-                <td>{{r.display_time}}</td>
+                <td>{{r.display_date}}</td>
             </tr>
             {% endfor %}
         </table>
@@ -4925,11 +4918,11 @@ def recommendations_page():
             <tr>
                 <td>{{r.away_team}} @ {{r.home_team}}</td>
                 <td>{{ 'MONEYLINE' if r.market=='ML' else (r.market|upper) }}</td>
-                <td>{% if r.market=='ML' %}{{ (r.home_team ~ ' ML Medium') if r.side=='Home' else (r.away_team ~ ' ML Medium') }}{% elif r.market=='Spread' %}{{ (r.home_team if r.side=='Home' else r.away_team) }} {% if r.line is not none %}{{ '%+g' % r.line if r.side=='Home' else '%+g' % (-r.line) }}{% endif %} Medium{% else %}{{ r.side }} {% if r.line is not none %}{{ r.line }}{% endif %} Medium{% endif %}</td>
+                <td>{% if r.market=='ML' %}{{ (r.home_team ~ ' ML') if r.side=='Home' else (r.away_team ~ ' ML') }}<span class="pill">Medium</span>{% elif r.market=='Spread' %}{{ (r.home_team if r.side=='Home' else r.away_team) }} {% if r.line is not none %}{{ '%+g' % r.line if r.side=='Home' else '%+g' % (-r.line) }}{% endif %} <span class="pill">Medium</span>{% else %}{{ r.side }} {% if r.line is not none %}{{ r.line }}{% endif %} <span class="pill">Medium</span>{% endif %}</td>
                 <td>{{r.price_american}}</td>
                 <td>{{'%0.1f'%(r.edge*100) if r.edge is not none else ''}}%</td>
                 <td>{{r.result_txt}}</td>
-                <td>{{r.display_time}}</td>
+                <td>{{r.display_date}}</td>
             </tr>
             {% endfor %}
         </table>
@@ -4941,11 +4934,11 @@ def recommendations_page():
             <tr>
                 <td>{{r.away_team}} @ {{r.home_team}}</td>
                 <td>{{ 'MONEYLINE' if r.market=='ML' else (r.market|upper) }}</td>
-                <td>{% if r.market=='ML' %}{{ (r.home_team ~ ' ML Low') if r.side=='Home' else (r.away_team ~ ' ML Low') }}{% elif r.market=='Spread' %}{{ (r.home_team if r.side=='Home' else r.away_team) }} {% if r.line is not none %}{{ '%+g' % r.line if r.side=='Home' else '%+g' % (-r.line) }}{% endif %} Low{% else %}{{ r.side }} {% if r.line is not none %}{{ r.line }}{% endif %} Low{% endif %}</td>
+                <td>{% if r.market=='ML' %}{{ (r.home_team ~ ' ML') if r.side=='Home' else (r.away_team ~ ' ML') }}<span class="pill">Low</span>{% elif r.market=='Spread' %}{{ (r.home_team if r.side=='Home' else r.away_team) }} {% if r.line is not none %}{{ '%+g' % r.line if r.side=='Home' else '%+g' % (-r.line) }}{% endif %} <span class="pill">Low</span>{% else %}{{ r.side }} {% if r.line is not none %}{{ r.line }}{% endif %} <span class="pill">Low</span>{% endif %}</td>
                 <td>{{r.price_american}}</td>
                 <td>{{'%0.1f'%(r.edge*100) if r.edge is not none else ''}}%</td>
                 <td>{{r.result_txt}}</td>
-                <td>{{r.display_time}}</td>
+                <td>{{r.display_date}}</td>
             </tr>
             {% endfor %}
         </table>
