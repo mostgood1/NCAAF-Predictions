@@ -4856,14 +4856,20 @@ def recommendations_page():
     body.dark .conf-low { background:#3b0f14; }
         caption { text-align:left; font-weight:600; margin:12px 0 4px; }
     .meta-bar { font-size:.85rem; color:#555; margin-top:10px; }
-    .pill { display:inline-block; padding:3px 8px; border-radius:999px; background:#eef2ff; color:#1e3a8a; font-size:.8rem; border:1px solid #c7d2fe; margin-left:6px; }
+    .pill { display:inline-block; padding:3px 8px; border-radius:999px; font-size:.8rem; margin-left:6px; border:1px solid transparent; }
+    .pill-high { background:#eaf7ef; color:#14532d; border-color:#bae6c4; }
+    .pill-medium { background:#fff7e6; color:#7a4b00; border-color:#fde1a3; }
+    .pill-low { background:#fdecee; color:#7f1d1d; border-color:#f5b5bc; }
         @media (max-width:900px){ th,td { font-size:.72rem; padding:4px; } }
         /* Dark theme variants */
         body.dark { background:#0f172a; color:#e2e8f0; }
         body.dark .wrap { background:#0b1220; box-shadow:0 8px 20px rgba(0,0,0,.5); }
     body.dark th { background:#13223a; color:#e2e8f0; }
     body.dark td { background:#0f172a; color:#e2e8f0; border-color:#223; }
-        body.dark .card { background:#0f1a2b; border-color:#223; }
+    body.dark .card { background:#0f1a2b; border-color:#223; }
+    body.dark .pill-high { background:#0f2d1c; color:#bbf7d0; border-color:#14532d; }
+    body.dark .pill-medium { background:#2a1f0a; color:#fde68a; border-color:#7a4b00; }
+    body.dark .pill-low { background:#3b0f14; color:#fecaca; border-color:#7f1d1d; }
     body.dark a, body.dark .nav a { color:#8ab4ff; }
     body.dark .nav { color:#cbd5e1; }
     </style>
@@ -4901,8 +4907,8 @@ def recommendations_page():
             {% for r in high %}
             <tr>
                 <td>{{r.away_team}} @ {{r.home_team}}</td>
-                <td>{{ 'MONEYLINE' if r.market=='ML' else (r.market|upper) }}</td>
-                <td>{% if r.market=='ML' %}{{ (r.home_team ~ ' ML') if r.side=='Home' else (r.away_team ~ ' ML') }}<span class="pill">High</span>{% elif r.market=='Spread' %}{{ (r.home_team if r.side=='Home' else r.away_team) }} {% if r.line is not none %}{{ '%+g' % r.line if r.side=='Home' else '%+g' % (-r.line) }}{% endif %} <span class="pill">High</span>{% else %}{{ r.side }} {% if r.line is not none %}{{ r.line }}{% endif %} <span class="pill">High</span>{% endif %}</td>
+                <td>{% if r.market=='ML' %}MONEYLINE{% elif r.market=='Spread' %}SPREAD{% elif r.market=='Total' %}TOTALS{% else %}{{ r.market|upper }}{% endif %}</td>
+                <td>{% if r.market=='ML' %}{{ (r.home_team ~ ' ML') if r.side=='Home' else (r.away_team ~ ' ML') }}<span class="pill pill-high">High</span>{% elif r.market=='Spread' %}{{ (r.home_team if r.side=='Home' else r.away_team) }} {% if r.line is not none %}{{ '%+g' % r.line if r.side=='Home' else '%+g' % (-r.line) }}{% endif %} <span class="pill pill-high">High</span>{% else %}{{ r.side }} {% if r.line is not none %}{{ r.line }}{% endif %} <span class="pill pill-high">High</span>{% endif %}</td>
                 <td>{{r.price_american}}</td>
                 <td>{{'%0.1f'%(r.edge*100) if r.edge is not none else ''}}%</td>
                 <td>{{r.result_txt}}</td>
@@ -4917,8 +4923,8 @@ def recommendations_page():
             {% for r in medium %}
             <tr>
                 <td>{{r.away_team}} @ {{r.home_team}}</td>
-                <td>{{ 'MONEYLINE' if r.market=='ML' else (r.market|upper) }}</td>
-                <td>{% if r.market=='ML' %}{{ (r.home_team ~ ' ML') if r.side=='Home' else (r.away_team ~ ' ML') }}<span class="pill">Medium</span>{% elif r.market=='Spread' %}{{ (r.home_team if r.side=='Home' else r.away_team) }} {% if r.line is not none %}{{ '%+g' % r.line if r.side=='Home' else '%+g' % (-r.line) }}{% endif %} <span class="pill">Medium</span>{% else %}{{ r.side }} {% if r.line is not none %}{{ r.line }}{% endif %} <span class="pill">Medium</span>{% endif %}</td>
+                <td>{% if r.market=='ML' %}MONEYLINE{% elif r.market=='Spread' %}SPREAD{% elif r.market=='Total' %}TOTALS{% else %}{{ r.market|upper }}{% endif %}</td>
+                <td>{% if r.market=='ML' %}{{ (r.home_team ~ ' ML') if r.side=='Home' else (r.away_team ~ ' ML') }}<span class="pill pill-medium">Medium</span>{% elif r.market=='Spread' %}{{ (r.home_team if r.side=='Home' else r.away_team) }} {% if r.line is not none %}{{ '%+g' % r.line if r.side=='Home' else '%+g' % (-r.line) }}{% endif %} <span class="pill pill-medium">Medium</span>{% else %}{{ r.side }} {% if r.line is not none %}{{ r.line }}{% endif %} <span class="pill pill-medium">Medium</span>{% endif %}</td>
                 <td>{{r.price_american}}</td>
                 <td>{{'%0.1f'%(r.edge*100) if r.edge is not none else ''}}%</td>
                 <td>{{r.result_txt}}</td>
@@ -4933,8 +4939,8 @@ def recommendations_page():
             {% for r in low %}
             <tr>
                 <td>{{r.away_team}} @ {{r.home_team}}</td>
-                <td>{{ 'MONEYLINE' if r.market=='ML' else (r.market|upper) }}</td>
-                <td>{% if r.market=='ML' %}{{ (r.home_team ~ ' ML') if r.side=='Home' else (r.away_team ~ ' ML') }}<span class="pill">Low</span>{% elif r.market=='Spread' %}{{ (r.home_team if r.side=='Home' else r.away_team) }} {% if r.line is not none %}{{ '%+g' % r.line if r.side=='Home' else '%+g' % (-r.line) }}{% endif %} <span class="pill">Low</span>{% else %}{{ r.side }} {% if r.line is not none %}{{ r.line }}{% endif %} <span class="pill">Low</span>{% endif %}</td>
+                <td>{% if r.market=='ML' %}MONEYLINE{% elif r.market=='Spread' %}SPREAD{% elif r.market=='Total' %}TOTALS{% else %}{{ r.market|upper }}{% endif %}</td>
+                <td>{% if r.market=='ML' %}{{ (r.home_team ~ ' ML') if r.side=='Home' else (r.away_team ~ ' ML') }}<span class="pill pill-low">Low</span>{% elif r.market=='Spread' %}{{ (r.home_team if r.side=='Home' else r.away_team) }} {% if r.line is not none %}{{ '%+g' % r.line if r.side=='Home' else '%+g' % (-r.line) }}{% endif %} <span class="pill pill-low">Low</span>{% else %}{{ r.side }} {% if r.line is not none %}{{ r.line }}{% endif %} <span class="pill pill-low">Low</span>{% endif %}</td>
                 <td>{{r.price_american}}</td>
                 <td>{{'%0.1f'%(r.edge*100) if r.edge is not none else ''}}%</td>
                 <td>{{r.result_txt}}</td>
