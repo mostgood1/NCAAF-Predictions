@@ -30,7 +30,7 @@ def _get_git_commit() -> str:
 
 BUILD_TIME = _time.strftime('%Y-%m-%dT%H:%M:%SZ', _time.gmtime())
 BUILD_COMMIT = _get_git_commit()
-from flask import Flask, render_template_string, request, redirect, url_for, jsonify, make_response
+from flask import Flask, render_template_string, request, redirect, url_for, jsonify, make_response, send_from_directory
 import ast
 import unicodedata
 import pytz
@@ -929,10 +929,10 @@ def _build_game_card(game_row: pd.Series) -> dict:
         sort_ts = chosen_dt.timestamp()
         start_iso = chosen_dt.isoformat().replace('+00:00', 'Z')
         try:
-            # Show a neutral placeholder until client-side local-time conversion runs
-            display_time_fallback = 'Loading local time…'
+            # Server-side initial text in UTC; client JS will replace with local time
+            display_time_fallback = chosen_dt.strftime('%a, %b %d, %Y, %I:%M %p UTC')
         except Exception:
-            display_time_fallback = 'Loading local time…'
+            display_time_fallback = start_iso or (val_sd or val_api or '')
     # Confidence bounds
     conf_lower = conf_upper = conf_std = None
     try:
@@ -2323,6 +2323,140 @@ def normalize_kickoffs():
     except Exception as e:
         return {'error': str(e)}, 500
 
+@app.route('/api/backfill-start-date-utc', methods=['POST'])
+def backfill_start_date_utc():
+    """Backfill base CSV by converting Week>=threshold naive start_date to explicit UTC (Z) strings.
+    Threshold week is controlled by env START_DATE_NAIVE_IS_UTC_FROM_WEEK (default 5).
+    Only updates rows for season=2025.
+    """
+    try:
+        global pred_path_scores, pred_path_enh
+        target_path = pred_path_scores if (pred_path_scores and os.path.exists(pred_path_scores)) else pred_path_enh
+        if not target_path or not os.path.exists(target_path):
+            return {'step': 'backfill_start_date_utc', 'skipped': 'no_source_csv'}, 200
+        try:
+            df = pd.read_csv(target_path)
+        except Exception as e:
+            return {'step': 'backfill_start_date_utc', 'error': f'read_failed: {e}'}, 500
+        if df.empty or 'start_date' not in df.columns:
+            return {'step': 'backfill_start_date_utc', 'skipped': 'no_start_date_col'}, 200
+        # Determine threshold week
+        try:
+            thr = int(os.environ.get('START_DATE_NAIVE_IS_UTC_FROM_WEEK', '5'))
+        except Exception:
+            thr = 5
+        changed = 0
+        total_checked = 0
+        for i, r in df.iterrows():
+            try:
+                if int(r.get('season', 0)) != 2025:
+                    continue
+            except Exception:
+                continue
+            try:
+                wk = int(r.get('week')) if pd.notna(r.get('week')) else None
+            except Exception:
+                wk = None
+            if wk is None or wk < thr:
+                continue
+            sd = r.get('start_date')
+            if not isinstance(sd, str) or not sd.strip():
+                continue
+            s = sd.strip()
+            # If already has timezone (Z or ±HH:MM), skip
+            if re.search(r"[zZ]$", s) or re.search(r"[\+\-]\d{2}:?\d{2}$", s):
+                continue
+            total_checked += 1
+            # Treat naive as UTC and write explicit Z
+            try:
+                dt = _parse_to_utc_with_context(s, assume_naive='utc', week=wk)
+                if dt is None:
+                    continue
+                iso = dt.isoformat().replace('+00:00', 'Z')
+                if iso != s:
+                    df.at[i, 'start_date'] = iso
+                    changed += 1
+            except Exception:
+                continue
+        if changed > 0:
+            try:
+                df.to_csv(target_path, index=False)
+            except Exception as e:
+                return {'step': 'backfill_start_date_utc', 'error': f'write_failed: {e}'}, 500
+        # reload in-memory
+        try:
+            _reload_predictions()
+        except Exception:
+            pass
+        return {'step': 'backfill_start_date_utc', 'changed': int(changed), 'checked': int(total_checked), 'path': target_path}, 200
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+@app.route('/logs/<path:filename>')
+def download_log_file(filename: str):
+    """Serve specific log files safely (only kickoff audit CSVs)."""
+    try:
+        # Only allow kickoff audit CSVs
+        if not re.fullmatch(r"kickoff_audit_[0-9\-]+\.csv", filename):
+            return {'error': 'forbidden'}, 403
+        logs_dir = os.path.join(BASE_DIR, 'logs')
+        if not os.path.exists(os.path.join(logs_dir, filename)):
+            return {'error': 'not_found'}, 404
+        return send_from_directory(logs_dir, filename, as_attachment=True, download_name=filename)
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+@app.route('/api/audit-kickoffs', methods=['GET'])
+def audit_kickoffs():
+    try:
+        df = pred_df[(pred_df.get('season',0) == 2025)].copy()
+        if df.empty:
+            return {'message': 'No 2025 rows loaded.', 'rows': 0}, 200
+        cols = ['season','week','home_team','away_team','start_date','start_date_api']
+        safe = df[cols].copy() if set(cols).issubset(df.columns) else df.copy()
+        recs = []
+        for _, r in safe.iterrows():
+            try:
+                wk = None
+                try:
+                    wk = int(r.get('week'))
+                except Exception:
+                    wk = None
+                raw_sd = r.get('start_date')
+                raw_api = r.get('start_date_api')
+                # Parse under different assumptions
+                dt_api = _parse_to_utc_with_context(str(raw_api) if pd.notna(raw_api) else None, assume_naive='eastern', week=wk)
+                dt_sd_eastern = _parse_to_utc_with_context(str(raw_sd) if pd.notna(raw_sd) else None, assume_naive='eastern', week=wk)
+                # Force treat naive as UTC regardless of week for comparison
+                dt_sd_utc_forced = _parse_to_utc_with_context(str(raw_sd) if pd.notna(raw_sd) else None, assume_naive='utc', week=wk)
+                # Chosen logic in app (API preferred, else start_date w/ context)
+                chosen = dt_api or dt_sd_eastern
+                recs.append({
+                    'season': r.get('season'),
+                    'week': r.get('week'),
+                    'home_team': r.get('home_team'),
+                    'away_team': r.get('away_team'),
+                    'start_date': raw_sd,
+                    'start_date_api': raw_api,
+                    'api_parsed_utc': (dt_api.isoformat() if dt_api else ''),
+                    'sd_parsed_eastern_to_utc': (dt_sd_eastern.isoformat() if dt_sd_eastern else ''),
+                    'sd_parsed_forced_utc': (dt_sd_utc_forced.isoformat() if dt_sd_utc_forced else ''),
+                    'chosen_utc': (chosen.isoformat() if chosen else ''),
+                    'chosen_local': _fmt_in_zone(chosen, os.environ.get('AUDIT_TZ','US/Central')),
+                })
+            except Exception:
+                continue
+        out = pd.DataFrame(recs)
+        ts = datetime.now().strftime('%Y%m%d-%H%M%S')
+        logs_dir = os.path.join(BASE_DIR, 'logs')
+        os.makedirs(logs_dir, exist_ok=True)
+        out_path = os.path.join(logs_dir, f'kickoff_audit_{ts}.csv')
+        out.to_csv(out_path, index=False)
+        sample = out.head(10).to_dict(orient='records')
+        return {'message': 'Kickoff audit complete', 'rows': int(len(out)), 'path': out_path, 'sample': sample}, 200
+    except Exception as e:
+        return {'error': str(e)}, 500
+
 
 @app.route('/api/debug-week-counts')
 def debug_week_counts():
@@ -2658,6 +2792,18 @@ def _parse_to_utc_with_context(s_val: str | None, *, assume_naive: str = 'easter
         return dt_obj.astimezone(pytz.UTC)
     except Exception:
         return None
+
+def _fmt_in_zone(dt_utc: datetime | None, tz_name: str) -> str:
+    try:
+        if dt_utc is None:
+            return ''
+        tz = pytz.timezone(tz_name)
+        return dt_utc.astimezone(tz).strftime('%Y-%m-%d %a %I:%M %p %Z')
+    except Exception:
+        try:
+            return dt_utc.isoformat() if dt_utc else ''
+        except Exception:
+            return ''
 
 def _parse_start_ts(row: pd.Series) -> tuple[str, float | None, str]:
     """Return (start_iso, sort_ts, display_time) from a predictions row."""
@@ -3199,7 +3345,7 @@ def index():
                 <a href="/team-schedules">Team Schedules</a>
             </div>
         {% if not HIDE_REFRESH %}
-        <div style="display:flex; align-items:center; gap:8px;">
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
             <button type="button" id="refreshBtn" title="Click = full refresh; Shift+Click = quick (scores+odds)" onclick="if(window.refreshData){try{window.refreshData();}catch(e){alert('Refresh error: '+e);}}else{fetch('/api/refresh-data',{method:'POST'}).then(()=>location.reload()).catch(e=>alert('Refresh failed: '+e));}">Refresh Data</button>
             <span id="refreshStatus" style="font-size:0.95em; color:#555;"></span>
             <small>
@@ -3207,6 +3353,8 @@ def index():
                 • <a href="/api/refresh-data?mode=quick" target="_blank" style="color:#27ae60; text-decoration:underline;">fast</a>
                 • <a href="/refresh-status" target="_blank" style="color:#8e44ad; text-decoration:underline;">diagnostics</a>
             </small>
+            <button type="button" id="auditKickoffsBtn" title="Generate kickoff audit CSV and download">Audit Kickoffs</button>
+            <button type="button" id="normalizeKickoffsBtn" title="Re-pull kickoff times from APIs (start_date_api)">Normalize Kickoffs</button>
         </div>
     {% endif %}
     </div> <!-- end topbar -->
@@ -3281,6 +3429,22 @@ def index():
             <button type="submit">Submit</button>
         </form>
     <div class="grid">
+    <script>
+        // Early, minimal local-time conversion to avoid leaving UTC text if later JS fails
+        (function(){
+            try{
+                const opts = { weekday: 'short', month: 'short', day: '2-digit', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' };
+                document.querySelectorAll('.local-time').forEach(el=>{
+                    let s = (el.getAttribute('data-iso')||'').trim();
+                    if(!s) return;
+                    if(s.indexOf('T') === -1 && /^\d{4}-\d{2}-\d{2} /.test(s)) s = s.replace(' ', 'T');
+                    if(!/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) s = s + 'Z';
+                    const d = new Date(s);
+                    if(!isNaN(d)) el.textContent = d.toLocaleString(undefined, opts);
+                });
+            }catch(e){}
+        })();
+    </script>
     {% for game_info in game_cards %}
     <div class="card" data-sort-ts="{{game_info['sort_ts'] or 0}}" data-home-win-prob="{{game_info['home_win_prob'] or 0}}" data-ou-edge="{{game_info['ou_edge_num'] or 0}}" data-ats-edge="{{game_info['ats_edge_num'] or 0}}" data-home-conf="{{game_info['home_conference']}}" data-away-conf="{{game_info['away_conference']}}" data-ats-actual="{{game_info['ats_actual_result'] or ''}}" data-ats-correct="{% if game_info['ats_correct'] is not none %}{{ 'true' if game_info['ats_correct'] else 'false' }}{% else %}{% endif %}" data-ou-actual="{{game_info['ou_actual_result'] or ''}}" data-ou-correct="{% if game_info['ou_correct'] is not none %}{{ 'true' if game_info['ou_correct'] else 'false' }}{% else %}{% endif %}" data-winner-correct="{% if game_info['correct_prediction'] is not none %}{{ 'true' if game_info['correct_prediction'] else 'false' }}{% else %}{% endif %}" style="border-left-color: {% if game_info['is_final'] %}{% if game_info['correct_prediction'] is not none %}{% if game_info['correct_prediction'] %}#2ecc71{% else %}#e74c3c{% endif %}{% else %}#95a5a6{% endif %}{% else %}#bdc3c7{% endif %};">
         <div class="card-header">
@@ -3495,6 +3659,35 @@ def index():
             document.addEventListener('DOMContentLoaded', function(){
                 const btn = document.getElementById('refreshBtn');
                 if(btn){ btn.addEventListener('click', doRefresh); }
+                // Wire kickoff audit and normalize buttons
+                const auditBtn = document.getElementById('auditKickoffsBtn');
+                if(auditBtn){
+                    auditBtn.addEventListener('click', async () => {
+                        try{
+                            auditBtn.disabled = true; auditBtn.textContent = 'Auditing…';
+                            const r = await fetch('/api/audit-kickoffs');
+                            const j = await r.json();
+                            if(j && j.path){
+                                const reCsv = new RegExp('kickoff_audit_[^/\\\\]+\\.csv$');
+                                const m = (j.path.match(reCsv) || [null])[0];
+                                if(m){ window.open('/logs/' + m, '_blank'); }
+                            }
+                            auditBtn.textContent = 'Audit Kickoffs'; auditBtn.disabled = false;
+                        }catch(e){ alert('Audit failed: ' + e); auditBtn.textContent = 'Audit Kickoffs'; auditBtn.disabled = false; }
+                    });
+                }
+                const normBtn = document.getElementById('normalizeKickoffsBtn');
+                if(normBtn){
+                    normBtn.addEventListener('click', async ()=>{
+                        try{
+                            normBtn.disabled = true; normBtn.textContent = 'Normalizing…';
+                            const r = await fetch('/api/normalize-kickoffs', {method:'POST'});
+                            if(r.ok){ alert('Kickoff times refreshed. UI will reload.'); location.reload(); }
+                            else { const t = await r.text(); throw new Error(t || r.status); }
+                        }catch(e){ alert('Normalize failed: ' + e); }
+                        finally{ normBtn.textContent = 'Normalize Kickoffs'; normBtn.disabled = false; }
+                    });
+                }
 
                 // Render game times in user's local timezone
                 function applyLocalTimes(root){
@@ -3502,10 +3695,14 @@ def index():
                         const opts = { weekday: 'short', month: 'short', day: '2-digit', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' };
                         (root || document).querySelectorAll('.local-time').forEach(el => {
                             let s = (el.getAttribute('data-iso') || '').trim();
-                            if(!s) return; // require server-provided ISO
-                            if(s.indexOf('T') === -1 && s.indexOf(' ') !== -1){ s = s.replace(' ', 'T'); }
+                            if(!s){
+                                // Fallback: try to parse existing UTC text content
+                                s = (el.textContent || '').trim();
+                            }
+                            if(!s) return;
+                            if(s.indexOf('T') === -1 && (new RegExp('^\\\d{4}-\\\d{2}-\\\d{2} ')).test(s)){ s = s.replace(' ', 'T'); }
                             // If no timezone provided, assume UTC (append Z)
-                            if(!/[zZ]|[+-]\\d{2}:?\\d{2}$/.test(s)) s = s + 'Z';
+                            if(!(new RegExp('[zZ]|[+\\-]\\\d{2}:?\\\d{2}$')).test(s)) s = s + 'Z';
                             let d = new Date(s);
                             if(isNaN(d)) return;
                             el.textContent = d.toLocaleString(undefined, opts);
@@ -3908,6 +4105,22 @@ def conference_records():
                     <td>{{ row['Overall_Ties'] }}</td>
                 </tr>
                 {% endfor %}
+                <script>
+                    // After-grid conversion to local time to ensure all cards are present
+                    (function(){
+                        try{
+                            const opts = { weekday: 'short', month: 'short', day: '2-digit', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' };
+                            document.querySelectorAll('.local-time').forEach(el=>{
+                                let s = (el.getAttribute('data-iso')||'').trim();
+                                if(!s) return;
+                                if(s.indexOf('T') === -1 && /^\d{4}-\d{2}-\d{2} /.test(s)) s = s.replace(' ', 'T');
+                                if(!/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) s = s + 'Z';
+                                const d = new Date(s);
+                                if(!isNaN(d)) el.textContent = d.toLocaleString(undefined, opts);
+                            });
+                        }catch(e){}
+                    })();
+                </script>
             </table>
         </div>
         {% endfor %}
