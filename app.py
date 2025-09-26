@@ -4987,7 +4987,14 @@ def recommendations_page():
     # If RECS file has entries for the selected week (typically past weeks), load from there
     try:
         if sel_week is not None and os.path.exists(RECS_PATH):
-            df_log = pd.read_csv(RECS_PATH)
+            # Safely read log if non-empty; else treat as empty
+            try:
+                if os.path.getsize(RECS_PATH) > 0:
+                    df_log = pd.read_csv(RECS_PATH)
+                else:
+                    df_log = pd.DataFrame()
+            except Exception:
+                df_log = pd.DataFrame()
             if 'week' in df_log.columns and 'season' in df_log.columns:
                 rows_wk = df_log[(pd.to_numeric(df_log['season'], errors='coerce') == 2025) & (pd.to_numeric(df_log['week'], errors='coerce') == int(sel_week))]
                 # Use log only for past weeks unless explicitly overridden
@@ -5013,11 +5020,19 @@ def recommendations_page():
         else:
             # Build recs from log for selected week
             try:
-                # Use only essential columns if present
-                cols = ['season','week','home_team','away_team','market','side','price_american','line','model_prob','implied_prob','edge','kelly_f','stake','provider','status','result']
-                df_log = pd.read_csv(RECS_PATH, usecols=[c for c in cols if c in pd.read_csv(RECS_PATH, nrows=1).columns]) if os.path.exists(RECS_PATH) else pd.DataFrame()
+                if os.path.exists(RECS_PATH) and os.path.getsize(RECS_PATH) > 0:
+                    # Use only essential columns if present
+                    cols = ['season','week','home_team','away_team','market','side','price_american','line','model_prob','implied_prob','edge','kelly_f','stake','provider','status','result']
+                    try:
+                        _hdr = pd.read_csv(RECS_PATH, nrows=1)
+                        usecols = [c for c in cols if c in _hdr.columns]
+                    except Exception:
+                        usecols = []
+                    df_log = pd.read_csv(RECS_PATH, usecols=usecols) if usecols else pd.read_csv(RECS_PATH)
+                else:
+                    df_log = pd.DataFrame()
             except Exception:
-                df_log = pd.read_csv(RECS_PATH) if os.path.exists(RECS_PATH) else pd.DataFrame()
+                df_log = pd.DataFrame()
             df_wk = df_log[(pd.to_numeric(df_log.get('season'), errors='coerce') == 2025) & (pd.to_numeric(df_log.get('week'), errors='coerce') == int(sel_week))] if not df_log.empty else pd.DataFrame()
             # Convert to list of rec dicts compatible with enrichment
             recs = []
@@ -5189,7 +5204,7 @@ def recommendations_page():
     weekly_stats = []
     open_count = 0
     try:
-        if os.path.exists(RECS_PATH):
+        if os.path.exists(RECS_PATH) and os.path.getsize(RECS_PATH) > 0:
             perf_df = pd.read_csv(RECS_PATH)
             # Coerce numeric
             for col in ['stake','pnl','edge','kelly_f','model_prob','implied_prob','week','season']:
