@@ -283,6 +283,38 @@ def _apply_week0_label(df: pd.DataFrame) -> pd.DataFrame:
     except Exception:
         return df
 
+def _infer_current_week(default: int | None = None) -> int | None:
+    """Infer the current (upcoming) week using earliest game date per week relative to today.
+    Strategy: choose the smallest week whose earliest game date is >= (today - 2 days).
+    Fallback to the min available week, else provided default.
+    """
+    try:
+        import datetime as _dt
+        weeks = sorted(pred_df['week'].dropna().unique())
+        if not weeks:
+            return default
+        today = _dt.date.today()
+        week_min_dates = {}
+        if 'start_date' in pred_df.columns:
+            tmp = pred_df[['week','start_date']].dropna().copy()
+            tmp['start_dt'] = pd.to_datetime(tmp['start_date'], errors='coerce', utc=True)
+            tmp = tmp.dropna(subset=['start_dt'])
+            for w, grp in tmp.groupby('week'):
+                try:
+                    week_min_dates[int(w)] = grp['start_dt'].min().date()
+                except Exception:
+                    continue
+        candidate_weeks = [w for w,d in week_min_dates.items() if d >= (today - _dt.timedelta(days=2))]
+        if candidate_weeks:
+            return min(candidate_weeks)
+        # Fallback to min week
+        try:
+            return int(min(weeks))
+        except Exception:
+            return default
+    except Exception:
+        return default
+
 def _load_predictions_df() -> pd.DataFrame:
     """Load predictions preferring enhanced (to preserve weather), then merge in actuals from with_scores if present."""
     global PRED_SOURCE
@@ -2400,6 +2432,13 @@ def compute_recommendations(
         if pred_margin is None:
             pred_margin = pred_home - pred_away
         sigma_m = _get_conf_std_for_game(row)
+        # Precompute home win prob once per row for ML usage
+        p_home_model = _compute_home_win_prob(row)
+        if p_home_model is None:
+            try:
+                p_home_model = _phi(pred_margin / sigma_m)
+            except Exception:
+                p_home_model = None
         # Uncertainty filter on game-level margin sigma
         try:
             if max_sigma_margin is not None and sigma_m is not None and sigma_m > float(max_sigma_margin):
@@ -2413,9 +2452,7 @@ def compute_recommendations(
             home_ml = _safe_float(odds.get('homeMoneyline'))
             away_ml = _safe_float(odds.get('awayMoneyline'))
             if home_ml is not None:
-                p_home = _compute_home_win_prob(row)
-                if p_home is None:
-                    p_home = _phi(pred_margin / sigma_m)
+                p_home = p_home_model
                 dec, _ = american_to_decimal(home_ml)
                 if dec:
                     # Side-level min prob filter
@@ -2435,10 +2472,11 @@ def compute_recommendations(
                             stake = round(bankroll * kf * kelly_factor, 2)
                             recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'ML', 'side': 'Home', 'provider': provider, 'price_american': int(home_ml), 'model_prob': round(p_home,4), 'implied_prob': round(1/(dec),4), 'edge': round(ev,4), 'kelly_f': round(kf,4), 'stake': stake})
             if away_ml is not None:
-                p_home_tmp = _compute_home_win_prob(row)
-                if p_home_tmp is None:
-                    p_home_tmp = _phi(pred_margin / sigma_m)
-                p_away = max(0.0, 1.0 - p_home_tmp)
+                p_away = None
+                try:
+                    p_away = max(0.0, 1.0 - (p_home_model if p_home_model is not None else _phi(pred_margin / sigma_m)))
+                except Exception:
+                    p_away = None
                 dec, _ = american_to_decimal(away_ml)
                 if dec:
                     if min_prob is not None and p_away is not None and p_away < float(min_prob):
@@ -2692,6 +2730,8 @@ def recommendations_api():
         idx = {}
         try:
             df2025 = pred_df[(pred_df.get('season', 0) == 2025)].copy()
+            if week_val is not None:
+                df2025 = df2025[df2025['week']==int(week_val)]
             for _, r in df2025.iterrows():
                 key = (int(r['season']), int(r['week']), str(r['home_team']), str(r['away_team']))
                 idx[key] = r
@@ -4650,8 +4690,10 @@ def recommendations_page():
     max_sigma_margin = float(max_sigma_margin) if str(max_sigma_margin).strip() not in ('', 'None') else None
     # With filters hidden, default to all conferences
     allowed_conferences = request.args.get('allowed_conferences') or request.form.get('allowed_conferences') or ''
-    # Determine selected week (optional). If blank => auto upcoming similar to API
+    # Determine selected week (optional). If blank => auto upcoming
     sel_week = int(week_q) if (week_q and week_q.isdigit()) else None
+    if sel_week is None:
+        sel_week = _infer_current_week()
     recs = compute_recommendations(
         week=sel_week,
         bankroll=bankroll,
@@ -4663,11 +4705,13 @@ def recommendations_page():
         max_sigma_margin=max_sigma_margin,
         allowed_conferences=allowed_conferences,
     )
-    # Attach confidence + timing like API
+    # Attach confidence + timing like API (limit to selected week for speed)
     idx = {}
     try:
-        df2025 = pred_df[(pred_df.get('season',0)==2025)].copy()
-        for _, r in df2025.iterrows():
+        base = pred_df[(pred_df.get('season',0)==2025)].copy()
+        if sel_week is not None:
+            base = base[base['week']==int(sel_week)]
+        for _, r in base.iterrows():
             idx[(int(r['season']), int(r['week']), str(r['home_team']), str(r['away_team']))] = r
     except Exception:
         pass
@@ -4840,8 +4884,8 @@ def recommendations_page():
     .cards { display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin:10px 0 14px; }
     .card { background:#f8fafc; border:1px solid #e3eaf2; border-radius:12px; padding:12px 14px; }
     .card h3 { margin:0 0 6px; font-size:.9rem; color:#334155; }
-    .card .big { font-size:1.35rem; font-weight:700; color:#0f172a; }
-    .card .sub { font-size:.8rem; color:#64748b; margin-top:2px; }
+    .card .big { font-size:1.35rem; font-weight:700; color:#0b1020; }
+    .card .sub { font-size:.8rem; color:#0b1020; margin-top:2px; }
     .kpi-line { margin:4px 0; }
         .section-empty { font-size:.85rem; color:#777; margin:4px 0 14px; }
         .filters form { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:10px 0 8px; }
@@ -4867,6 +4911,7 @@ def recommendations_page():
     body.dark th { background:#13223a; color:#e2e8f0; }
     body.dark td { background:#0f172a; color:#e2e8f0; border-color:#223; }
     body.dark .card { background:#0f1a2b; border-color:#223; }
+    body.dark .card .big, body.dark .card .sub, body.dark .card h3 { color:#ffffff; }
     body.dark .pill-high { background:#0f2d1c; color:#bbf7d0; border-color:#14532d; }
     body.dark .pill-medium { background:#2a1f0a; color:#fde68a; border-color:#7a4b00; }
     body.dark .pill-low { background:#3b0f14; color:#fecaca; border-color:#7f1d1d; }
