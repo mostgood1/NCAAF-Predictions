@@ -3025,14 +3025,14 @@ def index():
 
         .topbar { position: sticky; top: 0; z-index: 120; display:flex; justify-content: space-between; align-items:center; margin-bottom: 10px; padding: 10px 8px; background: rgba(255,255,255,0.96); border-bottom: 1px solid #e5e7eb; backdrop-filter: saturate(180%) blur(8px); border-top-left-radius: 12px; border-top-right-radius: 12px; }
     .links a { color:#1b4d91; margin-left:12px; text-decoration: none; font-weight:600; }
-    body.dark { background:#0f172a; color:#e2e8f0; }
+    body.dark { background:#0f172a; color:#ffffff; }
     body.dark .container { background:#0b1220; box-shadow: 0 8px 20px rgba(0,0,0,0.5); }
     body.dark .card { background:#0f1a2b; box-shadow: 0 1px 6px rgba(0,0,0,0.6); }
     body.dark .row { background:#0b1220; border-color:#334155; }
     body.dark .odds-table th { background:#1d2a44; color:#e5e7eb; }
     body.dark .odds-table tr:nth-child(even) { background:#0b1220; }
     body.dark a { color:#8ab4ff; }
-    body.dark select, body.dark button { background:#1e293b; color:#e2e8f0; border:1px solid #475569; }
+    body.dark select, body.dark button { background:#1e293b; color:#ffffff; border:1px solid #475569; }
     body.dark .odds-toggle button { background:#4f46e5; border-color:#4f46e5; }
     body.dark .filterbar { background:#0b1220; }
     body.dark .team-name { text-shadow: 0 1px 1px rgba(0,0,0,0.6); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12); }
@@ -3040,7 +3040,7 @@ def index():
     body.dark .topbar { background: rgba(15,23,42,0.96); border-bottom-color:#334155; }
     body.dark .banner { background:#0f1a2b; border-color:#334155; color:#e2e8f0; }
     body.dark .vs { color:#cbd5e1; }
-    body.dark .score { color:#e5e7eb; }
+    body.dark .score { color:#ffffff; }
     body.dark .pred { color:#a3b2c2; }
     body.dark .muted { color:#a3b2c2; }
     body.dark .odds-table td { background:#0f172a; color:#e2e8f0; border-color:#334155; }
@@ -3050,6 +3050,12 @@ def index():
     body.dark .err { background:#3b0f14; color:#f87171; border-color:#7f1d1d; }
     body.dark .push { background:#1f2937; color:#e2e8f0; border-color:#475569; }
     body.dark .team-logo { filter: drop-shadow(0 0 0.5px rgba(255,255,255,0.2)); }
+    /* Force key text to white in dark mode for readability */
+    body.dark h1, body.dark h2 { color:#ffffff; }
+    body.dark .when { color:#ffffff; }
+    body.dark .row { color:#ffffff; }
+    body.dark .summary { color:#ffffff; }
+    body.dark .team-name { color:#ffffff !important; }
     .summary { display:flex; gap:16px; justify-content:center; color:#0f172a; font-weight:700; margin:10px 0 16px; }
 
         /* Responsive grid for cards */
