@@ -116,7 +116,8 @@ pred_path_scores = os.path.join(DATA_DIR, 'college_football_schedule_2025_predic
 PRED_SOURCE = 'unknown'
 
 # UI/env toggles & locks
-HIDE_REFRESH = os.environ.get('HIDE_REFRESH', '0').lower() in ('1','true','yes')
+# Hide refresh/admin controls unconditionally now that most endpoints are removed
+HIDE_REFRESH = True
 _REFRESH_LOCK = threading.Lock()
 
 # Simple in-memory cache for game cards API (invalidated on prediction reload)
@@ -3344,24 +3345,14 @@ def index():
     <div class="container">
     <div class="topbar">
             <div class="links">
+                <a href="/">Cards</a>
                 <a href="/recommendations">Recommendations</a>
-                <a href="/recommendations/performance">Performance</a>
-                <a href="/api/game-cards" title="Predictions JSON">API</a>
-                <a href="/health">Health</a>
-                <a href="/analysis">Analysis</a>
-                <a href="/win-totals">Win Totals</a>
-                <a href="/conference-records">Conference Records</a>
-                <a href="/team-schedules">Team Schedules</a>
             </div>
         {% if not HIDE_REFRESH %}
         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
             <button type="button" id="refreshBtn" title="Click = full refresh; Shift+Click = quick (scores+odds)" onclick="if(window.refreshData){try{window.refreshData();}catch(e){alert('Refresh error: '+e);}}else{fetch('/api/refresh-data',{method:'POST'}).then(()=>location.reload()).catch(e=>alert('Refresh failed: '+e));}">Refresh Data</button>
             <span id="refreshStatus" style="font-size:0.95em; color:#555;"></span>
-            <small>
-                <a href="/api/refresh-data" target="_blank" style="color:#2980b9; text-decoration:underline;">manual</a>
-                • <a href="/api/refresh-data?mode=quick" target="_blank" style="color:#27ae60; text-decoration:underline;">fast</a>
-                • <a href="/refresh-status" target="_blank" style="color:#8e44ad; text-decoration:underline;">diagnostics</a>
-            </small>
+            <small class="muted">Refresh runs locally only</small>
             <button type="button" id="auditKickoffsBtn" title="Generate kickoff audit CSV and download">Audit Kickoffs</button>
             <button type="button" id="normalizeKickoffsBtn" title="Re-pull kickoff times from APIs (start_date_api)">Normalize Kickoffs</button>
         </div>
@@ -3589,7 +3580,7 @@ def index():
     </div>
     </div>
     <div style="margin:20px 0 10px; text-align:center; font-size:.85rem; color:#667;">
-        <a href="/">Cards</a> | <a href="/recommendations">Recommendations</a> | <a href="/recommendations/performance">Performance</a> | <a href="/api/game-cards">API</a> | <a href="/health">Health</a>
+        <a href="/">Cards</a> | <a href="/recommendations">Recommendations</a>
     </div>
     <button id="backToTop" title="Back to top">Top</button>
         <script>
@@ -4030,7 +4021,6 @@ def index():
         </script>
     <div style="margin-top:30px; text-align:center; font-size:0.75em; color:#7f8c8d;">
         Build {{ BUILD_TIME }} • Commit {{ BUILD_COMMIT[:8] if BUILD_COMMIT else 'unknown' }} • Source {{ PRED_SOURCE }}
-        • <a href="/version" style="color:#2980b9;">version JSON</a>
     </div>
     ''', weeks=weeks, selected_week=selected_week, all_dates=all_dates, selected_date=selected_date, show_all=show_all, hide_both_unknown=hide_both_unknown, all_conferences=pred_df['home_conference'].unique(), selected_conference=selected_conference, game_cards=game_cards, filter_type=filter_type, summary=summary, sort_by=sort_by, HIDE_REFRESH=HIDE_REFRESH, finals_count_week=finals_count_week, total_games_week=total_games_week, finals_pct_week=finals_pct_week, unknown_pending=unknown_pending, odds_with_lines_week=odds_with_lines_week, BUILD_TIME=BUILD_TIME, BUILD_COMMIT=BUILD_COMMIT, PRED_SOURCE=PRED_SOURCE)
     resp = make_response(page_html)
@@ -4039,6 +4029,23 @@ def index():
     resp.headers['Expires'] = '0'
     return resp
 
+
+# Restrict app to only the main cards page and recommendations
+@app.before_request
+def _limit_routes():
+    try:
+        p = request.path
+        # Allow the two public pages and minimal static files under /static if any
+        allowed = set(['/', '/recommendations'])
+        if p in allowed:
+            return None
+        # Allow static and favicon
+        if p.startswith('/static/') or p == '/favicon.ico':
+            return None
+        # Otherwise 404
+        return ('Not Found', 404)
+    except Exception:
+        return None
 
 # New route: Projected Conference Records for 2025
 @app.route('/conference-records')
@@ -5344,7 +5351,7 @@ def recommendations_page():
         body.dark a, body.dark .nav a { color:#8ab4ff; }
     </style>
     <div class="wrap">
-    <div class="nav"><a href="/">Cards</a> | <a href="/recommendations">Recommendations</a> | <a href="/recommendations/performance">Performance</a> | <a href="/api/game-cards">API</a> | <a href="/health">Health</a> | <button type="button" id="toggleThemeBtn" style="margin-left:10px; padding:4px 8px; border-radius:6px;">Dark Theme</button></div>
+    <div class="nav"><a href="/">Cards</a> | <a href="/recommendations">Recommendations</a> | <button type="button" id="toggleThemeBtn" style="margin-left:10px; padding:4px 8px; border-radius:6px;">Dark Theme</button></div>
         <h1>NCAAF Betting – Recommendations</h1>
         <div class="summary">
             <div class="kpi-line"><b>OVERALL</b> {{fmt_pct(overall_stats.acc)}} Accuracy {{overall_stats.wins}}W-{{overall_stats.losses}}L{% if overall_stats.pushes %}-{{overall_stats.pushes}}P{% endif %} / {{overall_stats.wins + overall_stats.losses + overall_stats.pushes}} settled ROI: {{fmt_pct(overall_stats.roi)}} Stake: {{fmt_money(overall_stats.stake)}} | P/L: {{fmt_money(overall_stats.pnl)}} Total picks: {{overall_stats.count}}</div>
