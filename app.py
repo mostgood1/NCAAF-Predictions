@@ -4708,9 +4708,15 @@ def recommendations_page():
     # Performance summary from logged CSV
     overall_stats = {}
     tier_stats = {}
+    weekly_stats = []
+    open_count = 0
     try:
         if os.path.exists(RECS_PATH):
             perf_df = pd.read_csv(RECS_PATH)
+            # Coerce numeric
+            for col in ['stake','pnl','edge','kelly_f','model_prob','implied_prob','week','season']:
+                if col in perf_df.columns:
+                    perf_df[col] = pd.to_numeric(perf_df[col], errors='coerce')
             # Recompute confidence if missing
             if 'confidence' not in perf_df.columns and {'edge','kelly_f','model_prob'}.issubset(perf_df.columns):
                 perf_df['confidence'] = perf_df.apply(lambda r: _confidence_tier(r.get('edge'), r.get('kelly_f'), r.get('model_prob'))[0], axis=1)
@@ -4728,12 +4734,46 @@ def recommendations_page():
             overall_stats = _agg(perf_df)
             for t in ['High','Medium','Low']:
                 tier_stats[t] = _agg(perf_df[perf_df.get('confidence','')==t])
+            # Weekly reconciliation (season 2025 only if present)
+            dfw = perf_df.copy()
+            if 'season' in dfw.columns:
+                try:
+                    dfw_2025 = dfw[dfw['season']==2025]
+                    if not dfw_2025.empty:
+                        dfw = dfw_2025
+                except Exception:
+                    pass
+            # open vs closed
+            try:
+                open_count = int((dfw.get('status','')=='open').sum()) if 'status' in dfw.columns else 0
+            except Exception:
+                open_count = 0
+            # Group by week
+            if 'week' in dfw.columns:
+                try:
+                    grp = dfw.dropna(subset=['week']).groupby('week')
+                    stats = []
+                    for wk, g in grp:
+                        a = _agg(g)
+                        try:
+                            wk_int = int(wk)
+                        except Exception:
+                            wk_int = wk
+                        a['week'] = wk_int
+                        stats.append(a)
+                    weekly_stats = sorted(stats, key=lambda x: x['week'])
+                except Exception:
+                    weekly_stats = []
         else:
             overall_stats = {'count':0,'wins':0,'losses':0,'pushes':0,'acc':0.0,'stake':0.0,'pnl':0.0,'roi':0.0}
             tier_stats = {k: overall_stats for k in ['High','Medium','Low']}
+            weekly_stats = []
+            open_count = 0
     except Exception:
         overall_stats = {'count':0,'wins':0,'losses':0,'pushes':0,'acc':0.0,'stake':0.0,'pnl':0.0,'roi':0.0}
         tier_stats = {k: overall_stats for k in ['High','Medium','Low']}
+        weekly_stats = []
+        open_count = 0
     def fmt_pct(x):
         try:
             return f"{x*100:.1f}%"
@@ -4755,7 +4795,15 @@ def recommendations_page():
         th { background:#f0f4f9; }
         .nav { font-size:.85rem; margin-bottom:12px; text-align:right; }
     .nav a { color:#1b4d91; text-decoration:none; margin-left:10px; }
-        .summary { background:#f8fafc; border:1px solid #e0e7ef; padding:10px 14px; border-radius:10px; font-size:.85rem; line-height:1.5; }
+        .cards { display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin:10px 0 14px; }
+        .card { background:#f8fafc; border:1px solid #e3eaf2; border-radius:12px; padding:12px 14px; }
+        .card h3 { margin:0 0 6px; font-size:.9rem; color:#334155; }
+        .card .big { font-size:1.35rem; font-weight:700; color:#0f172a; }
+        .card .sub { font-size:.8rem; color:#64748b; margin-top:2px; }
+        .tier-cards { display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; margin:8px 0 6px; }
+        .tcard { background:#fff; border:1px solid #e3eaf2; border-radius:12px; padding:10px 12px; }
+        .tcard h4 { margin:0 0 4px; font-size:.9rem; }
+        .tcard .metric { font-size:.95rem; color:#334155; }
         .kpi-line { margin:8px 0 4px; }
         .section-empty { font-size:.85rem; color:#777; margin:4px 0 14px; }
         .filters form { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:12px 0 4px; }
@@ -4770,26 +4818,34 @@ def recommendations_page():
     body.dark .conf-low { background:#3b0f14; }
         caption { text-align:left; font-weight:600; margin:12px 0 4px; }
         .meta-bar { font-size:.75rem; color:#555; margin-top:4px; }
+        .pill { display:inline-block; padding:3px 8px; border-radius:999px; background:#eef2ff; color:#1e3a8a; font-size:.8rem; border:1px solid #c7d2fe; }
+        .rec-header { display:flex; align-items:center; justify-content:space-between; margin-top:8px; }
         @media (max-width:900px){ th,td { font-size:.72rem; padding:4px; } }
         /* Dark theme variants */
         body.dark { background:#0f172a; color:#e2e8f0; }
         body.dark .wrap { background:#0b1220; box-shadow:0 8px 20px rgba(0,0,0,.5); }
     body.dark th { background:#13223a; color:#e2e8f0; }
     body.dark td { background:#0f172a; color:#e2e8f0; border-color:#223; }
-        body.dark .summary { background:#0f1a2b; border-color:#223; }
+        body.dark .card { background:#0f1a2b; border-color:#223; }
+        body.dark .tcard { background:#0f1a2b; border-color:#223; }
     body.dark a, body.dark .nav a { color:#8ab4ff; }
     body.dark .nav { color:#cbd5e1; }
     </style>
     <div class="wrap">
     <div class="nav"><a href="/">Cards</a> | <a href="/recommendations">Recommendations</a> | <button type="button" id="toggleThemeBtn" style="margin-left:10px; padding:4px 8px; border-radius:6px;">Dark Theme</button></div>
         <h1>NCAAF Betting – Recommendations</h1>
-        <div class="summary">
-            <div class="kpi-line"><b>OVERALL</b> {{fmt_pct(overall_stats.acc)}} Accuracy {{overall_stats.wins}}W-{{overall_stats.losses}}L{% if overall_stats.pushes %}-{{overall_stats.pushes}}P{% endif %} / {{overall_stats.wins + overall_stats.losses + overall_stats.pushes}} settled ROI: {{fmt_pct(overall_stats.roi)}} Stake: {{fmt_money(overall_stats.stake)}} | P/L: {{fmt_money(overall_stats.pnl)}} Total picks: {{overall_stats.count}}</div>
-            <div class="kpi-line">HIGH {{fmt_pct(tier_stats['High'].acc)}} Acc {{tier_stats['High'].wins}}W-{{tier_stats['High'].losses}}L{% if tier_stats['High'].pushes %}-{{tier_stats['High'].pushes}}P{% endif %} ROI: {{fmt_pct(tier_stats['High'].roi)}} Stake: {{fmt_money(tier_stats['High'].stake)}} | P/L: {{fmt_money(tier_stats['High'].pnl)}} Picks: {{tier_stats['High'].count}}</div>
-            <div class="kpi-line">MEDIUM {{fmt_pct(tier_stats['Medium'].acc)}} Acc {{tier_stats['Medium'].wins}}W-{{tier_stats['Medium'].losses}}L{% if tier_stats['Medium'].pushes %}-{{tier_stats['Medium'].pushes}}P{% endif %} ROI: {{fmt_pct(tier_stats['Medium'].roi)}} Stake: {{fmt_money(tier_stats['Medium'].stake)}} | P/L: {{fmt_money(tier_stats['Medium'].pnl)}} Picks: {{tier_stats['Medium'].count}}</div>
-            <div class="kpi-line">LOW {{fmt_pct(tier_stats['Low'].acc)}} Acc {{tier_stats['Low'].wins}}W-{{tier_stats['Low'].losses}}L{% if tier_stats['Low'].pushes %}-{{tier_stats['Low'].pushes}}P{% endif %} ROI: {{fmt_pct(tier_stats['Low'].roi)}} Stake: {{fmt_money(tier_stats['Low'].stake)}} | P/L: {{fmt_money(tier_stats['Low'].pnl)}} Picks: {{tier_stats['Low'].count}}</div>
-            <div class="meta-bar">Sorted by {{ 'confidence then edge' if sort_q!='edge_desc' else 'edge descending' }}. Moneyline, spread (-110 assumed if book price missing) and totals included.</div>
+        <div class="cards">
+            <div class="card"><h3>Accuracy</h3><div class="big">{{fmt_pct(overall_stats.acc)}}</div><div class="sub">{{overall_stats.wins}}W-{{overall_stats.losses}}L{% if overall_stats.pushes %}-{{overall_stats.pushes}}P{% endif %}</div></div>
+            <div class="card"><h3>ROI</h3><div class="big">{{fmt_pct(overall_stats.roi)}}</div><div class="sub">{{fmt_money(overall_stats.stake)}} staked</div></div>
+            <div class="card"><h3>Profit/Loss</h3><div class="big">{{fmt_money(overall_stats.pnl)}}</div><div class="sub">{{overall_stats.count}} total picks • {{open_count}} open</div></div>
+            <div class="card"><h3>Selected Week</h3><div class="big">{% if sel_week is not none %}Week {{sel_week}}{% else %}Auto{% endif %}</div><div class="sub">Sorted by {{ 'confidence→edge' if sort_q!='edge_desc' else 'edge ↓' }}</div></div>
         </div>
+        <div class="tier-cards">
+            <div class="tcard"><h4>High</h4><div class="metric">Acc {{fmt_pct(tier_stats['High'].acc)}}</div><div class="metric">ROI {{fmt_pct(tier_stats['High'].roi)}}</div><div class="metric">Picks {{tier_stats['High'].count}}</div></div>
+            <div class="tcard"><h4>Medium</h4><div class="metric">Acc {{fmt_pct(tier_stats['Medium'].acc)}}</div><div class="metric">ROI {{fmt_pct(tier_stats['Medium'].roi)}}</div><div class="metric">Picks {{tier_stats['Medium'].count}}</div></div>
+            <div class="tcard"><h4>Low</h4><div class="metric">Acc {{fmt_pct(tier_stats['Low'].acc)}}</div><div class="metric">ROI {{fmt_pct(tier_stats['Low'].roi)}}</div><div class="metric">Picks {{tier_stats['Low'].count}}</div></div>
+        </div>
+        <div class="meta-bar">Moneyline, spread (-110 assumed if price missing) and totals included.</div>
         <div class="filters">
             <form method="GET">
                 <label>Week
@@ -4818,6 +4874,7 @@ def recommendations_page():
                 <a href="/recommendations" style="margin-left:6px; text-decoration:none;"><button type="button" class="secondary">Reset</button></a>
             </form>
         </div>
+        <div class="rec-header"><div><span class="pill">{% if sel_week is not none %}Week {{sel_week}}{% else %}Auto Week{% endif %}</span></div><div class="meta-bar">{{high|length + medium|length + low|length}} recommendations shown</div></div>
         <h2>High confidence</h2>
         {% if high %}
         <table class="conf-high"><tr><th>Matchup</th><th>Market</th><th>Recommendation</th><th>Price</th><th>Edge</th><th>Stake</th><th>Model p</th><th>Date</th></tr>
@@ -4886,6 +4943,27 @@ def recommendations_page():
             {% endfor %}
             </table>
         {% else %}<div class="section-empty">No other recommendations.</div>{% endif %}
+        <h2>Weekly reconciliation</h2>
+        {% if weekly_stats %}
+        <table>
+            <tr><th>Week</th><th>Picks</th><th>Wins</th><th>Losses</th><th>Pushes</th><th>Accuracy</th><th>Stake</th><th>P/L</th><th>ROI</th></tr>
+            {% for s in weekly_stats %}
+            <tr>
+                <td>Week {{s.week}}</td>
+                <td>{{s.count}}</td>
+                <td>{{s.wins}}</td>
+                <td>{{s.losses}}</td>
+                <td>{{s.pushes}}</td>
+                <td>{{fmt_pct(s.acc)}}</td>
+                <td>{{fmt_money(s.stake)}}</td>
+                <td>{{fmt_money(s.pnl)}}</td>
+                <td>{{fmt_pct(s.roi)}}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% else %}
+        <div class="section-empty">No settled bets yet to reconcile.</div>
+        {% endif %}
         <div style="margin-top:30px; font-size:.75rem; color:#666;">Generated at {{now}}. Edge = model EV (expected value) using American odds. Kelly stake capped & scaled. Times shown in original schedule timezone if available.</div>
         <div style="margin-top:6px; font-size:.7rem; color:#777;">Build {{ BUILD_TIME }} • Commit {{ BUILD_COMMIT[:8] if BUILD_COMMIT else 'unknown' }}</div>
     </div>
