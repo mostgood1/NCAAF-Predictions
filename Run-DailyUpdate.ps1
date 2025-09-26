@@ -235,7 +235,7 @@ try {
             $gitCmd = Get-Command git -ErrorAction SilentlyContinue
             if(-not $gitCmd){ Write-Host "[git] git not found in PATH; skipping auto push." -ForegroundColor Yellow }
             else {
-                $inside = git rev-parse --is-inside-work-tree 2>$null
+                git rev-parse --is-inside-work-tree 2>$null | Out-Null
                 if($LASTEXITCODE -ne 0){ Write-Host "[git] Not inside a git work tree; skipping." -ForegroundColor Yellow }
                 else {
                     # Stage only tracked modifications and key data artifacts; avoid committing logs & secrets.
