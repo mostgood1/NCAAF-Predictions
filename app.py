@@ -2543,39 +2543,130 @@ def compute_recommendations(
     recs.sort(key=lambda x: x['edge'], reverse=True)
     return recs
 
-def _confidence_tier(edge: float | None, kelly_f: float | None, model_prob: float | None) -> tuple[str, int]:
+def _compute_confidence_tier(rec: dict, game_row: pd.Series | None = None) -> tuple[str, float]:
+    """Richer confidence tier using EV, Kelly, prob, market context, odds, and uncertainty.
+    Returns (tier, numeric_score).
+    """
+    # Base fields
+    e = _safe_float(rec.get('edge'), 0.0) or 0.0
+    k = _safe_float(rec.get('kelly_f'), 0.0) or 0.0
+    p = _safe_float(rec.get('model_prob'), 0.0) or 0.0
+    market = str(rec.get('market', '') or '')
+    price = _safe_float(rec.get('price_american'), None)
+    dec_odds, _ = american_to_decimal(price) if price is not None else (None, None)
+    line = _safe_float(rec.get('line'), None)
+
+    # Uncertainty (margin sigma) and model edges vs book lines
+    sigma_m = None
+    spread_edge_pts = None
+    total_edge_pts = None
     try:
-        e = float(edge) if edge is not None else 0.0
+        if isinstance(game_row, pd.Series):
+            sigma_m = _get_conf_std_for_game(game_row)
+            if market == 'Spread' and line is not None:
+                pred_margin = _safe_float(game_row.get('model_margin'))
+                if pred_margin is None:
+                    pred_margin = _safe_float(game_row.get('predicted_win_margin'))
+                if pred_margin is None:
+                    mh = _safe_float(game_row.get('model_home_points')) or _safe_float(game_row.get('predicted_home_points'))
+                    ma = _safe_float(game_row.get('model_away_points')) or _safe_float(game_row.get('predicted_away_points'))
+                    if mh is not None and ma is not None:
+                        pred_margin = mh - ma
+                if pred_margin is not None:
+                    spread_edge_pts = abs(pred_margin - line)
+            if market == 'Total' and line is not None:
+                mtot = _safe_float(game_row.get('model_total_points'))
+                if mtot is None:
+                    mh = _safe_float(game_row.get('model_home_points')) or _safe_float(game_row.get('predicted_home_points'))
+                    ma = _safe_float(game_row.get('model_away_points')) or _safe_float(game_row.get('predicted_away_points'))
+                    if mh is not None and ma is not None:
+                        mtot = mh + ma
+                if mtot is not None:
+                    total_edge_pts = abs(mtot - line)
     except Exception:
-        e = 0.0
+        pass
+
+    score = 0.0
+    # EV weight
+    if e >= 0.050:
+        score += 2.0
+    elif e >= 0.035:
+        score += 1.0
+    elif e >= 0.025:
+        score += 0.5
+
+    # Kelly fraction weight
+    if k >= 0.030:
+        score += 2.0
+    elif k >= 0.020:
+        score += 1.0
+    elif k >= 0.010:
+        score += 0.5
+
+    # Probability thresholds by market
+    m = market.lower()
+    if m == 'ml' or m == 'moneyline' or m == 'money line' or m == 'money_line':
+        if p >= 0.62:
+            score += 2.0
+        elif p >= 0.58:
+            score += 1.0
+        elif p >= 0.55:
+            score += 0.5
+    else:  # spread or total style
+        if p >= 0.56:
+            score += 1.0
+        elif p >= 0.53:
+            score += 0.5
+
+    # Uncertainty (lower sigma is better)
+    if sigma_m is not None:
+        try:
+            sm = float(sigma_m)
+            if sm <= 11.0:
+                score += 1.0
+            elif sm <= 14.0:
+                score += 0.5
+            elif sm > 18.0:
+                score -= 1.0
+        except Exception:
+            pass
+
+    # Edge points weight for spread and total
+    if spread_edge_pts is not None:
+        if spread_edge_pts >= 3.0:
+            score += 1.0
+        elif spread_edge_pts >= 2.0:
+            score += 0.5
+    if total_edge_pts is not None:
+        if total_edge_pts >= 5.0:
+            score += 1.0
+        elif total_edge_pts >= 3.0:
+            score += 0.5
+
+    # Longshot penalty (very big prices with low model prob)
     try:
-        k = float(kelly_f) if kelly_f is not None else 0.0
+        if dec_odds is not None and dec_odds > 4.0 and p < 0.35:
+            score -= 1.0
     except Exception:
-        k = 0.0
-    try:
-        p = float(model_prob) if model_prob is not None else 0.0
-    except Exception:
-        p = 0.0
-    score = 0
-    # Edge thresholds
-    if e >= 0.05:
-        score += 2
-    elif e >= 0.03:
-        score += 1
-    # Kelly fraction thresholds (scaled stake sizing)
-    if k >= 0.03:
-        score += 2
-    elif k >= 0.015:
-        score += 1
-    # Model probability threshold
-    if p >= 0.60:
-        score += 1
-    tier = 'Low'
-    if score >= 3:
-        tier = 'High'
-    elif score >= 2:
-        tier = 'Medium'
-    return tier, score
+        pass
+
+    # Map to tiers
+    if score >= 4.0:
+        return 'High', score
+    if score >= 2.5:
+        return 'Medium', score
+    return 'Low', score
+
+def _confidence_tier(edge: float | None, kelly_f: float | None, model_prob: float | None) -> tuple[str, float]:
+    """Backward-compatible wrapper used in a few places that only have scalars."""
+    rec = {
+        'edge': edge,
+        'kelly_f': kelly_f,
+        'model_prob': model_prob,
+        # Default to ML when unknown; produces reasonable tiers
+        'market': 'ML'
+    }
+    return _compute_confidence_tier(rec, None)
 
 def _parse_to_utc_with_context(s_val: str | None, *, assume_naive: str = 'eastern', week: int | None = None) -> datetime | None:
     """Parse an ISO-like string to a timezone-aware UTC datetime.
@@ -2738,9 +2829,9 @@ def recommendations_api():
         except Exception:
             idx = {}
         for rec in recs:
-            tier, score = _confidence_tier(rec.get('edge'), rec.get('kelly_f'), rec.get('model_prob'))
             key = (rec['season'], rec['week'], rec['home_team'], rec['away_team'])
             row = idx.get(key)
+            tier, score = _compute_confidence_tier(rec, row)
             start_iso, sort_ts, display_time = _parse_start_ts(row) if row is not None else ('', None, '')
             try:
                 ha = get_team_asset(rec['home_team'])
@@ -4718,9 +4809,9 @@ def recommendations_page():
     # Build enrichment and compute result text when actuals exist
     enriched = []
     for rec in recs:
-        tier, score = _confidence_tier(rec.get('edge'), rec.get('kelly_f'), rec.get('model_prob'))
         key = (rec['season'], rec['week'], rec['home_team'], rec['away_team'])
         row = idx.get(key)
+        tier, score = _compute_confidence_tier(rec, row)
         start_iso, sort_ts, display_time = _parse_start_ts(row) if row is not None else ('', None, '')
         # Determine result for settled games
         result_txt = '—'
