@@ -21,6 +21,11 @@ from datetime import datetime
 from typing import List
 
 import pandas as pd
+import sys
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(THIS_DIR)
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
 import app as webapp
 
 DATA_DIR = webapp.DATA_DIR

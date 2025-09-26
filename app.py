@@ -2373,6 +2373,7 @@ def compute_recommendations(
     min_prob: float | None = None,
     max_sigma_margin: float | None = None,
     allowed_conferences=None,
+    include_completed: bool = False,
 ):
     """Core engine to compute EV+ recommendations, reused by API and UI.
     Optional selection filters:
@@ -2383,8 +2384,9 @@ def compute_recommendations(
       - allowed_conferences: list/set or comma-separated string; keep games where either team conf is in this list
     """
     df = pred_df[(pred_df['season'] == 2025)].copy()
-    # Upcoming only
-    df = df[df['actual_home_points'].isna() & df['actual_away_points'].isna()]
+    # Optional upcoming-only filter
+    if not include_completed:
+        df = df[df['actual_home_points'].isna() & df['actual_away_points'].isna()]
     if week is not None:
         try:
             df = df[df['week'] == int(week)]
@@ -2872,6 +2874,15 @@ def recommendations_api():
                 out.sort(key=lambda x: (x.get('confidence_score') or 0, x.get('edge') or 0.0), reverse=True)
             elif sort_key == 'market':
                 out.sort(key=lambda x: (str(x.get('market','')), x.get('sort_ts') or 0.0))
+            elif sort_key == 'bet_type':
+                # Sort by bet type then side: ML/Spread/Total, then Home/Away/Over/Under
+                def _bt_key(r):
+                    m = str(r.get('market',''))
+                    side = str(r.get('side',''))
+                    m_rank = {'ML':0,'Moneyline':0,'Spread':1,'Total':2}.get(m, 3)
+                    s_rank = {'Home':0,'Away':1,'Over':0,'Under':1}.get(side, 2)
+                    return (m_rank, s_rank, -(r.get('edge') or 0.0))
+                out.sort(key=_bt_key)
             elif sort_key == 'stake_desc':
                 out.sort(key=lambda x: (x.get('stake') or 0.0), reverse=True)
             elif sort_key == 'prob_desc':
@@ -4874,7 +4885,20 @@ def recommendations_page():
     elif sort_q == 'time':
         enriched.sort(key=lambda x: (x.get('sort_ts') is None, x.get('sort_ts') or 0.0))
     elif sort_q == 'market':
-        enriched.sort(key=lambda x: (str(x.get('market','')), x.get('sort_ts') is None, x.get('sort_ts') or 0.0))
+        # Group by market inside tiers using a stable order ML -> Spread -> Total, then EV desc
+        def _mkey(r):
+            m = str(r.get('market',''))
+            m_rank = {'ML':0,'Moneyline':0,'Spread':1,'Total':2}.get(m, 3)
+            return (m_rank, -(r.get('edge') or 0.0), r.get('sort_ts') is None, r.get('sort_ts') or 0.0)
+        enriched.sort(key=_mkey)
+    elif sort_q == 'bet_type':
+        def _bt_key(r):
+            m = str(r.get('market',''))
+            side = str(r.get('side',''))
+            m_rank = {'ML':0,'Moneyline':0,'Spread':1,'Total':2}.get(m, 3)
+            s_rank = {'Home':0,'Away':1,'Over':0,'Under':1}.get(side, 2)
+            return (m_rank, s_rank, -(r.get('edge') or 0.0))
+        enriched.sort(key=_bt_key)
     else:  # confidence_then_edge default
         enriched.sort(key=lambda x: (_tier_rank(x.get('confidence')), -(x.get('edge') or 0.0)))
     # Group by tier (create 'Other' placeholder for future lower-confidence recs)
@@ -4961,6 +4985,18 @@ def recommendations_page():
             return f"${x:.0f}"
         except Exception:
             return "$0"
+    # Friendly label for the summary card
+    if sort_q == 'edge_desc':
+        sort_label = 'EV (desc)'
+    elif sort_q == 'bet_type':
+        sort_label = 'Bet Type (ML/Spread/Totals)'
+    elif sort_q == 'market':
+        sort_label = 'Market (ML/Spread/Totals)'
+    elif sort_q == 'time':
+        sort_label = 'Kickoff Time'
+    else:
+        sort_label = 'Confidence then EV'
+
     return render_template_string('''
     <style>
         body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background:#f5f8fc; margin:0; }
@@ -5016,7 +5052,7 @@ def recommendations_page():
             <div class="card"><h3>Accuracy</h3><div class="big">{{fmt_pct(overall_stats.acc)}}</div><div class="sub">{{overall_stats.wins}}W-{{overall_stats.losses}}L{% if overall_stats.pushes %} / {{overall_stats.wins + overall_stats.losses + overall_stats.pushes}} settled{% endif %}</div></div>
             <div class="card"><h3>ROI</h3><div class="big">{{fmt_pct(overall_stats.roi)}}</div><div class="sub">Stake {{fmt_money(overall_stats.stake)}}</div></div>
             <div class="card"><h3>Profit/Loss</h3><div class="big">{{fmt_money(overall_stats.pnl)}}</div><div class="sub">Total picks: {{overall_stats.count}}</div></div>
-            <div class="card"><h3>High/Med/Low</h3><div class="sub">High: {{tier_stats['High'].count}} • Med: {{tier_stats['Medium'].count}} • Low: {{tier_stats['Low'].count}}</div><div class="sub">Sorted by {{ 'confidence then EV' if sort_q!='edge_desc' else 'EV descending' }}</div></div>
+            <div class="card"><h3>High/Med/Low</h3><div class="sub">High: {{tier_stats['High'].count}} • Med: {{tier_stats['Medium'].count}} • Low: {{tier_stats['Low'].count}}</div><div class="sub">Sorted by {{ sort_label }}</div></div>
         </div>
         <div class="filters">
             <form method="GET">
@@ -5030,6 +5066,8 @@ def recommendations_page():
                     <select name="sort">
                         <option value="confidence_then_edge" {% if sort_q=='confidence_then_edge' %}selected{% endif %}>Confidence (default)</option>
                         <option value="edge_desc" {% if sort_q=='edge_desc' %}selected{% endif %}>EV</option>
+                        <option value="bet_type" {% if sort_q=='bet_type' %}selected{% endif %}>Bet Type</option>
+                        <option value="market" {% if sort_q=='market' %}selected{% endif %}>Market</option>
                     </select>
                 </label>
                 <button type="submit">Apply</button>

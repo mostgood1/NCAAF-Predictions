@@ -30,6 +30,11 @@ from typing import Iterable, List, Dict, Any
 import pandas as pd
 
 # Import the app module to reuse data and helpers
+import sys
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(THIS_DIR)
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
 import app as webapp
 
 DATA_DIR = webapp.DATA_DIR
@@ -87,7 +92,7 @@ def list_target_weeks(spec: str | None) -> List[int]:
     return out
 
 
-def compute_week_recommendations(week: int) -> List[Dict[str, Any]]:
+def compute_week_recommendations(week: int, include_completed: bool = True) -> List[Dict[str, Any]]:
     recs = webapp.compute_recommendations(
         week=week,
         bankroll=1000.0,
@@ -98,6 +103,7 @@ def compute_week_recommendations(week: int) -> List[Dict[str, Any]]:
         min_prob=None,
         max_sigma_margin=None,
         allowed_conferences=None,
+        include_completed=include_completed,
     )
     # Build enrichment index limited to week
     idx = {}
@@ -276,6 +282,7 @@ def main():
     parser = argparse.ArgumentParser(description="Build offline recommendations artifacts")
     parser.add_argument('--week', type=int, help='Single week to build')
     parser.add_argument('--weeks', type=str, help='Comma/range list, e.g. 3,4,5 or 3-8; use all/* for every available week')
+    parser.add_argument('--include-completed', action='store_true', help='Include completed games when computing recs (for backfill)')
     args = parser.parse_args()
 
     weeks: List[int]
@@ -290,7 +297,7 @@ def main():
 
     print(f"Building offline artifacts for weeks: {weeks}")
     for w in weeks:
-        rows = compute_week_recommendations(w)
+        rows = compute_week_recommendations(w, include_completed=args.include_completed)
         write_week_cache(w, rows)
         build_odds_coverage(w)
         print(f" - Week {w}: {len(rows)} recs cached; odds coverage written.")
