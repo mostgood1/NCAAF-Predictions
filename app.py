@@ -55,7 +55,9 @@ app = Flask(__name__)
 _orig_add_url_rule = app.add_url_rule
 def _filtered_add_url_rule(rule, endpoint=None, view_func=None, provide_automatic_options=None, **options):
     try:
-        if rule in ('/', '/recommendations') or rule.startswith('/static') or rule == '/favicon.ico':
+        # Publicly exposed routes (keep surface small but include diagnostics)
+        allowed = {'/', '/recommendations', '/recommendations/debug', '/favicon.ico'}
+        if rule in allowed or rule.startswith('/static'):
             return _orig_add_url_rule(rule, endpoint=endpoint, view_func=view_func,
                                       provide_automatic_options=provide_automatic_options, **options)
         # Skip registration for all other routes
