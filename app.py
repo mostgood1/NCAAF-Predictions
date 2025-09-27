@@ -5087,7 +5087,7 @@ def recommendations_page():
         # With filters hidden, default to all conferences
         allowed_conferences = request.args.get('allowed_conferences') or request.form.get('allowed_conferences') or ''
         # Optional: allow disabling augmentation of log results
-    augment_flag = str(request.args.get('augment') or request.form.get('augment') or '0').strip()
+        augment_flag = str(request.args.get('augment') or request.form.get('augment') or '0').strip()
         # Determine selected week (optional). If blank => auto upcoming
         sel_week = int(week_q) if (week_q and week_q.isdigit()) else None
         if sel_week is None:
