@@ -98,9 +98,10 @@ app.add_url_rule = _filtered_add_url_rule
 @app.errorhandler(500)
 def _handle_500(e):
     try:
-        # If the failing request targets recommendations, try a safe redirect to log source
         from flask import request as _rq, redirect as _redir, url_for as _url
+        import traceback as _tb
         path = _rq.path or ''
+        # If the failing request targets recommendations, try a safe redirect to log source first
         if path.rstrip('/') == '/recommendations':
             try:
                 q = dict(_rq.args)
@@ -109,11 +110,22 @@ def _handle_500(e):
                     return _redir(_url('recommendations_page', **q)), 302
             except Exception:
                 pass
-        # Otherwise return a compact diagnostics response instead of a 500
-        body = f"Internal error. Build {BUILD_TIME} • Commit {BUILD_COMMIT[:8] if BUILD_COMMIT else 'unknown'}\n"
+        # Return compact plaintext diagnostics instead of a raw 500 page
+        err_type = getattr(e, '__class__', type('E',(object,),{})).__name__
+        err_msg = str(e)
+        trace = _tb.format_exc()[-2000:]
+        qstr = '&'.join([f"{k}={v}" for k,v in _rq.args.items()])
+        body = (
+            f"Internal error\n"
+            f"path: {path}\n"
+            f"args: {qstr}\n"
+            f"error: {err_type}: {err_msg}\n"
+            f"trace_tail:\n{trace}\n"
+            f"build: {BUILD_TIME} commit: {BUILD_COMMIT[:8] if BUILD_COMMIT else 'unknown'}\n"
+        )
         return body, 200, {'Content-Type': 'text/plain; charset=utf-8'}
     except Exception:
-        return "Internal error", 200, {'Content-Type': 'text/plain; charset=utf-8'}
+        return "Internal error (fallback)", 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
 # Removed: /api/ping
 
@@ -5321,6 +5333,19 @@ def recommendations_page():
                 except Exception:
                     display_date = display_time or ''
                 enriched.append({**rec, 'line_num': line_num, 'confidence': tier, 'confidence_score': score, 'start_iso': start_iso, 'display_time': display_time, 'display_date': display_date, 'sort_ts': sort_ts, 'result_txt': result_txt})
+        # Early diagnostics path: return compact JSON if requested
+        try:
+            if (request.args.get('diag') or '0') == '1':
+                sample = (enriched[:3] if isinstance(enriched, list) else [])
+                return jsonify({
+                    'source': recs_source,
+                    'count': len(enriched) if isinstance(enriched, list) else 0,
+                    'sample': sample,
+                    'build_time': BUILD_TIME,
+                    'commit': BUILD_COMMIT,
+                }), 200
+        except Exception:
+            pass
         # Write to cache
         try:
             if recs_source == 'log':
