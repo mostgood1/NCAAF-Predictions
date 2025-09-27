@@ -5060,6 +5060,20 @@ def recommendations_page():
         # Inputs
         week_q = request.args.get('week') or request.form.get('week')
         sort_q = request.args.get('sort') or request.form.get('sort') or 'confidence_then_edge'
+        # Hard stabilization: if source is not 'log' (including missing), redirect to source=log
+        # to ensure the page never hits unstable compute path in production.
+        try:
+            _src_now_early = (request.args.get('source') or request.form.get('source') or '').strip().lower()
+            if _src_now_early != 'log':
+                _params = dict(request.args)
+                if week_q:
+                    _params['week'] = week_q
+                if sort_q:
+                    _params['sort'] = sort_q
+                _params['source'] = 'log'
+                return redirect(url_for('recommendations_page', **_params)), 302
+        except Exception:
+            pass
         # Short-circuit: if user explicitly requests compute, redirect to log to avoid any 500s
         # This preserves week/sort and can be relaxed later when compute UI is stable.
         try:
