@@ -56,7 +56,19 @@ _orig_add_url_rule = app.add_url_rule
 def _filtered_add_url_rule(rule, endpoint=None, view_func=None, provide_automatic_options=None, **options):
     try:
         # Publicly exposed routes (keep surface small but include diagnostics)
-        allowed = {'/', '/recommendations', '/recommendations/debug', '/favicon.ico'}
+        allowed = {
+            '/',
+            '/recommendations',
+            '/recommendations/debug',
+            '/favicon.ico',
+            # Deploy diagnostics (used by wsgi injector) and local route map
+            '/which-app',
+            '/deploy-info',
+            '/routes',
+            # Common trailing-slash variants to be safe
+            '/recommendations/',
+            '/recommendations/debug/',
+        }
         if rule in allowed or rule.startswith('/static'):
             return _orig_add_url_rule(rule, endpoint=endpoint, view_func=view_func,
                                       provide_automatic_options=provide_automatic_options, **options)
@@ -5618,6 +5630,32 @@ def recommendations_debug():
         {{rows|safe}}
       </table>
       <div style="margin-top:10px; color:#666; font-size:.8rem">Built {{BUILD_TIME}} • Commit {{BUILD_COMMIT[:8] if BUILD_COMMIT else 'unknown'}}</div>
+    </div>
+    """, rows=rows, BUILD_TIME=BUILD_TIME, BUILD_COMMIT=BUILD_COMMIT)
+
+
+@app.route('/routes')
+def list_routes():
+    try:
+        rules = sorted([
+            {'rule': str(r.rule), 'endpoint': str(r.endpoint), 'methods': sorted(list(getattr(r, 'methods', []) or []))}
+            for r in app.url_map.iter_rules()
+        ], key=lambda x: x['rule'])
+    except Exception:
+        rules = []
+    rows = ''.join(
+        f"<tr><td>{r.get('rule')}</td><td>{r.get('endpoint')}</td><td>{', '.join(r.get('methods', []))}</td></tr>"
+        for r in rules
+    )
+    return render_template_string("""
+    <div style="font-family:Segoe UI,Arial,sans-serif; max-width:900px; margin:20px auto; background:#fff; padding:18px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,.08)">
+      <h2>Registered Routes</h2>
+      <div style="margin-bottom:8px"><a href="/">Cards</a> | <a href="/recommendations">Recommendations</a> | <a href="/recommendations/debug">Recs Debug</a></div>
+      <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; width:100%">
+        <tr><th style="text-align:left; width:300px">Rule</th><th style="text-align:left">Endpoint</th><th style="text-align:left">Methods</th></tr>
+        {{rows|safe}}
+      </table>
+      <div style="margin-top:10px; color:#666; font-size:.8rem">Build {{BUILD_TIME}} • Commit {{BUILD_COMMIT[:8] if BUILD_COMMIT else 'unknown'}}</div>
     </div>
     """, rows=rows, BUILD_TIME=BUILD_TIME, BUILD_COMMIT=BUILD_COMMIT)
 
