@@ -5548,6 +5548,78 @@ def recommendations_performance_page():
     ''', total=total, wins=wins, losses=losses, pushes=pushes, staked=round(staked,2), pnl=round(pnl,2), roi=round(roi,4), last20=last20)
 
 
+@app.route('/recommendations/debug')
+def recommendations_debug():
+    """Lightweight diagnostics for the recommendations flow to avoid blind 500s."""
+    info = {}
+    try:
+        week_q = request.args.get('week')
+        sel_week = int(week_q) if (week_q and week_q.isdigit()) else None
+    except Exception:
+        sel_week = None
+    try:
+        cur_wk = _infer_current_week()
+    except Exception:
+        cur_wk = None
+    info['current_week'] = cur_wk
+    info['selected_week'] = sel_week
+    try:
+        info['recs_path'] = RECS_PATH
+        info['recs_exists'] = os.path.exists(RECS_PATH)
+        info['recs_size'] = os.path.getsize(RECS_PATH) if os.path.exists(RECS_PATH) else 0
+    except Exception as e:
+        info['recs_stat_error'] = str(e)
+    # Predictions snapshot
+    try:
+        cnt_all = len(pred_df)
+        cnt_2025 = int((pred_df.get('season',0)==2025).sum()) if 'season' in pred_df.columns else cnt_all
+        info['pred_df_counts'] = {'all': cnt_all, 'y2025': cnt_2025}
+        if sel_week is not None and 'week' in pred_df.columns:
+            cnt_wk = int(((pred_df.get('season',0)==2025) & (pred_df['week']==int(sel_week))).sum())
+            info['pred_df_counts']['week'] = cnt_wk
+    except Exception as e:
+        info['pred_df_error'] = str(e)
+    # Attempt compute
+    try:
+        recs = compute_recommendations(
+            week=sel_week,
+            bankroll=float(request.args.get('bankroll') or 1000),
+            kelly_factor=float(request.args.get('kelly') or 0.5),
+            ev_threshold=float(request.args.get('ev') or 0.02),
+            min_spread_edge_pts=float(request.args.get('min_spread_edge_pts') or 0.0),
+            min_total_edge_pts=float(request.args.get('min_total_edge_pts') or 0.0),
+            min_prob=(float(request.args.get('min_prob')) if (request.args.get('min_prob') not in (None, '')) else None),
+            max_sigma_margin=(float(request.args.get('max_sigma_margin')) if (request.args.get('max_sigma_margin') not in (None, '')) else None),
+            allowed_conferences=request.args.get('allowed_conferences',''),
+        )
+        info['compute'] = {'count': len(recs)}
+        # include one sample for shape
+        if recs:
+            sample = recs[0].copy()
+            # avoid dumping huge floats
+            for k in ['edge','kelly_f','model_prob','implied_prob']:
+                if k in sample and isinstance(sample[k], float):
+                    sample[k] = round(sample[k], 4)
+            info['compute']['sample'] = sample
+    except Exception as e:
+        import traceback
+        info['compute_error'] = str(e)
+        info['trace'] = traceback.format_exc()[-2000:]
+    # Render minimal HTML
+    rows = ''.join(f"<tr><td>{k}</td><td><pre style='white-space:pre-wrap'>{v}</pre></td></tr>" for k,v in info.items())
+    return render_template_string("""
+    <div style="font-family:Segoe UI,Arial,sans-serif; max-width:1100px; margin:20px auto; background:#fff; padding:18px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,.08)">
+      <h2>Recommendations Debug</h2>
+      <div style="margin-bottom:8px"><a href="/">Cards</a> | <a href="/recommendations">Recommendations</a></div>
+      <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; width:100%">
+        <tr><th style="text-align:left; width:240px">Key</th><th style="text-align:left">Value</th></tr>
+        {{rows|safe}}
+      </table>
+      <div style="margin-top:10px; color:#666; font-size:.8rem">Built {{BUILD_TIME}} • Commit {{BUILD_COMMIT[:8] if BUILD_COMMIT else 'unknown'}}</div>
+    </div>
+    """, rows=rows, BUILD_TIME=BUILD_TIME, BUILD_COMMIT=BUILD_COMMIT)
+
+
 def _do_refresh(quick: bool):
     """Execute the refresh pipeline and return (payload_dict, status_code)."""
     base_dir = os.path.dirname(os.path.abspath(__file__))  # .../NCAFCompare
