@@ -51,32 +51,37 @@ import glob
 
 app = Flask(__name__)
 
-# Only allow registering the two public routes; skip all others
+# Route registration filter: relaxed by default to avoid accidental 404s in prod
 _orig_add_url_rule = app.add_url_rule
 def _filtered_add_url_rule(rule, endpoint=None, view_func=None, provide_automatic_options=None, **options):
     try:
-        # Publicly exposed routes (keep surface small but include diagnostics)
+        # If LIMIT_ROUTES is disabled (default), pass-through and register all routes.
+        limit_flag = str(os.environ.get('LIMIT_ROUTES', '0')).strip().lower()
+        if limit_flag in ('0', 'false', 'no', ''):
+            return _orig_add_url_rule(rule, endpoint=endpoint, view_func=view_func,
+                                      provide_automatic_options=provide_automatic_options, **options)
+
+        # Otherwise, keep a small allowlist (main pages + diagnostics + static)
         allowed = {
             '/',
             '/recommendations',
             '/recommendations/debug',
             '/favicon.ico',
-            # Deploy diagnostics (used by wsgi injector) and local route map
             '/which-app',
             '/deploy-info',
             '/routes',
-            # Common trailing-slash variants to be safe
             '/recommendations/',
             '/recommendations/debug/',
         }
-        if rule in allowed or rule.startswith('/static'):
+        if rule in allowed or (isinstance(rule, str) and rule.startswith('/static')):
             return _orig_add_url_rule(rule, endpoint=endpoint, view_func=view_func,
                                       provide_automatic_options=provide_automatic_options, **options)
-        # Skip registration for all other routes
+        # Skip registration for all other routes when limiting is enabled
         return None
     except Exception:
-        # If anything goes wrong, default to skipping to avoid exposing routes
-        return None
+        # On any error, register the route to avoid breaking the app
+        return _orig_add_url_rule(rule, endpoint=endpoint, view_func=view_func,
+                                  provide_automatic_options=provide_automatic_options, **options)
 app.add_url_rule = _filtered_add_url_rule
 
 # Removed: /api/ping
