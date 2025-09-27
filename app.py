@@ -5108,52 +5108,52 @@ def recommendations_page():
     # Build enrichment and compute result text when actuals exist (unless provided by cache)
     if enriched is None:
         enriched = []
-    for rec in recs:
-        key = (rec['season'], rec['week'], rec['home_team'], rec['away_team'])
-        row = idx.get(key)
-        tier, score = _compute_confidence_tier(rec, row)
-        start_iso, sort_ts, display_time = _parse_start_ts(row) if row is not None else ('', None, '')
-        # Determine result for settled games
-        result_txt = '—'
-        try:
-            if row is not None and pd.notna(row.get('actual_home_points')) and pd.notna(row.get('actual_away_points')):
-                ah = float(row.get('actual_home_points'))
-                aa = float(row.get('actual_away_points'))
-                if rec.get('market') == 'ML':
-                    if rec.get('side') == 'Home':
-                        result_txt = 'Win' if ah > aa else ('Loss' if ah < aa else 'Push')
-                    else:
-                        result_txt = 'Win' if aa > ah else ('Loss' if aa < ah else 'Push')
-                elif rec.get('market') == 'Spread' and rec.get('line') is not None:
-                    # Assume stored line is the home spread value
-                    line = float(rec.get('line'))
-                    margin = ah - aa
-                    if rec.get('side') == 'Home':
-                        diff = margin - line
-                    else:
-                        # Away spread is negative of home spread
-                        diff = (aa - ah) - (-line)
-                    result_txt = 'Win' if diff > 0 else ('Loss' if diff < 0 else 'Push')
-                elif rec.get('market') == 'Total' and rec.get('line') is not None:
-                    total = ah + aa
-                    line = float(rec.get('line'))
-                    if rec.get('side') == 'Over':
-                        result_txt = 'Win' if total > line else ('Loss' if total < line else 'Push')
-                    else:
-                        result_txt = 'Win' if total < line else ('Loss' if total > line else 'Push')
-        except Exception:
+        for rec in recs:
+            key = (rec['season'], rec['week'], rec['home_team'], rec['away_team'])
+            row = idx.get(key)
+            tier, score = _compute_confidence_tier(rec, row)
+            start_iso, sort_ts, display_time = _parse_start_ts(row) if row is not None else ('', None, '')
+            # Determine result for settled games
             result_txt = '—'
-        # Derive a date-only string like the NFL page (YYYY-MM-DD)
-        display_date = ''
-        try:
-            if start_iso:
-                ds = pd.to_datetime(start_iso)
-                display_date = ds.strftime('%Y-%m-%d')
-            elif display_time:
-                display_date = str(display_time).split(' ')[0]
-        except Exception:
-            display_date = display_time or ''
-        enriched.append({**rec, 'confidence': tier, 'confidence_score': score, 'start_iso': start_iso, 'display_time': display_time, 'display_date': display_date, 'sort_ts': sort_ts, 'result_txt': result_txt})
+            try:
+                if row is not None and pd.notna(row.get('actual_home_points')) and pd.notna(row.get('actual_away_points')):
+                    ah = float(row.get('actual_home_points'))
+                    aa = float(row.get('actual_away_points'))
+                    if rec.get('market') == 'ML':
+                        if rec.get('side') == 'Home':
+                            result_txt = 'Win' if ah > aa else ('Loss' if ah < aa else 'Push')
+                        else:
+                            result_txt = 'Win' if aa > ah else ('Loss' if aa < ah else 'Push')
+                    elif rec.get('market') == 'Spread' and rec.get('line') is not None:
+                        # Assume stored line is the home spread value
+                        line = float(rec.get('line'))
+                        margin = ah - aa
+                        if rec.get('side') == 'Home':
+                            diff = margin - line
+                        else:
+                            # Away spread is negative of home spread
+                            diff = (aa - ah) - (-line)
+                        result_txt = 'Win' if diff > 0 else ('Loss' if diff < 0 else 'Push')
+                    elif rec.get('market') == 'Total' and rec.get('line') is not None:
+                        total = ah + aa
+                        line = float(rec.get('line'))
+                        if rec.get('side') == 'Over':
+                            result_txt = 'Win' if total > line else ('Loss' if total < line else 'Push')
+                        else:
+                            result_txt = 'Win' if total < line else ('Loss' if total > line else 'Push')
+            except Exception:
+                result_txt = '—'
+            # Derive a date-only string like the NFL page (YYYY-MM-DD)
+            display_date = ''
+            try:
+                if start_iso:
+                    ds = pd.to_datetime(start_iso)
+                    display_date = ds.strftime('%Y-%m-%d')
+                elif display_time:
+                    display_date = str(display_time).split(' ')[0]
+            except Exception:
+                display_date = display_time or ''
+            enriched.append({**rec, 'confidence': tier, 'confidence_score': score, 'start_iso': start_iso, 'display_time': display_time, 'display_date': display_date, 'sort_ts': sort_ts, 'result_txt': result_txt})
     # Write to cache
     try:
         if recs_source == 'log':
