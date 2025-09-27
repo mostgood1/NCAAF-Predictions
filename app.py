@@ -5573,6 +5573,19 @@ def recommendations_page():
     except Exception as e:
         # Failsafe: return a friendly diagnostics page instead of a 500 so we can see the error in prod
         import traceback as _tb
+        # Graceful fallback: if not already on source=log, redirect there to avoid user-visible 500s
+        try:
+            src_now = (request.args.get('source') or '').strip().lower()
+            if src_now != 'log':
+                # preserve week/sort when possible
+                params = {}
+                wq = request.args.get('week'); sq = request.args.get('sort')
+                if wq: params['week'] = wq
+                if sq: params['sort'] = sq
+                params['source'] = 'log'
+                return redirect(url_for('recommendations_page', **params)), 302
+        except Exception:
+            pass
         err = str(e)
         trace = _tb.format_exc()
         # keep it short to avoid huge responses
