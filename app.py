@@ -4,7 +4,16 @@ import os
 # -------------------- Build / Version Introspection --------------------
 import time as _time
 def _get_git_commit() -> str:
+    """Best-effort commit detection.
+    Prefer Render's env vars when available; otherwise fall back to scanning .git.
+    """
     try:
+        # 1) Render environment variables (most reliable in production)
+        for key in ('RENDER_GIT_COMMIT', 'RENDER_GIT_COMMIT_SHA', 'RENDER_GIT_COMMIT_ID', 'GIT_COMMIT', 'COMMIT_SHA'):
+            val = os.environ.get(key)
+            if val and isinstance(val, str) and len(val) >= 7:
+                return val.strip()[:40]
+        # 2) Local dev: scan .git directory
         base = os.path.dirname(os.path.abspath(__file__))
         for _ in range(5):
             cand = os.path.join(base, '.git')
