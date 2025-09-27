@@ -94,6 +94,27 @@ def _filtered_add_url_rule(rule, endpoint=None, view_func=None, provide_automati
                                   provide_automatic_options=provide_automatic_options, **options)
 app.add_url_rule = _filtered_add_url_rule
 
+# Global 500 handler to avoid raw 500s on key pages (especially /recommendations)
+@app.errorhandler(500)
+def _handle_500(e):
+    try:
+        # If the failing request targets recommendations, try a safe redirect to log source
+        from flask import request as _rq, redirect as _redir, url_for as _url
+        path = _rq.path or ''
+        if path.rstrip('/') == '/recommendations':
+            try:
+                q = dict(_rq.args)
+                if (q.get('source') or '').lower() != 'log':
+                    q['source'] = 'log'
+                    return _redir(_url('recommendations_page', **q)), 302
+            except Exception:
+                pass
+        # Otherwise return a compact diagnostics response instead of a 500
+        body = f"Internal error. Build {BUILD_TIME} • Commit {BUILD_COMMIT[:8] if BUILD_COMMIT else 'unknown'}\n"
+        return body, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+    except Exception:
+        return "Internal error", 200, {'Content-Type': 'text/plain; charset=utf-8'}
+
 # Removed: /api/ping
 
 # Resolve paths relative to this file, so it works from any working directory
@@ -5079,11 +5100,15 @@ def recommendations_page():
                     df_log = pd.DataFrame()
                 if 'week' in df_log.columns and 'season' in df_log.columns:
                     rows_wk = df_log[(pd.to_numeric(df_log['season'], errors='coerce') == 2025) & (pd.to_numeric(df_log['week'], errors='coerce') == int(sel_week))]
-                    # Use log only for past weeks unless explicitly overridden
-                    if not rows_wk.empty and (use_log or (current_wk is not None and int(sel_week) < int(current_wk))):
+                    # Prefer log if any rows exist for selected week unless the user explicitly forces compute
+                    if not rows_wk.empty and src_override != 'compute':
                         use_log = True
                     else:
-                        use_log = False
+                        # fallback: for past weeks, prefer log; for current/future, compute
+                        if not rows_wk.empty and (current_wk is not None and int(sel_week) < int(current_wk)):
+                            use_log = True
+                        else:
+                            use_log = False
         except Exception:
             use_log = False
 
