@@ -5100,8 +5100,9 @@ def recommendations_page():
         max_sigma_margin = float(max_sigma_margin) if str(max_sigma_margin).strip() not in ('', 'None') else None
         # With filters hidden, default to all conferences
         allowed_conferences = request.args.get('allowed_conferences') or request.form.get('allowed_conferences') or ''
-        # Optional: allow disabling augmentation of log results
-        augment_flag = str(request.args.get('augment') or request.form.get('augment') or '0').strip()
+        # Default augmentation ON: if log has few items, supplement with compute suggestions.
+        # Users can disable via ?augment=0
+        augment_flag = str(request.args.get('augment') or request.form.get('augment') or '1').strip()
         # Determine selected week (optional). If blank => auto upcoming
         sel_week = int(week_q) if (week_q and week_q.isdigit()) else None
         if sel_week is None:
@@ -5358,7 +5359,7 @@ def recommendations_page():
                     if dkey not in have:
                         more.append(r)
                 # Keep a sensible cap
-                more = more[:50]
+                more = more[:100]
         except Exception:
             more = []
         # Sorting primary: confidence tier order (High, Medium, Low) then edge desc
