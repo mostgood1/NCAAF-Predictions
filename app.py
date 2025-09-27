@@ -5060,6 +5060,20 @@ def recommendations_page():
         # Inputs
         week_q = request.args.get('week') or request.form.get('week')
         sort_q = request.args.get('sort') or request.form.get('sort') or 'confidence_then_edge'
+        # Short-circuit: if user explicitly requests compute, redirect to log to avoid any 500s
+        # This preserves week/sort and can be relaxed later when compute UI is stable.
+        try:
+            _src_now = (request.args.get('source') or request.form.get('source') or '').strip().lower()
+            if _src_now == 'compute':
+                _params = {}
+                if week_q:
+                    _params['week'] = week_q
+                if sort_q:
+                    _params['sort'] = sort_q
+                _params['source'] = 'log'
+                return redirect(url_for('recommendations_page', **_params)), 302
+        except Exception:
+            pass
         bankroll = float(request.args.get('bankroll') or request.form.get('bankroll') or 1000)
         kelly_factor = float(request.args.get('kelly') or request.form.get('kelly') or 0.5)
         ev_threshold = float(request.args.get('ev') or request.form.get('ev') or 0.02)
