@@ -5194,6 +5194,11 @@ def recommendations_page():
                 row = idx.get(key)
                 tier, score = _compute_confidence_tier(rec, row)
                 start_iso, sort_ts, display_time = _parse_start_ts(row) if row is not None else ('', None, '')
+                # Normalize numeric fields for safe templating
+                try:
+                    line_num = _safe_float(rec.get('line'))
+                except Exception:
+                    line_num = None
                 # Determine result for settled games
                 result_txt = '—'
                 try:
@@ -5205,9 +5210,9 @@ def recommendations_page():
                                 result_txt = 'Win' if ah > aa else ('Loss' if ah < aa else 'Push')
                             else:
                                 result_txt = 'Win' if aa > ah else ('Loss' if aa < ah else 'Push')
-                        elif rec.get('market') == 'Spread' and rec.get('line') is not None:
+                        elif rec.get('market') == 'Spread' and line_num is not None:
                             # Assume stored line is the home spread value
-                            line = float(rec.get('line'))
+                            line = float(line_num)
                             margin = ah - aa
                             if rec.get('side') == 'Home':
                                 diff = margin - line
@@ -5215,9 +5220,9 @@ def recommendations_page():
                                 # Away spread is negative of home spread
                                 diff = (aa - ah) - (-line)
                             result_txt = 'Win' if diff > 0 else ('Loss' if diff < 0 else 'Push')
-                        elif rec.get('market') == 'Total' and rec.get('line') is not None:
+                        elif rec.get('market') == 'Total' and line_num is not None:
                             total = ah + aa
-                            line = float(rec.get('line'))
+                            line = float(line_num)
                             if rec.get('side') == 'Over':
                                 result_txt = 'Win' if total > line else ('Loss' if total < line else 'Push')
                             else:
@@ -5234,7 +5239,7 @@ def recommendations_page():
                         display_date = str(display_time).split(' ')[0]
                 except Exception:
                     display_date = display_time or ''
-                enriched.append({**rec, 'confidence': tier, 'confidence_score': score, 'start_iso': start_iso, 'display_time': display_time, 'display_date': display_date, 'sort_ts': sort_ts, 'result_txt': result_txt})
+                enriched.append({**rec, 'line_num': line_num, 'confidence': tier, 'confidence_score': score, 'start_iso': start_iso, 'display_time': display_time, 'display_date': display_date, 'sort_ts': sort_ts, 'result_txt': result_txt})
         # Write to cache
         try:
             if recs_source == 'log':
@@ -5460,7 +5465,7 @@ def recommendations_page():
             <tr>
                 <td>{{r.away_team}} @ {{r.home_team}}</td>
                 <td>{% if r.market=='ML' %}MONEYLINE{% elif r.market=='Spread' %}SPREAD{% elif r.market=='Total' %}TOTALS{% else %}{{ r.market|upper }}{% endif %}</td>
-                <td>{% if r.market=='ML' %}{{ (r.home_team ~ ' ML') if r.side=='Home' else (r.away_team ~ ' ML') }}<span class="pill pill-high">High</span>{% elif r.market=='Spread' %}{{ (r.home_team if r.side=='Home' else r.away_team) }} {% if r.line is not none %}{{ '%+g' % r.line if r.side=='Home' else '%+g' % (-r.line) }}{% endif %} <span class="pill pill-high">High</span>{% else %}{{ r.side }} {% if r.line is not none %}{{ r.line }}{% endif %} <span class="pill pill-high">High</span>{% endif %}</td>
+                <td>{% if r.market=='ML' %}{{ (r.home_team ~ ' ML') if r.side=='Home' else (r.away_team ~ ' ML') }}<span class="pill pill-high">High</span>{% elif r.market=='Spread' %}{{ (r.home_team if r.side=='Home' else r.away_team) }} {% if r.line_num is not none %}{{ '%+g' % r.line_num if r.side=='Home' else '%+g' % (-r.line_num) }}{% endif %} <span class="pill pill-high">High</span>{% else %}{{ r.side }} {% if r.line_num is not none %}{{ r.line_num }}{% endif %} <span class="pill pill-high">High</span>{% endif %}</td>
                 <td>{{r.price_american}}</td>
                 <td>{{'%0.1f'%(r.edge*100) if r.edge is not none else ''}}%</td>
                 <td>{{r.result_txt}}</td>
@@ -5476,7 +5481,7 @@ def recommendations_page():
             <tr>
                 <td>{{r.away_team}} @ {{r.home_team}}</td>
                 <td>{% if r.market=='ML' %}MONEYLINE{% elif r.market=='Spread' %}SPREAD{% elif r.market=='Total' %}TOTALS{% else %}{{ r.market|upper }}{% endif %}</td>
-                <td>{% if r.market=='ML' %}{{ (r.home_team ~ ' ML') if r.side=='Home' else (r.away_team ~ ' ML') }}<span class="pill pill-medium">Medium</span>{% elif r.market=='Spread' %}{{ (r.home_team if r.side=='Home' else r.away_team) }} {% if r.line is not none %}{{ '%+g' % r.line if r.side=='Home' else '%+g' % (-r.line) }}{% endif %} <span class="pill pill-medium">Medium</span>{% else %}{{ r.side }} {% if r.line is not none %}{{ r.line }}{% endif %} <span class="pill pill-medium">Medium</span>{% endif %}</td>
+                <td>{% if r.market=='ML' %}{{ (r.home_team ~ ' ML') if r.side=='Home' else (r.away_team ~ ' ML') }}<span class="pill pill-medium">Medium</span>{% elif r.market=='Spread' %}{{ (r.home_team if r.side=='Home' else r.away_team) }} {% if r.line_num is not none %}{{ '%+g' % r.line_num if r.side=='Home' else '%+g' % (-r.line_num) }}{% endif %} <span class="pill pill-medium">Medium</span>{% else %}{{ r.side }} {% if r.line_num is not none %}{{ r.line_num }}{% endif %} <span class="pill pill-medium">Medium</span>{% endif %}</td>
                 <td>{{r.price_american}}</td>
                 <td>{{'%0.1f'%(r.edge*100) if r.edge is not none else ''}}%</td>
                 <td>{{r.result_txt}}</td>
@@ -5492,7 +5497,7 @@ def recommendations_page():
             <tr>
                 <td>{{r.away_team}} @ {{r.home_team}}</td>
                 <td>{% if r.market=='ML' %}MONEYLINE{% elif r.market=='Spread' %}SPREAD{% elif r.market=='Total' %}TOTALS{% else %}{{ r.market|upper }}{% endif %}</td>
-                <td>{% if r.market=='ML' %}{{ (r.home_team ~ ' ML') if r.side=='Home' else (r.away_team ~ ' ML') }}<span class="pill pill-low">Low</span>{% elif r.market=='Spread' %}{{ (r.home_team if r.side=='Home' else r.away_team) }} {% if r.line is not none %}{{ '%+g' % r.line if r.side=='Home' else '%+g' % (-r.line) }}{% endif %} <span class="pill pill-low">Low</span>{% else %}{{ r.side }} {% if r.line is not none %}{{ r.line }}{% endif %} <span class="pill pill-low">Low</span>{% endif %}</td>
+                <td>{% if r.market=='ML' %}{{ (r.home_team ~ ' ML') if r.side=='Home' else (r.away_team ~ ' ML') }}<span class="pill pill-low">Low</span>{% elif r.market=='Spread' %}{{ (r.home_team if r.side=='Home' else r.away_team) }} {% if r.line_num is not none %}{{ '%+g' % r.line_num if r.side=='Home' else '%+g' % (-r.line_num) }}{% endif %} <span class="pill pill-low">Low</span>{% else %}{{ r.side }} {% if r.line_num is not none %}{{ r.line_num }}{% endif %} <span class="pill pill-low">Low</span>{% endif %}</td>
                 <td>{{r.price_american}}</td>
                 <td>{{'%0.1f'%(r.edge*100) if r.edge is not none else ''}}%</td>
                 <td>{{r.result_txt}}</td>
@@ -5508,7 +5513,7 @@ def recommendations_page():
             <tr>
                 <td>{{r.away_team}} @ {{r.home_team}}</td>
                 <td>{{r.market}}</td>
-                <td>{{r.side}}{% if r.line is defined and r.line is not none %} {{r.line}}{% endif %}{% if r.confidence %} {{r.confidence}}{% endif %}</td>
+                <td>{{r.side}}{% if r.line_num is not none %} {{r.line_num}}{% endif %}{% if r.confidence %} {{r.confidence}}{% endif %}</td>
                 <td>{{r.price_american}}</td>
                 <td>{{'%0.1f'%(r.edge*100) if r.edge is not none else ''}}%</td>
                 <td>${{'%0.2f'%r.stake}}</td>
