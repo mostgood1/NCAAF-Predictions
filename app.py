@@ -2514,45 +2514,46 @@ def compute_recommendations(
             away_ml = _safe_float(odds.get('awayMoneyline'))
             if home_ml is not None:
                 p_home = p_home_model
-                dec, _ = american_to_decimal(home_ml)
-                if dec:
-                    # Side-level min prob filter
-                    if min_prob is not None and p_home is not None and p_home < float(min_prob):
-                        pass  # below threshold; skip
-                    else:
-                        kf = None
-                        # Skip extreme longshots unless model prob decent
-                        if not (dec > longshot_cap_odds and p_home < min_prob_for_longshot):
-                            kf = kelly_fraction(p_home, dec)
-                            kf = min(kf, kelly_cap)
-                            # Scale down for longshots
-                            if dec > longshot_cap_odds:
-                                kf *= 0.25
-                        ev = p_home * (dec - 1) - (1 - p_home)
-                        if ev > ev_threshold and kf is not None and kf > 0:
-                            stake = round(bankroll * kf * kelly_factor, 2)
-                            recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'ML', 'side': 'Home', 'provider': provider, 'price_american': int(home_ml), 'model_prob': round(p_home,4), 'implied_prob': round(1/(dec),4), 'edge': round(ev,4), 'kelly_f': round(kf,4), 'stake': stake})
+                # Only proceed if we have a valid probability
+                if p_home is not None:
+                    dec, _ = american_to_decimal(home_ml)
+                    if dec:
+                        # Side-level min prob filter
+                        if not (min_prob is not None and p_home < float(min_prob)):
+                            kf = None
+                            # Skip extreme longshots unless model prob decent; guard against None
+                            is_low_prob_longshot = (dec > longshot_cap_odds) and (p_home is not None and p_home < min_prob_for_longshot)
+                            if not is_low_prob_longshot:
+                                kf = kelly_fraction(p_home, dec)
+                                kf = min(kf, kelly_cap)
+                                # Scale down for longshots
+                                if dec > longshot_cap_odds:
+                                    kf *= 0.25
+                            ev = p_home * (dec - 1) - (1 - p_home)
+                            if ev > ev_threshold and kf is not None and kf > 0:
+                                stake = round(bankroll * kf * kelly_factor, 2)
+                                recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'ML', 'side': 'Home', 'provider': provider, 'price_american': int(home_ml), 'model_prob': round(p_home,4), 'implied_prob': round(1/(dec),4), 'edge': round(ev,4), 'kelly_f': round(kf,4), 'stake': stake})
             if away_ml is not None:
-                p_away = None
-                try:
-                    p_away = max(0.0, 1.0 - (p_home_model if p_home_model is not None else _phi(pred_margin / sigma_m)))
-                except Exception:
+                # Derive away probability from home if available; otherwise skip ML away
+                if p_home_model is not None:
+                    p_away = max(0.0, 1.0 - p_home_model)
+                else:
                     p_away = None
-                dec, _ = american_to_decimal(away_ml)
-                if dec:
-                    if min_prob is not None and p_away is not None and p_away < float(min_prob):
-                        pass
-                    else:
-                        kf = None
-                        if not (dec > longshot_cap_odds and p_away < min_prob_for_longshot):
-                            kf = kelly_fraction(p_away, dec)
-                            kf = min(kf, kelly_cap)
-                            if dec > longshot_cap_odds:
-                                kf *= 0.25
-                        ev = p_away * (dec - 1) - (1 - p_away)
-                        if ev > ev_threshold and kf is not None and kf > 0:
-                            stake = round(bankroll * kf * kelly_factor, 2)
-                            recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'ML', 'side': 'Away', 'provider': provider, 'price_american': int(away_ml), 'model_prob': round(p_away,4), 'implied_prob': round(1/(dec),4), 'edge': round(ev,4), 'kelly_f': round(kf,4), 'stake': stake})
+                if p_away is not None:
+                    dec, _ = american_to_decimal(away_ml)
+                    if dec:
+                        if not (min_prob is not None and p_away < float(min_prob)):
+                            kf = None
+                            is_low_prob_longshot = (dec > longshot_cap_odds) and (p_away is not None and p_away < min_prob_for_longshot)
+                            if not is_low_prob_longshot:
+                                kf = kelly_fraction(p_away, dec)
+                                kf = min(kf, kelly_cap)
+                                if dec > longshot_cap_odds:
+                                    kf *= 0.25
+                            ev = p_away * (dec - 1) - (1 - p_away)
+                            if ev > ev_threshold and kf is not None and kf > 0:
+                                stake = round(bankroll * kf * kelly_factor, 2)
+                                recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'ML', 'side': 'Away', 'provider': provider, 'price_american': int(away_ml), 'model_prob': round(p_away,4), 'implied_prob': round(1/(dec),4), 'edge': round(ev,4), 'kelly_f': round(kf,4), 'stake': stake})
             # Spread / Totals
             spread = odds.get('spread')
             try:
@@ -2561,7 +2562,7 @@ def compute_recommendations(
                 spread_val = None
             ou_val = _safe_float(odds.get('overUnder'))
             dec_110 = 1 + (100/110)
-            if spread_val is not None:
+            if spread_val is not None and sigma_m not in (None, 0, 0.0) and not (isinstance(sigma_m, float) and math.isnan(sigma_m)):
                 p_home_cover = _phi((pred_margin - spread_val) / sigma_m)
                 ev_home = p_home_cover * (dec_110 - 1) - (1 - p_home_cover)
                 kf_home = min(kelly_fraction(p_home_cover, dec_110), kelly_cap)
@@ -5064,17 +5065,21 @@ def recommendations_page():
         if cached and isinstance(cached.get('enriched'), list) and (now_ts - cached.get('ts', 0) <= cache_ttl):
             enriched = cached['enriched']
         else:
-            recs = compute_recommendations(
-                week=sel_week,
-                bankroll=bankroll,
-                kelly_factor=kelly_factor,
-                ev_threshold=ev_threshold,
-                min_spread_edge_pts=min_spread_edge_pts,
-                min_total_edge_pts=min_total_edge_pts,
-                min_prob=min_prob,
-                max_sigma_margin=max_sigma_margin,
-                allowed_conferences=allowed_conferences,
-            )
+            try:
+                recs = compute_recommendations(
+                    week=sel_week,
+                    bankroll=bankroll,
+                    kelly_factor=kelly_factor,
+                    ev_threshold=ev_threshold,
+                    min_spread_edge_pts=min_spread_edge_pts,
+                    min_total_edge_pts=min_total_edge_pts,
+                    min_prob=min_prob,
+                    max_sigma_margin=max_sigma_margin,
+                    allowed_conferences=allowed_conferences,
+                )
+            except Exception as e:
+                app.logger.exception(f"compute_recommendations failed for week {sel_week}: {e}")
+                recs = []
     # Attach confidence + timing like API (limit to selected week for speed)
     idx = {}
     try:
