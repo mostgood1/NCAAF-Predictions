@@ -5447,8 +5447,16 @@ def recommendations_page():
                     roi = (pnl / staked) if staked>0 else 0.0
                     return {'count':len(df_), 'wins':wins,'losses':losses,'pushes':pushes,'acc':acc,'stake':staked,'pnl':pnl,'roi':roi}
                 overall_stats = _agg(perf_df)
-                for t in ['High','Medium','Low']:
-                    tier_stats[t] = _agg(perf_df[perf_df.get('confidence','')==t])
+                if 'confidence' in perf_df.columns:
+                    for t in ['High','Medium','Low']:
+                        try:
+                            tier_stats[t] = _agg(perf_df[perf_df['confidence'] == t])
+                        except Exception:
+                            tier_stats[t] = _agg(perf_df.iloc[0:0])
+                else:
+                    # No confidence column; return empty aggregates for each tier
+                    for t in ['High','Medium','Low']:
+                        tier_stats[t] = _agg(perf_df.iloc[0:0])
                 # Weekly reconciliation (season 2025 only if present)
                 dfw = perf_df.copy()
                 if 'season' in dfw.columns:
