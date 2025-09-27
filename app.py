@@ -4964,356 +4964,357 @@ def recommendations_performance():
 
 @app.route('/recommendations', methods=['GET', 'POST'])
 def recommendations_page():
-    # Server-rendered grouped layout mimicking external recommendations page
-    # Build weeks list robustly even if column is missing or mixed type
     try:
-        if isinstance(pred_df, pd.DataFrame) and 'week' in pred_df.columns:
-            _wser = pd.to_numeric(pred_df['week'], errors='coerce').dropna().unique().tolist()
-            weeks = sorted(int(w) for w in _wser if pd.notna(w))
-        else:
-            weeks = []
-    except Exception:
-        weeks = []
-    # Inputs
-    week_q = request.args.get('week') or request.form.get('week')
-    sort_q = request.args.get('sort') or request.form.get('sort') or 'confidence_then_edge'
-    bankroll = float(request.args.get('bankroll') or request.form.get('bankroll') or 1000)
-    kelly_factor = float(request.args.get('kelly') or request.form.get('kelly') or 0.5)
-    ev_threshold = float(request.args.get('ev') or request.form.get('ev') or 0.02)
-    # New filter inputs with conservative defaults
-    min_spread_edge_pts = float(request.args.get('min_spread_edge_pts') or request.form.get('min_spread_edge_pts') or 2.5)
-    min_total_edge_pts = float(request.args.get('min_total_edge_pts') or request.form.get('min_total_edge_pts') or 3.0)
-    min_prob = request.args.get('min_prob') or request.form.get('min_prob') or ''
-    min_prob = float(min_prob) if str(min_prob).strip() not in ('', 'None') else None
-    max_sigma_margin = request.args.get('max_sigma_margin') or request.form.get('max_sigma_margin') or ''
-    max_sigma_margin = float(max_sigma_margin) if str(max_sigma_margin).strip() not in ('', 'None') else None
-    # With filters hidden, default to all conferences
-    allowed_conferences = request.args.get('allowed_conferences') or request.form.get('allowed_conferences') or ''
-    # Determine selected week (optional). If blank => auto upcoming
-    sel_week = int(week_q) if (week_q and week_q.isdigit()) else None
-    if sel_week is None:
-        sel_week = _infer_current_week()
-    # Decide data source: for past weeks with logged picks, prefer log; else compute fresh
-    now_ts = time.time()
-    try:
-        current_wk = _infer_current_week()
-    except Exception:
-        current_wk = None
-    # Optional override via query: source=log|compute
-    src_override = (request.args.get('source') or request.form.get('source') or '').strip().lower()
-    use_log = (src_override == 'log')
-    recs = []
-    recs_source = 'compute'
-    # If RECS file has entries for the selected week (typically past weeks), load from there
-    try:
-        if sel_week is not None and os.path.exists(RECS_PATH):
-            # Safely read log if non-empty; else treat as empty
-            try:
-                if os.path.getsize(RECS_PATH) > 0:
-                    df_log = pd.read_csv(RECS_PATH)
-                else:
-                    df_log = pd.DataFrame()
-            except Exception:
-                df_log = pd.DataFrame()
-            if 'week' in df_log.columns and 'season' in df_log.columns:
-                rows_wk = df_log[(pd.to_numeric(df_log['season'], errors='coerce') == 2025) & (pd.to_numeric(df_log['week'], errors='coerce') == int(sel_week))]
-                # Use log only for past weeks unless explicitly overridden
-                if not rows_wk.empty and (use_log or (current_wk is not None and int(sel_week) < int(current_wk))):
-                    use_log = True
-                else:
-                    use_log = False
-    except Exception:
-        use_log = False
-
-    enriched = None
-    cache_ttl = float(os.environ.get('RECOMMENDATIONS_CACHE_TTL_SEC', '60'))
-    if use_log:
-        recs_source = 'log'
+        # Server-rendered grouped layout mimicking external recommendations page
+        # Build weeks list robustly even if column is missing or mixed type
         try:
-            mtime = os.path.getmtime(RECS_PATH)
+            if isinstance(pred_df, pd.DataFrame) and 'week' in pred_df.columns:
+                _wser = pd.to_numeric(pred_df['week'], errors='coerce').dropna().unique().tolist()
+                weeks = sorted(int(w) for w in _wser if pd.notna(w))
+            else:
+                weeks = []
         except Exception:
-            mtime = None
-        cache_key = ('log', int(sel_week))
-        cached = _RECOMMENDATIONS_CACHE.get(cache_key)
-        if cached and cached.get('mtime') == mtime and isinstance(cached.get('enriched'), list):
-            enriched = cached['enriched']
-        else:
-            # Build recs from log for selected week
-            try:
-                if os.path.exists(RECS_PATH) and os.path.getsize(RECS_PATH) > 0:
-                    # Use only essential columns if present
-                    cols = ['season','week','home_team','away_team','market','side','price_american','line','model_prob','implied_prob','edge','kelly_f','stake','provider','status','result']
-                    try:
-                        _hdr = pd.read_csv(RECS_PATH, nrows=1)
-                        usecols = [c for c in cols if c in _hdr.columns]
-                    except Exception:
-                        usecols = []
-                    df_log = pd.read_csv(RECS_PATH, usecols=usecols) if usecols else pd.read_csv(RECS_PATH)
-                else:
+            weeks = []
+        # Inputs
+        week_q = request.args.get('week') or request.form.get('week')
+        sort_q = request.args.get('sort') or request.form.get('sort') or 'confidence_then_edge'
+        bankroll = float(request.args.get('bankroll') or request.form.get('bankroll') or 1000)
+        kelly_factor = float(request.args.get('kelly') or request.form.get('kelly') or 0.5)
+        ev_threshold = float(request.args.get('ev') or request.form.get('ev') or 0.02)
+        # New filter inputs with conservative defaults
+        min_spread_edge_pts = float(request.args.get('min_spread_edge_pts') or request.form.get('min_spread_edge_pts') or 2.5)
+        min_total_edge_pts = float(request.args.get('min_total_edge_pts') or request.form.get('min_total_edge_pts') or 3.0)
+        min_prob = request.args.get('min_prob') or request.form.get('min_prob') or ''
+        min_prob = float(min_prob) if str(min_prob).strip() not in ('', 'None') else None
+        max_sigma_margin = request.args.get('max_sigma_margin') or request.form.get('max_sigma_margin') or ''
+        max_sigma_margin = float(max_sigma_margin) if str(max_sigma_margin).strip() not in ('', 'None') else None
+        # With filters hidden, default to all conferences
+        allowed_conferences = request.args.get('allowed_conferences') or request.form.get('allowed_conferences') or ''
+        # Determine selected week (optional). If blank => auto upcoming
+        sel_week = int(week_q) if (week_q and week_q.isdigit()) else None
+        if sel_week is None:
+            sel_week = _infer_current_week()
+        # Decide data source: for past weeks with logged picks, prefer log; else compute fresh
+        now_ts = time.time()
+        try:
+            current_wk = _infer_current_week()
+        except Exception:
+            current_wk = None
+        # Optional override via query: source=log|compute
+        src_override = (request.args.get('source') or request.form.get('source') or '').strip().lower()
+        use_log = (src_override == 'log')
+        recs = []
+        recs_source = 'compute'
+        # If RECS file has entries for the selected week (typically past weeks), load from there
+        try:
+            if sel_week is not None and os.path.exists(RECS_PATH):
+                # Safely read log if non-empty; else treat as empty
+                try:
+                    if os.path.getsize(RECS_PATH) > 0:
+                        df_log = pd.read_csv(RECS_PATH)
+                    else:
+                        df_log = pd.DataFrame()
+                except Exception:
                     df_log = pd.DataFrame()
-            except Exception:
-                df_log = pd.DataFrame()
-            df_wk = df_log[(pd.to_numeric(df_log.get('season'), errors='coerce') == 2025) & (pd.to_numeric(df_log.get('week'), errors='coerce') == int(sel_week))] if not df_log.empty else pd.DataFrame()
-            # Convert to list of rec dicts compatible with enrichment
-            recs = []
-            if not df_wk.empty:
-                for _, r in df_wk.iterrows():
-                    recs.append({
-                        'season': int(_safe_float(r.get('season'), 2025) or 2025),
-                        'week': int(_safe_float(r.get('week'), sel_week) or sel_week or 0),
-                        'home_team': str(r.get('home_team')),
-                        'away_team': str(r.get('away_team')),
-                        'market': r.get('market'),
-                        'side': r.get('side'),
-                        'price_american': _safe_float(r.get('price_american')),
-                        'line': _safe_float(r.get('line')),
-                        'model_prob': _safe_float(r.get('model_prob')),
-                        'implied_prob': _safe_float(r.get('implied_prob')),
-                        'edge': _safe_float(r.get('edge')),
-                        'kelly_f': _safe_float(r.get('kelly_f')),
-                        'stake': _safe_float(r.get('stake')),
-                        'provider': r.get('provider'),
-                        'status': r.get('status'),
-                        'result': r.get('result'),
-                    })
-    else:
-        # Compute fresh recommendations (use cache when available)
-        wk_key = int(sel_week) if sel_week is not None else -1
-        cache_key = ('compute', wk_key, bankroll, kelly_factor, ev_threshold, min_spread_edge_pts, min_total_edge_pts, float(min_prob) if min_prob is not None else None, float(max_sigma_margin) if max_sigma_margin is not None else None, str(allowed_conferences or ''))
-        cached = _RECOMMENDATIONS_CACHE.get(cache_key)
-        if cached and isinstance(cached.get('enriched'), list) and (now_ts - cached.get('ts', 0) <= cache_ttl):
-            enriched = cached['enriched']
-        else:
+                if 'week' in df_log.columns and 'season' in df_log.columns:
+                    rows_wk = df_log[(pd.to_numeric(df_log['season'], errors='coerce') == 2025) & (pd.to_numeric(df_log['week'], errors='coerce') == int(sel_week))]
+                    # Use log only for past weeks unless explicitly overridden
+                    if not rows_wk.empty and (use_log or (current_wk is not None and int(sel_week) < int(current_wk))):
+                        use_log = True
+                    else:
+                        use_log = False
+        except Exception:
+            use_log = False
+
+        enriched = None
+        cache_ttl = float(os.environ.get('RECOMMENDATIONS_CACHE_TTL_SEC', '60'))
+        if use_log:
+            recs_source = 'log'
             try:
-                recs = compute_recommendations(
-                    week=sel_week,
-                    bankroll=bankroll,
-                    kelly_factor=kelly_factor,
-                    ev_threshold=ev_threshold,
-                    min_spread_edge_pts=min_spread_edge_pts,
-                    min_total_edge_pts=min_total_edge_pts,
-                    min_prob=min_prob,
-                    max_sigma_margin=max_sigma_margin,
-                    allowed_conferences=allowed_conferences,
-                )
-            except Exception as e:
-                app.logger.exception(f"compute_recommendations failed for week {sel_week}: {e}")
-                recs = []
-    # Attach confidence + timing like API (limit to selected week for speed)
-    idx = {}
-    try:
-        # Build a narrow base index with only required fields for enrichment
-        if isinstance(pred_df, pd.DataFrame):
-            base_cols = [c for c in ['season','week','home_team','away_team','start_date','start_date_api','actual_home_points','actual_away_points'] if c in pred_df.columns]
-            base = pred_df[base_cols].copy() if base_cols else pred_df.copy()
-            if 'season' in base.columns:
-                try:
-                    base = base[pd.to_numeric(base['season'], errors='coerce') == 2025]
-                except Exception:
-                    pass
-            if sel_week is not None and 'week' in base.columns:
-                try:
-                    base = base[pd.to_numeric(base['week'], errors='coerce') == int(sel_week)]
-                except Exception:
-                    pass
-            if not base.empty:
-                for _, r in base.iterrows():
-                    try:
-                        idx[(int(r['season']), int(r['week']), str(r['home_team']), str(r['away_team']))] = r
-                    except Exception:
-                        continue
-    except Exception:
-        pass
-    # Build enrichment and compute result text when actuals exist (unless provided by cache)
-    if enriched is None:
-        enriched = []
-        for rec in recs:
-            key = (rec['season'], rec['week'], rec['home_team'], rec['away_team'])
-            row = idx.get(key)
-            tier, score = _compute_confidence_tier(rec, row)
-            start_iso, sort_ts, display_time = _parse_start_ts(row) if row is not None else ('', None, '')
-            # Determine result for settled games
-            result_txt = '—'
-            try:
-                if row is not None and pd.notna(row.get('actual_home_points')) and pd.notna(row.get('actual_away_points')):
-                    ah = float(row.get('actual_home_points'))
-                    aa = float(row.get('actual_away_points'))
-                    if rec.get('market') == 'ML':
-                        if rec.get('side') == 'Home':
-                            result_txt = 'Win' if ah > aa else ('Loss' if ah < aa else 'Push')
-                        else:
-                            result_txt = 'Win' if aa > ah else ('Loss' if aa < ah else 'Push')
-                    elif rec.get('market') == 'Spread' and rec.get('line') is not None:
-                        # Assume stored line is the home spread value
-                        line = float(rec.get('line'))
-                        margin = ah - aa
-                        if rec.get('side') == 'Home':
-                            diff = margin - line
-                        else:
-                            # Away spread is negative of home spread
-                            diff = (aa - ah) - (-line)
-                        result_txt = 'Win' if diff > 0 else ('Loss' if diff < 0 else 'Push')
-                    elif rec.get('market') == 'Total' and rec.get('line') is not None:
-                        total = ah + aa
-                        line = float(rec.get('line'))
-                        if rec.get('side') == 'Over':
-                            result_txt = 'Win' if total > line else ('Loss' if total < line else 'Push')
-                        else:
-                            result_txt = 'Win' if total < line else ('Loss' if total > line else 'Push')
+                mtime = os.path.getmtime(RECS_PATH)
             except Exception:
-                result_txt = '—'
-            # Derive a date-only string like the NFL page (YYYY-MM-DD)
-            display_date = ''
-            try:
-                if start_iso:
-                    ds = pd.to_datetime(start_iso)
-                    display_date = ds.strftime('%Y-%m-%d')
-                elif display_time:
-                    display_date = str(display_time).split(' ')[0]
-            except Exception:
-                display_date = display_time or ''
-            enriched.append({**rec, 'confidence': tier, 'confidence_score': score, 'start_iso': start_iso, 'display_time': display_time, 'display_date': display_date, 'sort_ts': sort_ts, 'result_txt': result_txt})
-    # Write to cache
-    try:
-        if recs_source == 'log':
-            _RECOMMENDATIONS_CACHE[('log', int(sel_week))] = {'mtime': os.path.getmtime(RECS_PATH) if os.path.exists(RECS_PATH) else None, 'enriched': enriched}
-        else:
-            _RECOMMENDATIONS_CACHE[cache_key] = {'ts': now_ts, 'enriched': enriched}
-    except Exception:
-        pass
-    # Deduplicate recommendations (server page) by (season,week,home,away,market,side) keeping highest edge
-    dedup_page = {}
-    for r in enriched:
-        dkey = (r.get('season'), r.get('week'), r.get('home_team'), r.get('away_team'), r.get('market'), r.get('side'))
-        prev = dedup_page.get(dkey)
-        if prev is None or (r.get('edge') or 0) > (prev.get('edge') or 0):
-            dedup_page[dkey] = r
-    enriched = list(dedup_page.values())
-    # Sorting primary: confidence tier order (High, Medium, Low) then edge desc
-    def _tier_rank(t: str):
-        s = (t or '').lower()
-        if s == 'high': return 0
-        if s == 'medium': return 1
-        if s == 'low': return 2
-        return 3
-    if sort_q == 'edge_desc':
-        enriched.sort(key=lambda x: (-(x.get('edge') or 0.0)))
-    elif sort_q == 'time':
-        enriched.sort(key=lambda x: (x.get('sort_ts') is None, x.get('sort_ts') or 0.0))
-    elif sort_q == 'market':
-        # Group by market inside tiers using a stable order ML -> Spread -> Total, then EV desc
-        def _mkey(r):
-            m = str(r.get('market',''))
-            m_rank = {'ML':0,'Moneyline':0,'Spread':1,'Total':2}.get(m, 3)
-            return (m_rank, -(r.get('edge') or 0.0), r.get('sort_ts') is None, r.get('sort_ts') or 0.0)
-        enriched.sort(key=_mkey)
-    elif sort_q == 'bet_type':
-        def _bt_key(r):
-            m = str(r.get('market',''))
-            side = str(r.get('side',''))
-            m_rank = {'ML':0,'Moneyline':0,'Spread':1,'Total':2}.get(m, 3)
-            s_rank = {'Home':0,'Away':1,'Over':0,'Under':1}.get(side, 2)
-            return (m_rank, s_rank, -(r.get('edge') or 0.0))
-        enriched.sort(key=_bt_key)
-    else:  # confidence_then_edge default
-        enriched.sort(key=lambda x: (_tier_rank(x.get('confidence')), -(x.get('edge') or 0.0)))
-    # Group by tier (create 'Other' placeholder for future lower-confidence recs)
-    high = [r for r in enriched if r.get('confidence') == 'High']
-    medium = [r for r in enriched if r.get('confidence') == 'Medium']
-    low = [r for r in enriched if r.get('confidence') == 'Low']
-    other = []  # currently unused; kept to mirror external layout
-    # Performance summary from logged CSV
-    overall_stats = {}
-    tier_stats = {}
-    weekly_stats = []
-    open_count = 0
-    try:
-        if os.path.exists(RECS_PATH) and os.path.getsize(RECS_PATH) > 0:
-            perf_df = pd.read_csv(RECS_PATH)
-            # Coerce numeric
-            for col in ['stake','pnl','edge','kelly_f','model_prob','implied_prob','week','season']:
-                if col in perf_df.columns:
-                    perf_df[col] = pd.to_numeric(perf_df[col], errors='coerce')
-            # Recompute confidence if missing
-            if 'confidence' not in perf_df.columns and {'edge','kelly_f','model_prob'}.issubset(perf_df.columns):
-                perf_df['confidence'] = perf_df.apply(lambda r: _confidence_tier(r.get('edge'), r.get('kelly_f'), r.get('model_prob'))[0], axis=1)
-            def _agg(df_):
-                if df_.empty:
-                    return {'count':0,'wins':0,'losses':0,'pushes':0,'acc':0.0,'stake':0.0,'pnl':0.0,'roi':0.0}
-                wins = int((df_['result']=='win').sum()) if 'result' in df_.columns else 0
-                losses = int((df_['result']=='loss').sum()) if 'result' in df_.columns else 0
-                pushes = int((df_['result']=='push').sum()) if 'result' in df_.columns else 0
-                staked = float(df_['stake'].sum()) if 'stake' in df_.columns else 0.0
-                pnl = float(df_['pnl'].sum()) if 'pnl' in df_.columns else 0.0
-                acc = (wins / (wins+losses)) if (wins+losses)>0 else 0.0
-                roi = (pnl / staked) if staked>0 else 0.0
-                return {'count':len(df_), 'wins':wins,'losses':losses,'pushes':pushes,'acc':acc,'stake':staked,'pnl':pnl,'roi':roi}
-            overall_stats = _agg(perf_df)
-            for t in ['High','Medium','Low']:
-                tier_stats[t] = _agg(perf_df[perf_df.get('confidence','')==t])
-            # Weekly reconciliation (season 2025 only if present)
-            dfw = perf_df.copy()
-            if 'season' in dfw.columns:
+                mtime = None
+            cache_key = ('log', int(sel_week))
+            cached = _RECOMMENDATIONS_CACHE.get(cache_key)
+            if cached and cached.get('mtime') == mtime and isinstance(cached.get('enriched'), list):
+                enriched = cached['enriched']
+            else:
+                # Build recs from log for selected week
                 try:
-                    dfw_2025 = dfw[dfw['season']==2025]
-                    if not dfw_2025.empty:
-                        dfw = dfw_2025
-                except Exception:
-                    pass
-            # open vs closed
-            try:
-                open_count = int((dfw.get('status','')=='open').sum()) if 'status' in dfw.columns else 0
-            except Exception:
-                open_count = 0
-            # Group by week
-            if 'week' in dfw.columns:
-                try:
-                    grp = dfw.dropna(subset=['week']).groupby('week')
-                    stats = []
-                    for wk, g in grp:
-                        a = _agg(g)
+                    if os.path.exists(RECS_PATH) and os.path.getsize(RECS_PATH) > 0:
+                        # Use only essential columns if present
+                        cols = ['season','week','home_team','away_team','market','side','price_american','line','model_prob','implied_prob','edge','kelly_f','stake','provider','status','result']
                         try:
-                            wk_int = int(wk)
+                            _hdr = pd.read_csv(RECS_PATH, nrows=1)
+                            usecols = [c for c in cols if c in _hdr.columns]
                         except Exception:
-                            wk_int = wk
-                        a['week'] = wk_int
-                        stats.append(a)
-                    weekly_stats = sorted(stats, key=lambda x: x['week'])
+                            usecols = []
+                        df_log = pd.read_csv(RECS_PATH, usecols=usecols) if usecols else pd.read_csv(RECS_PATH)
+                    else:
+                        df_log = pd.DataFrame()
                 except Exception:
-                    weekly_stats = []
+                    df_log = pd.DataFrame()
+                df_wk = df_log[(pd.to_numeric(df_log.get('season'), errors='coerce') == 2025) & (pd.to_numeric(df_log.get('week'), errors='coerce') == int(sel_week))] if not df_log.empty else pd.DataFrame()
+                # Convert to list of rec dicts compatible with enrichment
+                recs = []
+                if not df_wk.empty:
+                    for _, r in df_wk.iterrows():
+                        recs.append({
+                            'season': int(_safe_float(r.get('season'), 2025) or 2025),
+                            'week': int(_safe_float(r.get('week'), sel_week) or sel_week or 0),
+                            'home_team': str(r.get('home_team')),
+                            'away_team': str(r.get('away_team')),
+                            'market': r.get('market'),
+                            'side': r.get('side'),
+                            'price_american': _safe_float(r.get('price_american')),
+                            'line': _safe_float(r.get('line')),
+                            'model_prob': _safe_float(r.get('model_prob')),
+                            'implied_prob': _safe_float(r.get('implied_prob')),
+                            'edge': _safe_float(r.get('edge')),
+                            'kelly_f': _safe_float(r.get('kelly_f')),
+                            'stake': _safe_float(r.get('stake')),
+                            'provider': r.get('provider'),
+                            'status': r.get('status'),
+                            'result': r.get('result'),
+                        })
         else:
+            # Compute fresh recommendations (use cache when available)
+            wk_key = int(sel_week) if sel_week is not None else -1
+            cache_key = ('compute', wk_key, bankroll, kelly_factor, ev_threshold, min_spread_edge_pts, min_total_edge_pts, float(min_prob) if min_prob is not None else None, float(max_sigma_margin) if max_sigma_margin is not None else None, str(allowed_conferences or ''))
+            cached = _RECOMMENDATIONS_CACHE.get(cache_key)
+            if cached and isinstance(cached.get('enriched'), list) and (now_ts - cached.get('ts', 0) <= cache_ttl):
+                enriched = cached['enriched']
+            else:
+                try:
+                    recs = compute_recommendations(
+                        week=sel_week,
+                        bankroll=bankroll,
+                        kelly_factor=kelly_factor,
+                        ev_threshold=ev_threshold,
+                        min_spread_edge_pts=min_spread_edge_pts,
+                        min_total_edge_pts=min_total_edge_pts,
+                        min_prob=min_prob,
+                        max_sigma_margin=max_sigma_margin,
+                        allowed_conferences=allowed_conferences,
+                    )
+                except Exception as e:
+                    app.logger.exception(f"compute_recommendations failed for week {sel_week}: {e}")
+                    recs = []
+        # Attach confidence + timing like API (limit to selected week for speed)
+        idx = {}
+        try:
+            # Build a narrow base index with only required fields for enrichment
+            if isinstance(pred_df, pd.DataFrame):
+                base_cols = [c for c in ['season','week','home_team','away_team','start_date','start_date_api','actual_home_points','actual_away_points'] if c in pred_df.columns]
+                base = pred_df[base_cols].copy() if base_cols else pred_df.copy()
+                if 'season' in base.columns:
+                    try:
+                        base = base[pd.to_numeric(base['season'], errors='coerce') == 2025]
+                    except Exception:
+                        pass
+                if sel_week is not None and 'week' in base.columns:
+                    try:
+                        base = base[pd.to_numeric(base['week'], errors='coerce') == int(sel_week)]
+                    except Exception:
+                        pass
+                if not base.empty:
+                    for _, r in base.iterrows():
+                        try:
+                            idx[(int(r['season']), int(r['week']), str(r['home_team']), str(r['away_team']))] = r
+                        except Exception:
+                            continue
+        except Exception:
+            pass
+        # Build enrichment and compute result text when actuals exist (unless provided by cache)
+        if enriched is None:
+            enriched = []
+            for rec in recs:
+                key = (rec['season'], rec['week'], rec['home_team'], rec['away_team'])
+                row = idx.get(key)
+                tier, score = _compute_confidence_tier(rec, row)
+                start_iso, sort_ts, display_time = _parse_start_ts(row) if row is not None else ('', None, '')
+                # Determine result for settled games
+                result_txt = '—'
+                try:
+                    if row is not None and pd.notna(row.get('actual_home_points')) and pd.notna(row.get('actual_away_points')):
+                        ah = float(row.get('actual_home_points'))
+                        aa = float(row.get('actual_away_points'))
+                        if rec.get('market') == 'ML':
+                            if rec.get('side') == 'Home':
+                                result_txt = 'Win' if ah > aa else ('Loss' if ah < aa else 'Push')
+                            else:
+                                result_txt = 'Win' if aa > ah else ('Loss' if aa < ah else 'Push')
+                        elif rec.get('market') == 'Spread' and rec.get('line') is not None:
+                            # Assume stored line is the home spread value
+                            line = float(rec.get('line'))
+                            margin = ah - aa
+                            if rec.get('side') == 'Home':
+                                diff = margin - line
+                            else:
+                                # Away spread is negative of home spread
+                                diff = (aa - ah) - (-line)
+                            result_txt = 'Win' if diff > 0 else ('Loss' if diff < 0 else 'Push')
+                        elif rec.get('market') == 'Total' and rec.get('line') is not None:
+                            total = ah + aa
+                            line = float(rec.get('line'))
+                            if rec.get('side') == 'Over':
+                                result_txt = 'Win' if total > line else ('Loss' if total < line else 'Push')
+                            else:
+                                result_txt = 'Win' if total < line else ('Loss' if total > line else 'Push')
+                except Exception:
+                    result_txt = '—'
+                # Derive a date-only string like the NFL page (YYYY-MM-DD)
+                display_date = ''
+                try:
+                    if start_iso:
+                        ds = pd.to_datetime(start_iso)
+                        display_date = ds.strftime('%Y-%m-%d')
+                    elif display_time:
+                        display_date = str(display_time).split(' ')[0]
+                except Exception:
+                    display_date = display_time or ''
+                enriched.append({**rec, 'confidence': tier, 'confidence_score': score, 'start_iso': start_iso, 'display_time': display_time, 'display_date': display_date, 'sort_ts': sort_ts, 'result_txt': result_txt})
+        # Write to cache
+        try:
+            if recs_source == 'log':
+                _RECOMMENDATIONS_CACHE[('log', int(sel_week))] = {'mtime': os.path.getmtime(RECS_PATH) if os.path.exists(RECS_PATH) else None, 'enriched': enriched}
+            else:
+                _RECOMMENDATIONS_CACHE[cache_key] = {'ts': now_ts, 'enriched': enriched}
+        except Exception:
+            pass
+        # Deduplicate recommendations (server page) by (season,week,home,away,market,side) keeping highest edge
+        dedup_page = {}
+        for r in enriched:
+            dkey = (r.get('season'), r.get('week'), r.get('home_team'), r.get('away_team'), r.get('market'), r.get('side'))
+            prev = dedup_page.get(dkey)
+            if prev is None or (r.get('edge') or 0) > (prev.get('edge') or 0):
+                dedup_page[dkey] = r
+        enriched = list(dedup_page.values())
+        # Sorting primary: confidence tier order (High, Medium, Low) then edge desc
+        def _tier_rank(t: str):
+            s = (t or '').lower()
+            if s == 'high': return 0
+            if s == 'medium': return 1
+            if s == 'low': return 2
+            return 3
+        if sort_q == 'edge_desc':
+            enriched.sort(key=lambda x: (-(x.get('edge') or 0.0)))
+        elif sort_q == 'time':
+            enriched.sort(key=lambda x: (x.get('sort_ts') is None, x.get('sort_ts') or 0.0))
+        elif sort_q == 'market':
+            # Group by market inside tiers using a stable order ML -> Spread -> Total, then EV desc
+            def _mkey(r):
+                m = str(r.get('market',''))
+                m_rank = {'ML':0,'Moneyline':0,'Spread':1,'Total':2}.get(m, 3)
+                return (m_rank, -(r.get('edge') or 0.0), r.get('sort_ts') is None, r.get('sort_ts') or 0.0)
+            enriched.sort(key=_mkey)
+        elif sort_q == 'bet_type':
+            def _bt_key(r):
+                m = str(r.get('market',''))
+                side = str(r.get('side',''))
+                m_rank = {'ML':0,'Moneyline':0,'Spread':1,'Total':2}.get(m, 3)
+                s_rank = {'Home':0,'Away':1,'Over':0,'Under':1}.get(side, 2)
+                return (m_rank, s_rank, -(r.get('edge') or 0.0))
+            enriched.sort(key=_bt_key)
+        else:  # confidence_then_edge default
+            enriched.sort(key=lambda x: (_tier_rank(x.get('confidence')), -(x.get('edge') or 0.0)))
+        # Group by tier (create 'Other' placeholder for future lower-confidence recs)
+        high = [r for r in enriched if r.get('confidence') == 'High']
+        medium = [r for r in enriched if r.get('confidence') == 'Medium']
+        low = [r for r in enriched if r.get('confidence') == 'Low']
+        other = []  # currently unused; kept to mirror external layout
+        # Performance summary from logged CSV
+        overall_stats = {}
+        tier_stats = {}
+        weekly_stats = []
+        open_count = 0
+        try:
+            if os.path.exists(RECS_PATH) and os.path.getsize(RECS_PATH) > 0:
+                perf_df = pd.read_csv(RECS_PATH)
+                # Coerce numeric
+                for col in ['stake','pnl','edge','kelly_f','model_prob','implied_prob','week','season']:
+                    if col in perf_df.columns:
+                        perf_df[col] = pd.to_numeric(perf_df[col], errors='coerce')
+                # Recompute confidence if missing
+                if 'confidence' not in perf_df.columns and {'edge','kelly_f','model_prob'}.issubset(perf_df.columns):
+                    perf_df['confidence'] = perf_df.apply(lambda r: _confidence_tier(r.get('edge'), r.get('kelly_f'), r.get('model_prob'))[0], axis=1)
+                def _agg(df_):
+                    if df_.empty:
+                        return {'count':0,'wins':0,'losses':0,'pushes':0,'acc':0.0,'stake':0.0,'pnl':0.0,'roi':0.0}
+                    wins = int((df_['result']=='win').sum()) if 'result' in df_.columns else 0
+                    losses = int((df_['result']=='loss').sum()) if 'result' in df_.columns else 0
+                    pushes = int((df_['result']=='push').sum()) if 'result' in df_.columns else 0
+                    staked = float(df_['stake'].sum()) if 'stake' in df_.columns else 0.0
+                    pnl = float(df_['pnl'].sum()) if 'pnl' in df_.columns else 0.0
+                    acc = (wins / (wins+losses)) if (wins+losses)>0 else 0.0
+                    roi = (pnl / staked) if staked>0 else 0.0
+                    return {'count':len(df_), 'wins':wins,'losses':losses,'pushes':pushes,'acc':acc,'stake':staked,'pnl':pnl,'roi':roi}
+                overall_stats = _agg(perf_df)
+                for t in ['High','Medium','Low']:
+                    tier_stats[t] = _agg(perf_df[perf_df.get('confidence','')==t])
+                # Weekly reconciliation (season 2025 only if present)
+                dfw = perf_df.copy()
+                if 'season' in dfw.columns:
+                    try:
+                        dfw_2025 = dfw[dfw['season']==2025]
+                        if not dfw_2025.empty:
+                            dfw = dfw_2025
+                    except Exception:
+                        pass
+                # open vs closed
+                try:
+                    open_count = int((dfw.get('status','')=='open').sum()) if 'status' in dfw.columns else 0
+                except Exception:
+                    open_count = 0
+                # Group by week
+                if 'week' in dfw.columns:
+                    try:
+                        grp = dfw.dropna(subset=['week']).groupby('week')
+                        stats = []
+                        for wk, g in grp:
+                            a = _agg(g)
+                            try:
+                                wk_int = int(wk)
+                            except Exception:
+                                wk_int = wk
+                            a['week'] = wk_int
+                            stats.append(a)
+                        weekly_stats = sorted(stats, key=lambda x: x['week'])
+                    except Exception:
+                        weekly_stats = []
+            else:
+                overall_stats = {'count':0,'wins':0,'losses':0,'pushes':0,'acc':0.0,'stake':0.0,'pnl':0.0,'roi':0.0}
+                tier_stats = {k: overall_stats for k in ['High','Medium','Low']}
+                weekly_stats = []
+                open_count = 0
+        except Exception:
             overall_stats = {'count':0,'wins':0,'losses':0,'pushes':0,'acc':0.0,'stake':0.0,'pnl':0.0,'roi':0.0}
             tier_stats = {k: overall_stats for k in ['High','Medium','Low']}
             weekly_stats = []
             open_count = 0
-    except Exception:
-        overall_stats = {'count':0,'wins':0,'losses':0,'pushes':0,'acc':0.0,'stake':0.0,'pnl':0.0,'roi':0.0}
-        tier_stats = {k: overall_stats for k in ['High','Medium','Low']}
-        weekly_stats = []
-        open_count = 0
-    def fmt_pct(x):
-        try:
-            return f"{x*100:.1f}%"
-        except Exception:
-            return ""
-    def fmt_money(x):
-        try:
-            return f"${x:.0f}"
-        except Exception:
-            return "$0"
-    # Friendly label for the summary card
-    if sort_q == 'edge_desc':
-        sort_label = 'EV (desc)'
-    elif sort_q == 'bet_type':
-        sort_label = 'Bet Type (ML/Spread/Totals)'
-    elif sort_q == 'market':
-        sort_label = 'Market (ML/Spread/Totals)'
-    elif sort_q == 'time':
-        sort_label = 'Kickoff Time'
-    else:
-        sort_label = 'Confidence then EV'
+        def fmt_pct(x):
+            try:
+                return f"{x*100:.1f}%"
+            except Exception:
+                return ""
+        def fmt_money(x):
+            try:
+                return f"${x:.0f}"
+            except Exception:
+                return "$0"
+        # Friendly label for the summary card
+        if sort_q == 'edge_desc':
+            sort_label = 'EV (desc)'
+        elif sort_q == 'bet_type':
+            sort_label = 'Bet Type (ML/Spread/Totals)'
+        elif sort_q == 'market':
+            sort_label = 'Market (ML/Spread/Totals)'
+        elif sort_q == 'time':
+            sort_label = 'Kickoff Time'
+        else:
+            sort_label = 'Confidence then EV'
 
-    return render_template_string('''
+        return render_template_string('''
     <style>
         body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background:#f5f8fc; margin:0; }
         h1 { font-size:1.6rem; margin:0 0 10px; }
@@ -5499,10 +5500,28 @@ def recommendations_page():
         }
     })();
     </script>
-     ''', weeks=weeks, sel_week=sel_week, sort_q=sort_q, bankroll=bankroll, kelly_factor=kelly_factor, ev_threshold=ev_threshold,
+         ''', weeks=weeks, sel_week=sel_week, sort_q=sort_q, bankroll=bankroll, kelly_factor=kelly_factor, ev_threshold=ev_threshold,
        high=high, medium=medium, low=low, other=other,
          overall_stats=overall_stats, tier_stats=tier_stats, fmt_pct=fmt_pct, fmt_money=fmt_money, now=datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'), BUILD_TIME=BUILD_TIME, BUILD_COMMIT=BUILD_COMMIT,
-         min_spread_edge_pts=min_spread_edge_pts, min_total_edge_pts=min_total_edge_pts, min_prob=min_prob, max_sigma_margin=max_sigma_margin, allowed_conferences=allowed_conferences)
+                 min_spread_edge_pts=min_spread_edge_pts, min_total_edge_pts=min_total_edge_pts, min_prob=min_prob, max_sigma_margin=max_sigma_margin, allowed_conferences=allowed_conferences)
+    except Exception as e:
+        # Failsafe: return a friendly diagnostics page instead of a 500 so we can see the error in prod
+        import traceback as _tb
+        err = str(e)
+        trace = _tb.format_exc()
+        # keep it short to avoid huge responses
+        trace_tail = trace[-4000:]
+        return render_template_string('''
+        <div style="font-family:Segoe UI,Arial,sans-serif; max-width:1000px; margin:20px auto; background:#fff; padding:18px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,.08)">
+            <h2>/recommendations failed</h2>
+            <div style="margin:6px 0 12px; color:#666">This page caught an error and is showing diagnostics instead of a 500. Share this with the dev console.</div>
+            <div><b>Error:</b> {{err}}</div>
+            <div style="margin-top:8px"><b>Trace (tail):</b></div>
+            <pre style="white-space:pre-wrap; background:#0f172a; color:#e2e8f0; padding:10px; border-radius:8px; max-height:420px; overflow:auto">{{trace}}</pre>
+            <div style="margin-top:10px; color:#666; font-size:.85rem">Build {{BUILD_TIME}} • Commit {{BUILD_COMMIT[:8] if BUILD_COMMIT else 'unknown'}}</div>
+            <div style="margin-top:8px"><a href="/">Cards</a></div>
+        </div>
+        ''', err=err, trace=trace_tail, BUILD_TIME=BUILD_TIME, BUILD_COMMIT=BUILD_COMMIT), 200
 # Removed route: /recommendations/performance (decorator stripped)
 def recommendations_performance_page():
     # Read performance via the same CSV and simple aggregation
