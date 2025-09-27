@@ -5572,17 +5572,22 @@ def recommendations_page():
         trace = _tb.format_exc()
         # keep it short to avoid huge responses
         trace_tail = trace[-4000:]
-        return render_template_string('''
-        <div style="font-family:Segoe UI,Arial,sans-serif; max-width:1000px; margin:20px auto; background:#fff; padding:18px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,.08)">
-            <h2>/recommendations failed</h2>
-            <div style="margin:6px 0 12px; color:#666">This page caught an error and is showing diagnostics instead of a 500. Share this with the dev console.</div>
-            <div><b>Error:</b> {{err}}</div>
-            <div style="margin-top:8px"><b>Trace (tail):</b></div>
-            <pre style="white-space:pre-wrap; background:#0f172a; color:#e2e8f0; padding:10px; border-radius:8px; max-height:420px; overflow:auto">{{trace}}</pre>
-            <div style="margin-top:10px; color:#666; font-size:.85rem">Build {{BUILD_TIME}} • Commit {{BUILD_COMMIT[:8] if BUILD_COMMIT else 'unknown'}}</div>
-            <div style="margin-top:8px"><a href="/">Cards</a></div>
-        </div>
-        ''', err=err, trace=trace_tail, BUILD_TIME=BUILD_TIME, BUILD_COMMIT=BUILD_COMMIT), 200
+        try:
+            return render_template_string('''
+            <div style="font-family:Segoe UI,Arial,sans-serif; max-width:1000px; margin:20px auto; background:#fff; padding:18px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,.08)">
+                <h2>/recommendations failed</h2>
+                <div style="margin:6px 0 12px; color:#666">This page caught an error and is showing diagnostics instead of a 500. Share this with the dev console.</div>
+                <div><b>Error:</b> {{err}}</div>
+                <div style="margin-top:8px"><b>Trace (tail):</b></div>
+                <pre style="white-space:pre-wrap; background:#0f172a; color:#e2e8f0; padding:10px; border-radius:8px; max-height:420px; overflow:auto">{{trace}}</pre>
+                <div style="margin-top:10px; color:#666; font-size:.85rem">Build {{BUILD_TIME}} • Commit {{BUILD_COMMIT[:8] if BUILD_COMMIT else 'unknown'}}</div>
+                <div style="margin-top:8px"><a href="/">Cards</a></div>
+            </div>
+            ''', err=err, trace=trace_tail, BUILD_TIME=BUILD_TIME, BUILD_COMMIT=BUILD_COMMIT), 200
+        except Exception:
+            # As a last resort, return plain text so we never 500 invisibly
+            body = f"/recommendations failed\nError: {err}\nTrace (tail):\n{trace_tail}\nBuild {BUILD_TIME} • Commit {BUILD_COMMIT[:8] if BUILD_COMMIT else 'unknown'}\n"
+            return body, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 # Removed route: /recommendations/performance (decorator stripped)
 def recommendations_performance_page():
     # Read performance via the same CSV and simple aggregation
