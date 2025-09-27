@@ -5103,6 +5103,31 @@ def recommendations_page():
         # Default augmentation ON: if log has few items, supplement with compute suggestions.
         # Users can disable via ?augment=0
         augment_flag = str(request.args.get('augment') or request.form.get('augment') or '1').strip()
+        # Augmentation tuning (optional): cap and thresholds used only for the extra model suggestions
+        try:
+            extra_cap = int(request.args.get('extra_cap') or 100)
+            if extra_cap < 0:
+                extra_cap = 0
+            if extra_cap > 500:
+                extra_cap = 500
+        except Exception:
+            extra_cap = 100
+        # Allow looser thresholds for augmentation if specified; fallback to main thresholds
+        try:
+            aug_ev = request.args.get('aug_ev')
+            aug_ev = float(aug_ev) if aug_ev not in (None, '') else ev_threshold
+        except Exception:
+            aug_ev = ev_threshold
+        try:
+            aug_min_spread_edge_pts = request.args.get('aug_min_spread_edge_pts')
+            aug_min_spread_edge_pts = float(aug_min_spread_edge_pts) if aug_min_spread_edge_pts not in (None, '') else min_spread_edge_pts
+        except Exception:
+            aug_min_spread_edge_pts = min_spread_edge_pts
+        try:
+            aug_min_total_edge_pts = request.args.get('aug_min_total_edge_pts')
+            aug_min_total_edge_pts = float(aug_min_total_edge_pts) if aug_min_total_edge_pts not in (None, '') else min_total_edge_pts
+        except Exception:
+            aug_min_total_edge_pts = min_total_edge_pts
         # Determine selected week (optional). If blank => auto upcoming
         sel_week = int(week_q) if (week_q and week_q.isdigit()) else None
         if sel_week is None:
@@ -5322,9 +5347,9 @@ def recommendations_page():
                         week=sel_week,
                         bankroll=bankroll,
                         kelly_factor=kelly_factor,
-                        ev_threshold=ev_threshold,
-                        min_spread_edge_pts=min_spread_edge_pts,
-                        min_total_edge_pts=min_total_edge_pts,
+                        ev_threshold=aug_ev,
+                        min_spread_edge_pts=aug_min_spread_edge_pts,
+                        min_total_edge_pts=aug_min_total_edge_pts,
                         min_prob=min_prob,
                         max_sigma_margin=max_sigma_margin,
                         allowed_conferences=allowed_conferences,
@@ -5358,8 +5383,8 @@ def recommendations_page():
                     dkey = (r.get('season'), r.get('week'), r.get('home_team'), r.get('away_team'), r.get('market'), r.get('side'))
                     if dkey not in have:
                         more.append(r)
-                # Keep a sensible cap
-                more = more[:100]
+                # Keep a sensible cap (configurable via extra_cap)
+                more = more[:extra_cap]
         except Exception:
             more = []
         # Sorting primary: confidence tier order (High, Medium, Low) then edge desc
