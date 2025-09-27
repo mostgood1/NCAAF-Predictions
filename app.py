@@ -79,6 +79,7 @@ def _filtered_add_url_rule(rule, endpoint=None, view_func=None, provide_automati
             '/which-app',
             '/deploy-info',
             '/routes',
+            '/healthz',
             '/recommendations/',
             '/recommendations/debug/',
         }
@@ -133,6 +134,34 @@ try:
                 os.environ['ODDS_API_KEY'] = val
 except Exception:
     pass
+
+# Global security headers: upgrade insecure requests to avoid mixed-content issues with legacy asset URLs
+@app.after_request
+def _add_security_headers(resp):
+    try:
+        # In instructive browsers, this will automatically convert http:// to https:// for subresources
+        existing_csp = resp.headers.get('Content-Security-Policy', '')
+        if 'upgrade-insecure-requests' not in existing_csp:
+            csp_val = (existing_csp + ('; ' if existing_csp else '') + 'upgrade-insecure-requests').strip('; ')
+            resp.headers['Content-Security-Policy'] = csp_val
+    except Exception:
+        pass
+    return resp
+
+# Lightweight health check with build metadata
+@app.route('/healthz')
+def _healthz():
+    try:
+        from flask import jsonify as _jsonify
+        return _jsonify({
+            'status': 'ok',
+            'build_time': BUILD_TIME,
+            'commit': BUILD_COMMIT,
+            'service': 'ncaaf-compare'
+        }), 200
+    except Exception:
+        # Minimal fall-back response if jsonify import fails for any reason
+        return f"ok {BUILD_TIME} {BUILD_COMMIT}", 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
 def _ensure_cfbd_key():
     """Ensure CFBD_API_KEY (or compatible token) is present; if missing, re-read .env files.
@@ -578,6 +607,21 @@ except Exception:
 def get_team_asset(team_name):
     row = assets_df[assets_df['school'] == team_name]
     if not row.empty:
+        # Ensure external asset URLs are safe for HTTPS contexts
+        def _to_https(url: str | None) -> str:
+            try:
+                if url is None:
+                    return ''
+                s = str(url).strip()
+                if not s:
+                    return ''
+                if s.startswith('//'):
+                    return 'https:' + s
+                if s.startswith('http://'):
+                    return 'https://' + s[len('http://'):]
+                return s
+            except Exception:
+                return ''
         def clean(v):
             try:
                 import pandas as _pd
@@ -585,7 +629,7 @@ def get_team_asset(team_name):
             except Exception:
                 return v if v is not None else ''
         return {
-            'logo': clean(row.iloc[0].get('logo', '')),
+            'logo': _to_https(clean(row.iloc[0].get('logo', ''))),
             'color': clean(row.iloc[0].get('color', '')),
             'alt_color': clean(row.iloc[0].get('alt_color', ''))
         }
@@ -4167,7 +4211,15 @@ def _limit_routes():
     try:
         p = request.path
         # Allow the two public pages and minimal static files under /static if any
-        allowed = set(['/', '/recommendations'])
+        allowed = set([
+            '/',
+            '/recommendations',
+            '/recommendations/debug',
+            '/routes',
+            '/healthz',
+            '/which-app',
+            '/deploy-info',
+        ])
         if p in allowed:
             return None
         # Allow static and favicon
