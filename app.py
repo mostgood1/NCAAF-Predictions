@@ -5086,6 +5086,8 @@ def recommendations_page():
         max_sigma_margin = float(max_sigma_margin) if str(max_sigma_margin).strip() not in ('', 'None') else None
         # With filters hidden, default to all conferences
         allowed_conferences = request.args.get('allowed_conferences') or request.form.get('allowed_conferences') or ''
+        # Optional: allow disabling augmentation of log results
+        augment_flag = str(request.args.get('augment') or request.form.get('augment') or '1').strip()
         # Determine selected week (optional). If blank => auto upcoming
         sel_week = int(week_q) if (week_q and week_q.isdigit()) else None
         if sel_week is None:
@@ -5295,6 +5297,56 @@ def recommendations_page():
             if prev is None or (r.get('edge') or 0) > (prev.get('edge') or 0):
                 dedup_page[dkey] = r
         enriched = list(dedup_page.values())
+
+        # If using log source and we have very few items, optionally augment with compute-based suggestions (not logged)
+        more = []
+        try:
+            if recs_source == 'log' and len(enriched) < 20 and augment_flag != '0':
+                try:
+                    recs2 = compute_recommendations(
+                        week=sel_week,
+                        bankroll=bankroll,
+                        kelly_factor=kelly_factor,
+                        ev_threshold=ev_threshold,
+                        min_spread_edge_pts=min_spread_edge_pts,
+                        min_total_edge_pts=min_total_edge_pts,
+                        min_prob=min_prob,
+                        max_sigma_margin=max_sigma_margin,
+                        allowed_conferences=allowed_conferences,
+                    )
+                except Exception:
+                    recs2 = []
+                # Build enrichment for recs2
+                extra = []
+                for rec in recs2:
+                    key = (rec['season'], rec['week'], rec['home_team'], rec['away_team'])
+                    row = idx.get(key)
+                    tier, score = _compute_confidence_tier(rec, row)
+                    start_iso, sort_ts, display_time = _parse_start_ts(row) if row is not None else ('', None, '')
+                    try:
+                        line_num = _safe_float(rec.get('line'))
+                    except Exception:
+                        line_num = None
+                    display_date = ''
+                    try:
+                        if start_iso:
+                            ds = pd.to_datetime(start_iso)
+                            display_date = ds.strftime('%Y-%m-%d')
+                        elif display_time:
+                            display_date = str(display_time).split(' ')[0]
+                    except Exception:
+                        display_date = display_time or ''
+                    extra.append({**rec, 'line_num': line_num, 'confidence': tier, 'confidence_score': score, 'start_iso': start_iso, 'display_time': display_time, 'display_date': display_date, 'sort_ts': sort_ts, 'result_txt': '—', '_augmented': True})
+                # Exclude any already on the page by dkey
+                have = {(r.get('season'), r.get('week'), r.get('home_team'), r.get('away_team'), r.get('market'), r.get('side')) for r in enriched}
+                for r in extra:
+                    dkey = (r.get('season'), r.get('week'), r.get('home_team'), r.get('away_team'), r.get('market'), r.get('side'))
+                    if dkey not in have:
+                        more.append(r)
+                # Keep a sensible cap
+                more = more[:50]
+        except Exception:
+            more = []
         # Sorting primary: confidence tier order (High, Medium, Low) then edge desc
         def _tier_rank(t: str):
             s = (t or '').lower()
@@ -5562,6 +5614,22 @@ def recommendations_page():
             {% endfor %}
             </table>
         {% else %}<div class="section-empty">No other recommendations.</div>{% endif %}
+
+        {% if more %}
+        <h2>Additional model suggestions (not yet logged)</h2>
+        <table><tr><th>Game</th><th>Type</th><th>Selection</th><th>Odds</th><th>EV</th><th>Date</th></tr>
+            {% for r in more %}
+            <tr>
+                <td>{{r.away_team}} @ {{r.home_team}}</td>
+                <td>{% if r.market=='ML' %}MONEYLINE{% elif r.market=='Spread' %}SPREAD{% elif r.market=='Total' %}TOTALS{% else %}{{ r.market|upper }}{% endif %}</td>
+                <td>{% if r.market=='ML' %}{{ (r.home_team ~ ' ML') if r.side=='Home' else (r.away_team ~ ' ML') }}{% elif r.market=='Spread' %}{{ (r.home_team if r.side=='Home' else r.away_team) }} {% if r.line_num is not none %}{{ '%+g' % r.line_num if r.side=='Home' else '%+g' % (-r.line_num) }}{% endif %}{% else %}{{ r.side }} {% if r.line_num is not none %}{{ r.line_num }}{% endif %}{% endif %} <span class="pill" style="border-color:#94a3b8;color:#334155;">Model</span></td>
+                <td>{{r.price_american}}</td>
+                <td>{{'%0.1f'%(r.edge*100) if r.edge is not none else ''}}%</td>
+                <td>{{r.display_date}}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% endif %}
     <h2>Weekly reconciliation</h2>
         {% if weekly_stats %}
         <table>
@@ -5606,7 +5674,7 @@ def recommendations_page():
     })();
     </script>
          ''', weeks=weeks, sel_week=sel_week, sort_q=sort_q, bankroll=bankroll, kelly_factor=kelly_factor, ev_threshold=ev_threshold,
-       high=high, medium=medium, low=low, other=other,
+    high=high, medium=medium, low=low, other=other, more=more,
          overall_stats=overall_stats, tier_stats=tier_stats, fmt_pct=fmt_pct, fmt_money=fmt_money, now=datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'), BUILD_TIME=BUILD_TIME, BUILD_COMMIT=BUILD_COMMIT,
                  min_spread_edge_pts=min_spread_edge_pts, min_total_edge_pts=min_total_edge_pts, min_prob=min_prob, max_sigma_margin=max_sigma_margin, allowed_conferences=allowed_conferences)
     except Exception as e:
