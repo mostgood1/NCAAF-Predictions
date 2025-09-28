@@ -1,11 +1,10 @@
 season,week,home_team,away_team,market,side,provider,price_american,line,model_prob,implied_prob,edge,kelly_f,stake,start_iso,display_date,result_txt
-2025,6,Florida,Texas,ML,Home,ESPN Bet,175,,0.9211,0.3636,1.5331,0.1,50.0,2025-10-04T19:30:00Z,2025-10-04,—
-2025,6,Florida State,Miami,ML,Home,ESPN Bet,160,,0.9487,0.3846,1.4665,0.1,50.0,2025-10-04T23:30:00Z,2025-10-04,—
+2025,6,Florida,Texas,ML,Home,ESPN Bet,175,,0.8948,0.3636,1.4606,0.1,50.0,2025-10-04T19:30:00Z,2025-10-04,—
+2025,6,Florida State,Miami,ML,Home,ESPN Bet,160,,0.9174,0.3846,1.3851,0.1,50.0,2025-10-04T23:30:00Z,2025-10-04,—
 2025,6,Alabama,Vanderbilt,Spread,Home,ESPN Bet,-110,-24.0,1.0,0.5238,0.9091,0.1,50.0,2025-10-04T19:30:00Z,2025-10-04,—
-2025,6,Notre Dame,Boise State,Spread,Home,DraftKings,-110,-16.5,0.9998,0.5238,0.9087,0.1,50.0,2025-10-04T19:30:00Z,2025-10-04,—
-2025,6,Florida State,Miami,Spread,Home,ESPN Bet,-110,4.5,0.9956,0.5238,0.9006,0.1,50.0,2025-10-04T23:30:00Z,2025-10-04,—
-2025,6,Florida,Texas,Spread,Home,DraftKings,-110,6.5,0.9798,0.5238,0.8705,0.1,50.0,2025-10-04T19:30:00Z,2025-10-04,—
-2025,6,North Carolina,Clemson,Spread,Home,DraftKings,-110,13.5,0.8396,0.5238,0.6028,0.1,50.0,2025-10-04T16:00:00Z,2025-10-04,—
-2025,6,Alabama,Vanderbilt,Total,Under,ESPN Bet,-110,51.5,0.6539,0.5238,0.2484,0.1,50.0,2025-10-04T19:30:00Z,2025-10-04,—
-2025,6,Notre Dame,Boise State,Total,Under,ESPN Bet,-110,53.5,0.6357,0.5238,0.2136,0.1,50.0,2025-10-04T19:30:00Z,2025-10-04,—
-2025,6,Florida,Texas,Total,Under,ESPN Bet,-110,51.5,0.6256,0.5238,0.1943,0.1,50.0,2025-10-04T19:30:00Z,2025-10-04,—
+2025,6,Notre Dame,Boise State,Spread,Home,DraftKings,-110,-16.5,0.9997,0.5238,0.9086,0.1,50.0,2025-10-04T19:30:00Z,2025-10-04,—
+2025,6,Florida State,Miami,Spread,Home,ESPN Bet,-110,4.5,0.9933,0.5238,0.8963,0.1,50.0,2025-10-04T23:30:00Z,2025-10-04,—
+2025,6,Florida,Texas,Spread,Home,DraftKings,-110,6.5,0.9746,0.5238,0.8607,0.1,50.0,2025-10-04T19:30:00Z,2025-10-04,—
+2025,6,North Carolina,Clemson,Spread,Home,DraftKings,-110,13.5,0.8276,0.5238,0.5801,0.1,50.0,2025-10-04T16:00:00Z,2025-10-04,—
+2025,6,Florida State,Miami,Total,Over,ESPN Bet,-110,53.5,0.6142,0.5238,0.1725,0.1,50.0,2025-10-04T23:30:00Z,2025-10-04,—
+2025,6,Florida,Texas,Total,Under,ESPN Bet,-110,51.5,0.6113,0.5238,0.1671,0.1,50.0,2025-10-04T19:30:00Z,2025-10-04,—
