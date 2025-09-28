@@ -5152,7 +5152,8 @@ def recommendations_page():
             current_wk = None
         # Optional override via query: source=log|compute
         src_override = (request.args.get('source') or request.form.get('source') or '').strip().lower()
-        use_log = (src_override == 'log')
+        forced_log = (src_override == 'log')
+        use_log = forced_log
         recs = []
         recs_source = 'compute'
         # If RECS file has entries for the selected week (typically past weeks), load from there
@@ -5168,15 +5169,19 @@ def recommendations_page():
                     df_log = pd.DataFrame()
                 if 'week' in df_log.columns and 'season' in df_log.columns:
                     rows_wk = df_log[(pd.to_numeric(df_log['season'], errors='coerce') == 2025) & (pd.to_numeric(df_log['week'], errors='coerce') == int(sel_week))]
-                    # Prefer log if any rows exist for selected week unless the user explicitly forces compute
-                    if not rows_wk.empty and src_override != 'compute':
+                    if forced_log:
+                        # Honor explicit request to use logged picks only; don't fall back to compute
                         use_log = True
                     else:
-                        # fallback: for past weeks, prefer log; for current/future, compute
-                        if not rows_wk.empty and (current_wk is not None and int(sel_week) < int(current_wk)):
+                        # Prefer log if any rows exist for selected week unless the user explicitly forces compute
+                        if not rows_wk.empty and src_override != 'compute':
                             use_log = True
                         else:
-                            use_log = False
+                            # fallback: for past weeks, prefer log; for current/future, compute
+                            if not rows_wk.empty and (current_wk is not None and int(sel_week) < int(current_wk)):
+                                use_log = True
+                            else:
+                                use_log = False
         except Exception:
             use_log = False
 
@@ -5366,7 +5371,8 @@ def recommendations_page():
         # If using log source and we have very few items, optionally augment with compute-based suggestions (not logged)
         more = []
         try:
-            if recs_source == 'log' and len(enriched) < 20 and augment_flag != '0':
+            # If the user explicitly forced log, do not auto-augment with compute to avoid surprising content
+            if recs_source == 'log' and len(enriched) < 20 and augment_flag != '0' and not forced_log:
                 try:
                     recs2 = compute_recommendations(
                         week=sel_week,
