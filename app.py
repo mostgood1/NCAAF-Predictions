@@ -421,7 +421,21 @@ def _load_predictions_df() -> pd.DataFrame:
         chosen_path = None
         try:
             pattern = os.path.join(DATA_DIR, 'college_football_schedule_2025_predicted_totals_enhanced*.csv')
-            cand_files = [p for p in glob.glob(pattern) if not p.endswith('with_scores.csv')]
+            all_cands = [p for p in glob.glob(pattern) if not p.endswith('with_scores.csv')]
+            # Allow only base or timestamped variants. Exclude experimental/test variants like with_weather/static/etc.
+            import re as _re
+            def _is_preferred(fname: str) -> bool:
+                base = os.path.basename(fname)
+                # Match exactly enhanced.csv or enhanced_YYYYMMDDTHHMMSSZ.csv
+                return bool(_re.match(r'^college_football_schedule_2025_predicted_totals_enhanced(?:_[0-9]{8}T[0-9]{6}Z)?\.csv$', base))
+            cand_files = [p for p in all_cands if _is_preferred(p)]
+            if not cand_files:
+                # Fallback: if nothing matched, use the base enhanced.csv if present
+                base_path = os.path.join(DATA_DIR, 'college_football_schedule_2025_predicted_totals_enhanced.csv')
+                if os.path.exists(base_path):
+                    cand_files = [base_path]
+                else:
+                    cand_files = all_cands  # last resort
             if cand_files:
                 cand_files.sort(key=lambda p: os.path.getmtime(p), reverse=True)
                 chosen_path = cand_files[0]
@@ -3206,11 +3220,13 @@ def index():
         filter_type = request.args.get('filter_type', 'all')
         # Week selection
         week_q = request.args.get('week')
+        explicit_week_selected = False
         try:
             if week_q is not None and week_q.isdigit():
                 w_int = int(week_q)
                 if w_int in weeks:
                     selected_week = w_int
+                    explicit_week_selected = True
         except Exception:
             pass
         # If no explicit week chosen, pick the "current" (upcoming) week instead of earliest or last-completed.
@@ -3245,10 +3261,10 @@ def index():
                 selected_week = max(done_weeks) if done_weeks else min(weeks)
             except Exception:
                 selected_week = weeks[0]
-        # If the chosen week has no finals yet (e.g., upcoming Week 4 on Monday),
+        # If no explicit week was chosen and the default "current" week has no finals yet (e.g., early in the week),
         # fallback to the most recent week that does have finals so FINAL cards render by default.
         try:
-            if selected_week is not None:
+            if not explicit_week_selected and selected_week is not None:
                 sub_sel = pred_df[pred_df['week']==int(selected_week)]
                 sel_finals = int((sub_sel['actual_home_points'].notna() & sub_sel['actual_away_points'].notna()).sum())
                 if sel_finals == 0 and weeks:
