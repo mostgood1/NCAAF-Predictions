@@ -417,34 +417,32 @@ def _load_predictions_df() -> pd.DataFrame:
     actuals_df = None
     # Try reading both files if available
     try:
-        if pred_path_enh and os.path.exists(pred_path_enh):
-            df_enh = pd.read_csv(pred_path_enh)
+        # Prefer the freshest enhanced predictions file (base or timestamped variant), excluding the with_scores file
+        chosen_path = None
+        try:
+            pattern = os.path.join(DATA_DIR, 'college_football_schedule_2025_predicted_totals_enhanced*.csv')
+            cand_files = [p for p in glob.glob(pattern) if not p.endswith('with_scores.csv')]
+            if cand_files:
+                cand_files.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+                chosen_path = cand_files[0]
+        except Exception:
+            chosen_path = None
+        # Fallback to base path
+        if chosen_path is None and pred_path_enh and os.path.exists(pred_path_enh):
+            chosen_path = pred_path_enh
+        if chosen_path and os.path.exists(chosen_path):
+            df_enh = pd.read_csv(chosen_path)
+            try:
+                base_name = os.path.basename(chosen_path)
+                PRED_SOURCE = f'enhanced:{base_name}'
+            except Exception:
+                pass
             # Align week labels (Week 0 vs 1) before any merges
             try:
                 df_enh = _apply_week0_label(df_enh)
             except Exception:
                 pass
-            # If base enhanced file lacks model / odds columns, attempt to auto-upgrade
-            try:
-                have_model = any(c.startswith('model_') for c in df_enh.columns)
-                if not have_model:
-                    pattern = os.path.join(DATA_DIR, 'college_football_schedule_2025_predicted_totals_enhanced_*.csv')
-                    cand_files = sorted(glob.glob(pattern), key=lambda p: os.path.getmtime(p), reverse=True)
-                    for cf in cand_files:
-                        # Skip with scores (handled separately) and the base file itself
-                        base_name = os.path.basename(cf)
-                        if base_name.endswith('with_scores.csv') or base_name == os.path.basename(pred_path_enh):
-                            continue
-                        try:
-                            tmp_df = pd.read_csv(cf)
-                        except Exception:
-                            continue
-                        if any(c.startswith('model_') for c in tmp_df.columns):
-                            df_enh = tmp_df
-                            print(f"[load] Upgraded predictions source to latest model overlay file: {base_name}")
-                            break
-            except Exception as _upgrade_e:
-                print(f"[load] upgrade scan failed: {_upgrade_e}")
+            # No further upgrade step needed; we've already selected the freshest file
     except Exception as e:
         print(f"[app] Failed to read enhanced: {e}")
     try:
@@ -527,7 +525,14 @@ def _load_predictions_df() -> pd.DataFrame:
                     df = _apply_week0_label(df)
                 except Exception:
                     pass
-                PRED_SOURCE = 'enhanced+scores'
+                # Preserve filename context if we have it
+                try:
+                    if isinstance(PRED_SOURCE, str) and PRED_SOURCE.startswith('enhanced:'):
+                        PRED_SOURCE = PRED_SOURCE + '+scores'
+                    else:
+                        PRED_SOURCE = 'enhanced+scores'
+                except Exception:
+                    PRED_SOURCE = 'enhanced+scores'
             except Exception as _merge_e:
                 print(f"[app] Merge actuals into enhanced failed: {_merge_e}")
                 PRED_SOURCE = 'enhanced'
@@ -536,7 +541,8 @@ def _load_predictions_df() -> pd.DataFrame:
                 df = _apply_week0_label(df)
             except Exception:
                 pass
-            PRED_SOURCE = 'enhanced'
+            if not isinstance(PRED_SOURCE, str) or not PRED_SOURCE.startswith('enhanced:'):
+                PRED_SOURCE = 'enhanced'
     elif df_scores is not None and isinstance(df_scores, pd.DataFrame) and not df_scores.empty:
         df = df_scores.copy()
         for col in ['actual_home_points','actual_away_points']:
@@ -600,6 +606,82 @@ def norm(name):
 conf_map = dict(zip(team_conf_df['school_norm'], team_conf_df['conference']))
 pred_df['home_conference'] = pred_df['home_team'].apply(lambda x: conf_map.get(norm(x), 'Unknown'))
 pred_df['away_conference'] = pred_df['away_team'].apply(lambda x: conf_map.get(norm(x), 'Unknown'))
+
+# Cached YTD summary for FBS-involved games (recomputed periodically)
+YTD_SUMMARY_CACHE = {'ts': 0.0, 'data': None}
+
+def _compute_ytd_summary_fbs(cache_ttl_sec: int = 180) -> dict:
+    import time
+    now = time.time()
+    try:
+        if YTD_SUMMARY_CACHE['data'] is not None and (now - float(YTD_SUMMARY_CACHE['ts'])) < cache_ttl_sec:
+            return YTD_SUMMARY_CACHE['data']
+    except Exception:
+        pass
+    # Build FBS-involved finals mask quickly using conferences (approximate)
+    try:
+        df = pred_df.copy()
+        # finals only
+        finals_mask = df['actual_home_points'].notna() & df['actual_away_points'].notna()
+        df = df[finals_mask]
+        # at least one FBS team
+        fbs_confs = {
+            'acc','sec','big ten','big 12','pac 12','american','mountain west','sun belt','mac','conference usa','independent','independents','fbs independents','independent (fbs)'
+        }
+        fbs_indies = {'notre dame','army','navy','umass','uconn','new mexico state'}
+        def is_fbs(team, conf):
+            try:
+                c = str(conf or '').strip().lower()
+                t = str(team or '').strip().lower()
+                return c in fbs_confs or t in fbs_indies
+            except Exception:
+                return False
+        mask_any_fbs = df.apply(lambda r: (is_fbs(r.get('home_team'), r.get('home_conference')) or is_fbs(r.get('away_team'), r.get('away_conference'))), axis=1)
+        df = df[mask_any_fbs]
+        # Tally using the same per-card logic for correctness and pushes
+        summary = { 'winners': {'correct':0,'total':0}, 'ou': {'correct':0,'push':0,'total':0}, 'ats': {'correct':0,'push':0,'total':0} }
+        cnt = 0
+        for _, row in df.iterrows():
+            try:
+                g = _build_game_card(row)
+                if g.get('correct_prediction') is not None:
+                    summary['winners']['total'] += 1
+                    if g['correct_prediction']:
+                        summary['winners']['correct'] += 1
+                if g.get('ou_actual_result'):
+                    if g['ou_actual_result'] == 'Push':
+                        summary['ou']['push'] += 1
+                    else:
+                        summary['ou']['total'] += 1
+                        if g.get('ou_correct') is True:
+                            summary['ou']['correct'] += 1
+                if g.get('ats_actual_result'):
+                    if g['ats_actual_result'] == 'Push':
+                        summary['ats']['push'] += 1
+                    else:
+                        summary['ats']['total'] += 1
+                        if g.get('ats_correct') is True:
+                            summary['ats']['correct'] += 1
+                cnt += 1
+            except Exception:
+                continue
+        # Compute pcts
+        for key in ('winners','ou','ats'):
+            corr = summary[key].get('correct', 0) or 0
+            tot = summary[key].get('total', 0) or 0
+            try:
+                summary[key]['pct'] = (f"{(corr/tot*100):.1f}%" if tot > 0 else '—')
+            except Exception:
+                summary[key]['pct'] = '—'
+        out = summary
+    except Exception:
+        out = { 'winners': {'correct':0,'total':0,'pct':'—'}, 'ou': {'correct':0,'push':0,'total':0,'pct':'—'}, 'ats': {'correct':0,'push':0,'total':0,'pct':'—'} }
+    try:
+        YTD_SUMMARY_CACHE['ts'] = now
+        YTD_SUMMARY_CACHE['data'] = out
+    except Exception:
+        pass
+    return out
 
 # Load win margin confidence intervals and build a fast lookup index
 WIN_MARGIN_CONF_INDEX = {}
@@ -1192,6 +1274,19 @@ def _build_game_card(game_row: pd.Series) -> dict:
             predicted_winner = game_row['home_team']
         elif predicted_home < predicted_away:
             predicted_winner = game_row['away_team']
+        else:
+            predicted_winner = None
+        # Tie-break: if model margin is tiny, lean to market favorite when available
+        try:
+            pred_margin_tmp = (predicted_home - predicted_away)
+            if abs(pred_margin_tmp) < 0.5 and ats_home_line is not None:
+                # Negative home line => home favorite; positive => away favorite
+                if ats_home_line < 0:
+                    predicted_winner = game_row['home_team']
+                elif ats_home_line > 0:
+                    predicted_winner = game_row['away_team']
+        except Exception:
+            pass
     # Win probability: robust computation with clamp and file-prob sanity check
     p_home_win = _compute_home_win_prob(game_row)
     if _is_valid_num(actual_home) and _is_valid_num(actual_away):
@@ -1249,13 +1344,24 @@ def _build_game_card(game_row: pd.Series) -> dict:
                 except Exception:
                     continue
         if ou_values:
-            ou_line = sum(ou_values) / len(ou_values)
+            # Robust aggregation: median with simple outlier trim
+            vals = sorted(ou_values)
+            try:
+                import statistics as _stats
+                med = _stats.median(vals)
+                # Trim extremes far from median (likely stale/misparsed)
+                trimmed = [v for v in vals if abs(v - med) <= 5.0]
+                ou_line = _stats.median(trimmed) if trimmed else med
+            except Exception:
+                ou_line = sum(vals) / len(vals)
     except Exception:
         ou_line = None
     if ou_line is not None and predicted_total_points is not None:
-        if predicted_total_points > ou_line:
+        # Treat near-equality as push to avoid spurious lean due to float rounding
+        _EPS = 0.05
+        if predicted_total_points - ou_line > _EPS:
             ou_model_lean = 'Over'
-        elif predicted_total_points < ou_line:
+        elif ou_line - predicted_total_points > _EPS:
             ou_model_lean = 'Under'
         else:
             ou_model_lean = 'Push'
@@ -1327,15 +1433,24 @@ def _build_game_card(game_row: pd.Series) -> dict:
                 if val is not None:
                     spread_vals.append(val)
         if spread_vals:
-            ats_home_line = sum(spread_vals) / len(spread_vals)
+            # Robust aggregation: median with gentle trim to remove clear outliers
+            try:
+                import statistics as _stats
+                vals = sorted(spread_vals)
+                med = _stats.median(vals)
+                trimmed = [v for v in vals if abs(v - med) <= 4.0]
+                ats_home_line = _stats.median(trimmed) if trimmed else med
+            except Exception:
+                ats_home_line = sum(spread_vals) / len(spread_vals)
     except Exception:
         ats_home_line = None
     if ats_home_line is not None and predicted_home is not None and predicted_away is not None:
         pred_margin = predicted_home - predicted_away
         comp = pred_margin + ats_home_line
-        if comp > 0:
+        _EPS = 0.05
+        if comp > _EPS:
             ats_model_lean = 'Home'
-        elif comp < 0:
+        elif comp < -_EPS:
             ats_model_lean = 'Away'
         else:
             ats_model_lean = 'Push'
@@ -3251,6 +3366,9 @@ def index():
     except Exception:
         finals_count_week = 0; total_games_week = 0; finals_pct_week='—'; unknown_pending=0
 
+    # Season-to-date summary for FBS-involved games (cached)
+    ytd_summary = _compute_ytd_summary_fbs()
+
     # Prepare game cards for all filtered games (fixed loop)
     game_cards = []
     try:
@@ -3271,9 +3389,17 @@ def index():
         except Exception:
             # Skip any problematic row but continue rendering others
             continue
-    # Summary metrics for this view
+    # Summary metrics for this view (restrict to games with at least one FBS team)
     summary = { 'winners': {'correct':0,'total':0}, 'ou': {'correct':0,'push':0,'total':0}, 'ats': {'correct':0,'push':0,'total':0} }
     for g in game_cards:
+        try:
+            home_fbs = bool(g.get('home_is_fbs'))
+            away_fbs = bool(g.get('away_is_fbs'))
+            if not (home_fbs or away_fbs):
+                continue
+        except Exception:
+            # If flags missing, keep game for safety
+            pass
         if g.get('correct_prediction') is not None:
             summary['winners']['total'] += 1
             if g['correct_prediction']:
@@ -3485,11 +3611,17 @@ def index():
             </div>
         </div>
         <div class="summary">
-            <div class="muted" style="align-self:center;">This view</div>
+            <div class="muted" style="align-self:center;">This view (FBS-involved only)</div>
             <div class="muted" style="align-self:center;"><span id="sum-count-shown">{{ game_cards|length }}</span> shown</div>
             <div>Winners: <span id="sum-winners-correct">{{summary['winners']['correct']}}</span> / <span id="sum-winners-total">{{summary['winners']['total']}}</span> (<span id="sum-winners-pct">{{summary['winners']['pct']}}</span>)</div>
             <div>ATS: <span id="sum-ats-correct">{{summary['ats']['correct']}}</span> / <span id="sum-ats-total">{{summary['ats']['total']}}</span> (<span id="sum-ats-pct">{{summary['ats']['pct']}}</span>) +<span id="sum-ats-push">{{summary['ats']['push']}}</span> push</div>
             <div>Totals: <span id="sum-ou-correct">{{summary['ou']['correct']}}</span> / <span id="sum-ou-total">{{summary['ou']['total']}}</span> (<span id="sum-ou-pct">{{summary['ou']['pct']}}</span>) +<span id="sum-ou-push">{{summary['ou']['push']}}</span> push</div>
+        </div>
+        <div class="summary" style="margin-top:-8px;">
+            <div class="muted" style="align-self:center;">Season-to-date (FBS-involved):</div>
+            <div>Winners: {{ytd_summary['winners']['correct']}} / {{ytd_summary['winners']['total']}} ({{ytd_summary['winners']['pct']}})</div>
+            <div>ATS: {{ytd_summary['ats']['correct']}} / {{ytd_summary['ats']['total']}} ({{ytd_summary['ats']['pct']}}) +{{ytd_summary['ats']['push']}} push</div>
+            <div>Totals: {{ytd_summary['ou']['correct']}} / {{ytd_summary['ou']['total']}} ({{ytd_summary['ou']['pct']}}) +{{ytd_summary['ou']['push']}} push</div>
         </div>
         <div style="text-align:center; margin:-2px 0 8px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
             <button type="button" id="toggleFinalsBtn" style="background:#8e44ad;">{{ 'Show All Games' if filter_type == 'completed' else 'Show Finals Only' }}</button>
@@ -4230,7 +4362,7 @@ def index():
     <div style="margin-top:30px; text-align:center; font-size:0.75em; color:#7f8c8d;">
         Build {{ BUILD_TIME }} • Commit {{ BUILD_COMMIT[:8] if BUILD_COMMIT else 'unknown' }} • Source {{ PRED_SOURCE }}
     </div>
-    ''', weeks=weeks, selected_week=selected_week, all_dates=all_dates, selected_date=selected_date, show_all=show_all, hide_both_unknown=hide_both_unknown, all_conferences=pred_df['home_conference'].unique(), selected_conference=selected_conference, game_cards=game_cards, filter_type=filter_type, summary=summary, sort_by=sort_by, HIDE_REFRESH=HIDE_REFRESH, finals_count_week=finals_count_week, total_games_week=total_games_week, finals_pct_week=finals_pct_week, unknown_pending=unknown_pending, odds_with_lines_week=odds_with_lines_week, BUILD_TIME=BUILD_TIME, BUILD_COMMIT=BUILD_COMMIT, PRED_SOURCE=PRED_SOURCE)
+    ''', weeks=weeks, selected_week=selected_week, all_dates=all_dates, selected_date=selected_date, show_all=show_all, hide_both_unknown=hide_both_unknown, all_conferences=pred_df['home_conference'].unique(), selected_conference=selected_conference, game_cards=game_cards, filter_type=filter_type, summary=summary, sort_by=sort_by, HIDE_REFRESH=HIDE_REFRESH, finals_count_week=finals_count_week, total_games_week=total_games_week, finals_pct_week=finals_pct_week, unknown_pending=unknown_pending, odds_with_lines_week=odds_with_lines_week, BUILD_TIME=BUILD_TIME, BUILD_COMMIT=BUILD_COMMIT, PRED_SOURCE=PRED_SOURCE, ytd_summary=ytd_summary)
     resp = make_response(page_html)
     resp.headers['Cache-Control'] = 'no-store, max-age=0'
     resp.headers['Pragma'] = 'no-cache'
