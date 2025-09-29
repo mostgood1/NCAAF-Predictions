@@ -623,6 +623,8 @@ pred_df['away_conference'] = pred_df['away_team'].apply(lambda x: conf_map.get(n
 
 # Cached YTD summary for FBS-involved games (recomputed periodically)
 YTD_SUMMARY_CACHE = {'ts': 0.0, 'data': None}
+# Cached YTD summary for strictly FBS vs FBS games
+YTD_SUMMARY_FBSvFBS_CACHE = {'ts': 0.0, 'data': None}
 
 def _compute_ytd_summary_fbs(cache_ttl_sec: int = 180) -> dict:
     import time
@@ -693,6 +695,72 @@ def _compute_ytd_summary_fbs(cache_ttl_sec: int = 180) -> dict:
     try:
         YTD_SUMMARY_CACHE['ts'] = now
         YTD_SUMMARY_CACHE['data'] = out
+    except Exception:
+        pass
+    return out
+
+def _compute_ytd_summary_fbsvfbs(cache_ttl_sec: int = 180) -> dict:
+    import time
+    now = time.time()
+    try:
+        if YTD_SUMMARY_FBSvFBS_CACHE['data'] is not None and (now - float(YTD_SUMMARY_FBSvFBS_CACHE['ts'])) < cache_ttl_sec:
+            return YTD_SUMMARY_FBSvFBS_CACHE['data']
+    except Exception:
+        pass
+    try:
+        df = pred_df.copy()
+        finals_mask = df['actual_home_points'].notna() & df['actual_away_points'].notna()
+        df = df[finals_mask]
+        fbs_confs = {
+            'acc','sec','big ten','big 12','pac 12','american','mountain west','sun belt','mac','conference usa','independent','independents','fbs independents','independent (fbs)'
+        }
+        fbs_indies = {'notre dame','army','navy','umass','uconn','new mexico state'}
+        def is_fbs(team, conf):
+            try:
+                c = str(conf or '').strip().lower()
+                t = str(team or '').strip().lower()
+                return c in fbs_confs or t in fbs_indies
+            except Exception:
+                return False
+        mask_both_fbs = df.apply(lambda r: (is_fbs(r.get('home_team'), r.get('home_conference')) and is_fbs(r.get('away_team'), r.get('away_conference'))), axis=1)
+        df = df[mask_both_fbs]
+        summary = { 'winners': {'correct':0,'total':0}, 'ou': {'correct':0,'push':0,'total':0}, 'ats': {'correct':0,'push':0,'total':0} }
+        for _, row in df.iterrows():
+            try:
+                g = _build_game_card(row)
+                if g.get('correct_prediction') is not None:
+                    summary['winners']['total'] += 1
+                    if g['correct_prediction']:
+                        summary['winners']['correct'] += 1
+                if g.get('ou_actual_result'):
+                    if g['ou_actual_result'] == 'Push':
+                        summary['ou']['push'] += 1
+                    else:
+                        summary['ou']['total'] += 1
+                        if g.get('ou_correct') is True:
+                            summary['ou']['correct'] += 1
+                if g.get('ats_actual_result'):
+                    if g['ats_actual_result'] == 'Push':
+                        summary['ats']['push'] += 1
+                    else:
+                        summary['ats']['total'] += 1
+                        if g.get('ats_correct') is True:
+                            summary['ats']['correct'] += 1
+            except Exception:
+                continue
+        for key in ('winners','ou','ats'):
+            corr = summary[key].get('correct', 0) or 0
+            tot = summary[key].get('total', 0) or 0
+            try:
+                summary[key]['pct'] = (f"{(corr/tot*100):.1f}%" if tot > 0 else '—')
+            except Exception:
+                summary[key]['pct'] = '—'
+        out = summary
+    except Exception:
+        out = { 'winners': {'correct':0,'total':0,'pct':'—'}, 'ou': {'correct':0,'push':0,'total':0,'pct':'—'}, 'ats': {'correct':0,'push':0,'total':0,'pct':'—'} }
+    try:
+        YTD_SUMMARY_FBSvFBS_CACHE['ts'] = now
+        YTD_SUMMARY_FBSvFBS_CACHE['data'] = out
     except Exception:
         pass
     return out
@@ -3384,6 +3452,8 @@ def index():
 
     # Season-to-date summary for FBS-involved games (cached)
     ytd_summary = _compute_ytd_summary_fbs()
+    # Season-to-date summary for strictly FBS vs FBS (cached)
+    ytd_fbsvfbs = _compute_ytd_summary_fbsvfbs()
 
     # Prepare game cards for all filtered games (fixed loop)
     game_cards = []
@@ -3638,6 +3708,12 @@ def index():
             <div>Winners: {{ytd_summary['winners']['correct']}} / {{ytd_summary['winners']['total']}} ({{ytd_summary['winners']['pct']}})</div>
             <div>ATS: {{ytd_summary['ats']['correct']}} / {{ytd_summary['ats']['total']}} ({{ytd_summary['ats']['pct']}}) +{{ytd_summary['ats']['push']}} push</div>
             <div>Totals: {{ytd_summary['ou']['correct']}} / {{ytd_summary['ou']['total']}} ({{ytd_summary['ou']['pct']}}) +{{ytd_summary['ou']['push']}} push</div>
+        </div>
+        <div class="summary" style="margin-top:-12px;">
+            <div class="muted" style="align-self:center;">Season-to-date (FBS vs FBS):</div>
+            <div>Winners: {{ytd_fbsvfbs['winners']['correct']}} / {{ytd_fbsvfbs['winners']['total']}} ({{ytd_fbsvfbs['winners']['pct']}})</div>
+            <div>ATS: {{ytd_fbsvfbs['ats']['correct']}} / {{ytd_fbsvfbs['ats']['total']}} ({{ytd_fbsvfbs['ats']['pct']}}) +{{ytd_fbsvfbs['ats']['push']}} push</div>
+            <div>Totals: {{ytd_fbsvfbs['ou']['correct']}} / {{ytd_fbsvfbs['ou']['total']}} ({{ytd_fbsvfbs['ou']['pct']}}) +{{ytd_fbsvfbs['ou']['push']}} push</div>
         </div>
         <div style="text-align:center; margin:-2px 0 8px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
             <button type="button" id="toggleFinalsBtn" style="background:#8e44ad;">{{ 'Show All Games' if filter_type == 'completed' else 'Show Finals Only' }}</button>
@@ -4378,7 +4454,7 @@ def index():
     <div style="margin-top:30px; text-align:center; font-size:0.75em; color:#7f8c8d;">
         Build {{ BUILD_TIME }} • Commit {{ BUILD_COMMIT[:8] if BUILD_COMMIT else 'unknown' }} • Source {{ PRED_SOURCE }}
     </div>
-    ''', weeks=weeks, selected_week=selected_week, all_dates=all_dates, selected_date=selected_date, show_all=show_all, hide_both_unknown=hide_both_unknown, all_conferences=pred_df['home_conference'].unique(), selected_conference=selected_conference, game_cards=game_cards, filter_type=filter_type, summary=summary, sort_by=sort_by, HIDE_REFRESH=HIDE_REFRESH, finals_count_week=finals_count_week, total_games_week=total_games_week, finals_pct_week=finals_pct_week, unknown_pending=unknown_pending, odds_with_lines_week=odds_with_lines_week, BUILD_TIME=BUILD_TIME, BUILD_COMMIT=BUILD_COMMIT, PRED_SOURCE=PRED_SOURCE, ytd_summary=ytd_summary)
+    ''', weeks=weeks, selected_week=selected_week, all_dates=all_dates, selected_date=selected_date, show_all=show_all, hide_both_unknown=hide_both_unknown, all_conferences=pred_df['home_conference'].unique(), selected_conference=selected_conference, game_cards=game_cards, filter_type=filter_type, summary=summary, sort_by=sort_by, HIDE_REFRESH=HIDE_REFRESH, finals_count_week=finals_count_week, total_games_week=total_games_week, finals_pct_week=finals_pct_week, unknown_pending=unknown_pending, odds_with_lines_week=odds_with_lines_week, BUILD_TIME=BUILD_TIME, BUILD_COMMIT=BUILD_COMMIT, PRED_SOURCE=PRED_SOURCE, ytd_summary=ytd_summary, ytd_fbsvfbs=ytd_fbsvfbs)
     resp = make_response(page_html)
     resp.headers['Cache-Control'] = 'no-store, max-age=0'
     resp.headers['Pragma'] = 'no-cache'
