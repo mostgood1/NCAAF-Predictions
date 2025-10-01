@@ -1,6 +1,6 @@
 {
   "week": 6,
-  "generated_at": "2025-10-01T22:59:57.072553Z",
+  "generated_at": "2025-10-01T23:04:49.396791Z",
   "count": 130,
   "results": [
     {
@@ -87,11 +87,11 @@
       "market": "ML",
       "side": "Home",
       "provider": "BetUS",
-      "price_american": 405,
+      "price_american": 425,
       "line": NaN,
       "model_prob": 0.8914,
-      "implied_prob": 0.198,
-      "edge": 3.5018,
+      "implied_prob": 0.1905,
+      "edge": 3.6801,
       "kelly_f": 0.025,
       "stake": 12.5,
       "start_iso": "2025-10-04T20:00:00Z",
