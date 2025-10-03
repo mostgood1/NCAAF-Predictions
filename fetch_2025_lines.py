@@ -99,6 +99,12 @@ ALIASES = {
     'penn state nittany lions': 'penn state', 'oregon ducks': 'oregon',
     'nebraska cornhuskers': 'nebraska', 'michigan wolverines': 'michigan',
     'lsu tigers': 'lsu', 'uconn huskies': 'connecticut', 'delaware blue hens': 'delaware',
+    # Sam Houston / New Mexico State variations
+    'sam houston state': 'sam houston',
+    'sam houston bearkats': 'sam houston',
+    'sam houston state bearkats': 'sam houston',
+    'new mexico st': 'new mexico state',
+    'new mexico state aggies': 'new mexico state',
 }
 
 def norm_team(name: str) -> str:
@@ -275,6 +281,8 @@ def build_lines_rows(week: int, odds_events: List[Dict[str, Any]], debug: bool =
     rows: List[Dict[str, Any]] = []
     unmatched: List[Dict[str, Any]] = []
     skipped_time = 0
+    skipped_samples: List[Dict[str, Any]] = []
+    # First pass: enforce time window if available
     for ev in odds_events:
         raw_home = ev.get('home_team'); raw_away = ev.get('away_team')
         if not raw_home or not raw_away:
@@ -286,6 +294,8 @@ def build_lines_rows(week: int, odds_events: List[Dict[str, Any]], debug: bool =
                     ctd = pd.to_datetime(ct, utc=True)
                     if ctd < week_start or ctd > week_end:
                         skipped_time += 1
+                        if debug and len(skipped_samples) < 10:
+                            skipped_samples.append({'home': raw_home, 'away': raw_away, 'commence_time': str(ctd)})
                         continue
                 except Exception:
                     pass
@@ -316,10 +326,54 @@ def build_lines_rows(week: int, odds_events: List[Dict[str, Any]], debug: bool =
             'awayTeam': sched_away,
             'lines': json.dumps(provs, separators=(',',':')),
         })
+    # Second pass: relaxed matching that ignores the inferred week time window
+    # This helps capture legit week games whose commence_time falls just outside our inferred bounds.
+    relaxed_added = 0
+    if week_start is not None and week_end is not None:
+        # Build index of already-added keys to avoid duplicates
+        existing_keys = set((r['homeTeam'], r['awayTeam']) for r in rows)
+        for ev in odds_events:
+            raw_home = ev.get('home_team'); raw_away = ev.get('away_team')
+            if not raw_home or not raw_away:
+                continue
+            # Best-match normalization (account for mascots / suffixes)
+            n_home = best_schedule_norm(raw_home, schedule_team_norms)
+            n_away = best_schedule_norm(raw_away, schedule_team_norms)
+            key = (n_home, n_away)
+            if key not in schedule_index:
+                key_rev = (n_away, n_home)
+                if key_rev in schedule_index:
+                    key = key_rev
+                else:
+                    continue
+            (sched_home, sched_away) = schedule_index[key]
+            if (sched_home, sched_away) in existing_keys:
+                continue
+            provs = []
+            for bookmaker in ev.get('bookmakers', []):
+                try:
+                    provs.append(_extract_markets(bookmaker, sched_home, sched_away))
+                except Exception:
+                    continue
+            if not provs:
+                continue
+            rows.append({
+                'year': YEAR,
+                'week': week,
+                'homeTeam': sched_home,
+                'awayTeam': sched_away,
+                'lines': json.dumps(provs, separators=(',',':')),
+            })
+            existing_keys.add((sched_home, sched_away))
+            relaxed_added += 1
     if unmatched:
         print(f"[warn] Unmatched odds events: {len(unmatched)}", file=sys.stderr)
     if skipped_time and debug:
         print(f"[info] Skipped events outside inferred week window: {skipped_time}", file=sys.stderr)
+        if skipped_samples:
+            print('[debug] sample time-skipped events:', json.dumps(skipped_samples, indent=2), file=sys.stderr)
+    if relaxed_added and debug:
+        print(f"[info] Relaxed time-window matched additional games: {relaxed_added}", file=sys.stderr)
     if unmatched and debug:
         sample = unmatched[:10]
         print('[debug] sample unmatched events:', json.dumps(sample, indent=2), file=sys.stderr)
