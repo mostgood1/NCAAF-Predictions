@@ -2356,6 +2356,14 @@ def _update_scores_with_cfbd(week: int | None = None, overwrite: bool = False) -
                             unique_dates.add(d.date().isoformat())
             except Exception:
                 pass
+            # Always include today and yesterday to catch recent finals even if start_date is missing
+            try:
+                from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+                today = _dt.now(_tz.utc).date()
+                yday = today - _td(days=1)
+                unique_dates.update({today.isoformat(), yday.isoformat()})
+            except Exception:
+                pass
             # Always ensure broad Week 0/1 window (union), covers Labor Day Monday
             try:
                 if week is None or int(week) in (0, 1):

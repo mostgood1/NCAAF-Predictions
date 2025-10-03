@@ -174,11 +174,27 @@ try {
     # Lightweight daily scores finalization pass (prior + current week) unless skipped
     if(-not $SkipScoreCheck){
         try {
-            Write-Host "Running daily_scores_check.py" -ForegroundColor Cyan
-            & $py (Join-Path $root 'daily_scores_check.py') *>&1 | Tee-Object -FilePath $log -Append
+            Write-Host "Running daily_scores_check.py (scan today & yesterday)" -ForegroundColor Cyan
+            & $py (Join-Path $root 'daily_scores_check.py') --scan-today-yesterday *>&1 | Tee-Object -FilePath $log -Append
         } catch {
             Write-Host "daily_scores_check.py failed: $($_.Exception.Message)" -ForegroundColor Yellow
         }
+        # Best-effort: ask local web app (if running) to reload predictions so cards settle now
+        try {
+            $svcPort = if($env:PORT){ $env:PORT } else { 5051 }
+            $urls = @(
+                "http://127.0.0.1:$svcPort/api/refresh-data?quick=1",
+                "http://127.0.0.1:$svcPort/api/admin/reload"
+            )
+            foreach($u in $urls){
+                try {
+                    Write-Host "Attempting app reload via $u" -ForegroundColor DarkCyan
+                    Invoke-RestMethod -Method GET -Uri $u -TimeoutSec 10 -ErrorAction Stop | Out-Null
+                    Write-Host "App reload request sent." -ForegroundColor DarkGreen
+                    break
+                } catch {}
+            }
+        } catch {}
     }
 
     if($LASTEXITCODE -ne 0){ Write-Host "weekly_update.py failed (exit $LASTEXITCODE). Skipping rec logging." -ForegroundColor Yellow }

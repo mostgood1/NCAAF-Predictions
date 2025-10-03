@@ -402,6 +402,12 @@ def _merge_provider_entries(base_rows: List[Dict[str, Any]], new_rows: List[Dict
 # ---------------------------------------------------------------------------
 
 def merge_and_write(rows: List[Dict[str, Any]], week: int):
+    """Merge new odds rows into the CSV without dropping unmatched games for the week.
+
+    Prior behavior removed all rows for the target week, which caused odds to disappear
+    for games once The Odds API stopped returning them (e.g., after kickoff). We now
+    only replace keys that appear in the new fetch and preserve other existing rows.
+    """
     new_df = pd.DataFrame(rows)
     if os.path.exists(LINES_PATH):
         try:
@@ -410,9 +416,38 @@ def merge_and_write(rows: List[Dict[str, Any]], week: int):
             old = pd.DataFrame(columns=['year','week','homeTeam','awayTeam','lines'])
     else:
         old = pd.DataFrame(columns=['year','week','homeTeam','awayTeam','lines'])
-    # Drop existing rows for this (year, week)
-    mask = ~((old.get('year',0)==YEAR) & (old.get('week',0)==week))
-    merged = pd.concat([old[mask], new_df], ignore_index=True)
+
+    # Build key sets for efficient merge: (year, week, homeTeam, awayTeam)
+    def _key_iter(df: pd.DataFrame):
+        for _, r in df.iterrows():
+            try:
+                yield (int(r.get('year', YEAR)), int(r.get('week', week)), str(r.get('homeTeam','')), str(r.get('awayTeam','')))
+            except Exception:
+                continue
+    try:
+        new_keys = set(_key_iter(new_df))
+    except Exception:
+        new_keys = set()
+
+    # Keep everything outside the target YEAR/WEEK as-is.
+    base_mask = ~((old.get('year', 0) == YEAR) & (old.get('week', 0) == week))
+    keep_rows = old[base_mask].copy()
+
+    # Within the target YEAR/WEEK, preserve rows not in new_keys; replace rows that are in new_keys.
+    wk_mask = ((old.get('year', 0) == YEAR) & (old.get('week', 0) == week))
+    if 'homeTeam' in old.columns and 'awayTeam' in old.columns:
+        def _row_key(r):
+            try:
+                return (int(r['year']), int(r['week']), str(r['homeTeam']), str(r['awayTeam']))
+            except Exception:
+                return None
+        preserved_same_week = [r for _, r in old[wk_mask].iterrows() if _row_key(r) not in new_keys]
+        if preserved_same_week:
+            keep_rows = pd.concat([keep_rows, pd.DataFrame(preserved_same_week)], ignore_index=True)
+
+    # Append new rows (they will replace any existing keys that we purposely did not carry over above)
+    merged = pd.concat([keep_rows, new_df], ignore_index=True)
+
     # Sort for stability
     try:
         merged['week_int'] = pd.to_numeric(merged['week'], errors='coerce')
@@ -420,10 +455,11 @@ def merge_and_write(rows: List[Dict[str, Any]], week: int):
         merged.drop(columns=['week_int'], inplace=True)
     except Exception:
         pass
+
     tmp = LINES_PATH + '.tmp'
     merged.to_csv(tmp, index=False)
     os.replace(tmp, LINES_PATH)
-    return {'written_rows': len(new_df), 'total_rows': len(merged), 'path': LINES_PATH}
+    return {'written_rows': len(new_df), 'preserved_rows': int(len(merged) - len(new_df) - len(old[~base_mask])), 'total_rows': len(merged), 'path': LINES_PATH}
 
 # ---------------------------------------------------------------------------
 # Main
