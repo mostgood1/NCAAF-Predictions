@@ -390,7 +390,7 @@ year,week,homeTeam,awayTeam,lines
 2025,7,Akron,Miami (OH),[]
 2025,7,Arizona,BYU,[]
 2025,7,Army,Charlotte,[]
-2025,7,Auburn,Georgia,"[{'provider': 'DraftKings', 'spread': 7, 'formattedSpread': 'Georgia -7', 'spreadOpen': 7, 'overUnder': None, 'overUnderOpen': None, 'homeMoneyline': None, 'awayMoneyline': None}, {'provider': 'ESPN Bet', 'spread': 6, 'formattedSpread': 'Georgia -6', 'spreadOpen': 7, 'overUnder': 50.5, 'overUnderOpen': 50.5, 'homeMoneyline': 180, 'awayMoneyline': -215}]"
+2025,7,Auburn,Georgia,"[{""provider"":""DraftKings"",""spread"":4.5,""formattedSpread"":""Auburn +4.5"",""overUnder"":null,""homeMoneyline"":null,""awayMoneyline"":null},{""provider"":""Paddy Power"",""spread"":null,""formattedSpread"":"""",""overUnder"":null,""homeMoneyline"":138,""awayMoneyline"":-167},{""provider"":""FanDuel"",""spread"":3.5,""formattedSpread"":""Auburn +3.5"",""overUnder"":47.5,""homeMoneyline"":142,""awayMoneyline"":-172},{""provider"":""BoyleSports"",""spread"":3.5,""formattedSpread"":""Auburn +3.5"",""overUnder"":null,""homeMoneyline"":null,""awayMoneyline"":null},{""provider"":""Fliff"",""spread"":4.5,""formattedSpread"":""Auburn +4.5"",""overUnder"":null,""homeMoneyline"":140,""awayMoneyline"":-180}]"
 2025,7,Boise State,New Mexico,[]
 2025,7,Boston College,Clemson,[]
 2025,7,Bowling Green,Toledo,[]
@@ -401,44 +401,44 @@ year,week,homeTeam,awayTeam,lines
 2025,7,Eastern Michigan,Northern Illinois,[]
 2025,7,Florida Atlantic,UAB,[]
 2025,7,Florida State,Pittsburgh,[]
-2025,7,Georgia Southern,Southern Miss,[]
+2025,7,Georgia Southern,Southern Miss,"[{""provider"":""FanDuel"",""spread"":-2.5,""formattedSpread"":""Georgia Southern -2.5"",""overUnder"":59.5,""homeMoneyline"":-126,""awayMoneyline"":105},{""provider"":""Paddy Power"",""spread"":null,""formattedSpread"":"""",""overUnder"":null,""homeMoneyline"":-120,""awayMoneyline"":100},{""provider"":""Fliff"",""spread"":null,""formattedSpread"":"""",""overUnder"":59.5,""homeMoneyline"":-130,""awayMoneyline"":105}]"
 2025,7,Georgia State,App State,[]
 2025,7,Georgia Tech,Virginia Tech,[]
 2025,7,Hawai'i,Utah State,[]
-2025,7,Illinois,Ohio State,"[{'provider': 'ESPN Bet', 'spread': 13.5, 'formattedSpread': 'Ohio State -13.5', 'spreadOpen': 13.5, 'overUnder': 50.5, 'overUnderOpen': 50.5, 'homeMoneyline': 400, 'awayMoneyline': -600}]"
+2025,7,Illinois,Ohio State,"[{""provider"":""FanDuel"",""spread"":15.5,""formattedSpread"":""Illinois +15.5"",""overUnder"":48.5,""homeMoneyline"":540,""awayMoneyline"":-800},{""provider"":""Paddy Power"",""spread"":null,""formattedSpread"":"""",""overUnder"":null,""homeMoneyline"":500,""awayMoneyline"":-750},{""provider"":""DraftKings"",""spread"":14.0,""formattedSpread"":""Illinois +14.0"",""overUnder"":null,""homeMoneyline"":null,""awayMoneyline"":null},{""provider"":""Fliff"",""spread"":null,""formattedSpread"":"""",""overUnder"":null,""homeMoneyline"":530,""awayMoneyline"":-900}]"
 2025,7,James Madison,Louisiana,[]
 2025,7,Kansas State,TCU,[]
-2025,7,Kennesaw State,Louisiana Tech,[]
+2025,7,Kennesaw State,Louisiana Tech,"[{""provider"":""FanDuel"",""spread"":5.5,""formattedSpread"":""Kennesaw State +5.5"",""overUnder"":45.5,""homeMoneyline"":180,""awayMoneyline"":-220},{""provider"":""Paddy Power"",""spread"":null,""formattedSpread"":"""",""overUnder"":null,""homeMoneyline"":175,""awayMoneyline"":-222},{""provider"":""Fliff"",""spread"":5.5,""formattedSpread"":""Kennesaw State +5.5"",""overUnder"":45.5,""homeMoneyline"":175,""awayMoneyline"":-235}]"
 2025,7,Kent State,Massachusetts,[]
-2025,7,LSU,South Carolina,[]
+2025,7,LSU,South Carolina,"[{""provider"":""FanDuel"",""spread"":-9.5,""formattedSpread"":""LSU -9.5"",""overUnder"":42.5,""homeMoneyline"":-385,""awayMoneyline"":290},{""provider"":""Paddy Power"",""spread"":null,""formattedSpread"":"""",""overUnder"":null,""homeMoneyline"":-400,""awayMoneyline"":300},{""provider"":""DraftKings"",""spread"":-10.0,""formattedSpread"":""LSU -10.0"",""overUnder"":null,""homeMoneyline"":null,""awayMoneyline"":null}]"
 2025,7,Marshall,Old Dominion,[]
 2025,7,Maryland,Nebraska,[]
 2025,7,Michigan State,UCLA,[]
-2025,7,Middle Tennessee,Missouri State,[]
+2025,7,Middle Tennessee,Missouri State,"[{""provider"":""FanDuel"",""spread"":2.5,""formattedSpread"":""Middle Tennessee +2.5"",""overUnder"":54.5,""homeMoneyline"":116,""awayMoneyline"":-140},{""provider"":""Paddy Power"",""spread"":null,""formattedSpread"":"""",""overUnder"":null,""homeMoneyline"":115,""awayMoneyline"":-143}]"
 2025,7,Minnesota,Purdue,[]
-2025,7,Missouri,Alabama,[]
+2025,7,Missouri,Alabama,"[{""provider"":""FanDuel"",""spread"":5.5,""formattedSpread"":""Missouri +5.5"",""overUnder"":55.5,""homeMoneyline"":152,""awayMoneyline"":-184},{""provider"":""Paddy Power"",""spread"":null,""formattedSpread"":"""",""overUnder"":null,""homeMoneyline"":150,""awayMoneyline"":-188},{""provider"":""DraftKings"",""spread"":6.0,""formattedSpread"":""Missouri +6.0"",""overUnder"":null,""homeMoneyline"":null,""awayMoneyline"":null}]"
 2025,7,Nevada,San Diego State,[]
 2025,7,North Texas,South Florida,[]
 2025,7,Notre Dame,NC State,[]
 2025,7,Oklahoma State,Houston,[]
-2025,7,Ole Miss,Washington State,[]
-2025,7,Oregon,Indiana,"[{'provider': 'DraftKings', 'spread': -14.5, 'formattedSpread': 'Oregon -14.5', 'spreadOpen': -14.5, 'overUnder': None, 'overUnderOpen': None, 'homeMoneyline': None, 'awayMoneyline': None}, {'provider': 'ESPN Bet', 'spread': -13.5, 'formattedSpread': 'Oregon -13.5', 'spreadOpen': -14, 'overUnder': 55.5, 'overUnderOpen': 55.5, 'homeMoneyline': -550, 'awayMoneyline': 380}]"
+2025,7,Ole Miss,Washington State,"[{""provider"":""FanDuel"",""spread"":-33.5,""formattedSpread"":""Ole Miss -33.5"",""overUnder"":57.5,""homeMoneyline"":null,""awayMoneyline"":null}]"
+2025,7,Oregon,Indiana,"[{""provider"":""DraftKings"",""spread"":-10.0,""formattedSpread"":""Oregon -10.0"",""overUnder"":null,""homeMoneyline"":null,""awayMoneyline"":null},{""provider"":""Paddy Power"",""spread"":null,""formattedSpread"":"""",""overUnder"":null,""homeMoneyline"":-400,""awayMoneyline"":300},{""provider"":""FanDuel"",""spread"":-10.5,""formattedSpread"":""Oregon -10.5"",""overUnder"":53.5,""homeMoneyline"":-375,""awayMoneyline"":290},{""provider"":""Fliff"",""spread"":null,""formattedSpread"":"""",""overUnder"":null,""homeMoneyline"":-405,""awayMoneyline"":280}]"
 2025,7,Oregon State,Wake Forest,[]
 2025,7,Penn State,Northwestern,[]
 2025,7,SMU,Stanford,[]
-2025,7,Sam Houston,Jacksonville State,[]
+2025,7,Sam Houston,Jacksonville State,"[{""provider"":""FanDuel"",""spread"":9.5,""formattedSpread"":""Sam Houston +9.5"",""overUnder"":55.5,""homeMoneyline"":280,""awayMoneyline"":-360},{""provider"":""Paddy Power"",""spread"":null,""formattedSpread"":"""",""overUnder"":null,""homeMoneyline"":270,""awayMoneyline"":-350},{""provider"":""Fliff"",""spread"":9.5,""formattedSpread"":""Sam Houston +9.5"",""overUnder"":55.5,""homeMoneyline"":255,""awayMoneyline"":-360}]"
 2025,7,Temple,Navy,[]
-2025,7,Tennessee,Arkansas,[]
-2025,7,Texas,Oklahoma,"[{'provider': 'DraftKings', 'spread': -9.5, 'formattedSpread': 'Texas -9.5', 'spreadOpen': -9.5, 'overUnder': None, 'overUnderOpen': None, 'homeMoneyline': None, 'awayMoneyline': None}, {'provider': 'ESPN Bet', 'spread': -9.5, 'formattedSpread': 'Texas -9.5', 'spreadOpen': -9.5, 'overUnder': 56.5, 'overUnderOpen': 56.5, 'homeMoneyline': -280, 'awayMoneyline': 230}]"
-2025,7,Texas A&M,Florida,[]
+2025,7,Tennessee,Arkansas,"[{""provider"":""FanDuel"",""spread"":-12.5,""formattedSpread"":""Tennessee -12.5"",""overUnder"":68.5,""homeMoneyline"":-480,""awayMoneyline"":360},{""provider"":""Paddy Power"",""spread"":null,""formattedSpread"":"""",""overUnder"":null,""homeMoneyline"":-450,""awayMoneyline"":333},{""provider"":""DraftKings"",""spread"":-13.5,""formattedSpread"":""Tennessee -13.5"",""overUnder"":null,""homeMoneyline"":null,""awayMoneyline"":null},{""provider"":""Fliff"",""spread"":-13.5,""formattedSpread"":""Tennessee -13.5"",""overUnder"":null,""homeMoneyline"":null,""awayMoneyline"":null}]"
+2025,7,Texas,Oklahoma,"[{""provider"":""DraftKings"",""spread"":-3.5,""formattedSpread"":""Texas -3.5"",""overUnder"":null,""homeMoneyline"":null,""awayMoneyline"":null},{""provider"":""Fliff"",""spread"":-3.5,""formattedSpread"":""Texas -3.5"",""overUnder"":null,""homeMoneyline"":null,""awayMoneyline"":null}]"
+2025,7,Texas A&M,Florida,"[{""provider"":""DraftKings"",""spread"":-9.5,""formattedSpread"":""Texas A&M -9.5"",""overUnder"":null,""homeMoneyline"":null,""awayMoneyline"":null}]"
 2025,7,Texas State,Troy,[]
 2025,7,Texas Tech,Kansas,[]
-2025,7,Tulane,East Carolina,[]
+2025,7,Tulane,East Carolina,"[{""provider"":""DraftKings"",""spread"":-7.5,""formattedSpread"":""Tulane -7.5"",""overUnder"":null,""homeMoneyline"":null,""awayMoneyline"":null},{""provider"":""FanDuel"",""spread"":-7.5,""formattedSpread"":""Tulane -7.5"",""overUnder"":53.5,""homeMoneyline"":-300,""awayMoneyline"":240},{""provider"":""Paddy Power"",""spread"":null,""formattedSpread"":"""",""overUnder"":null,""homeMoneyline"":-300,""awayMoneyline"":230},{""provider"":""Fliff"",""spread"":-7.5,""formattedSpread"":""Tulane -7.5"",""overUnder"":53.5,""homeMoneyline"":-330,""awayMoneyline"":240}]"
 2025,7,UNLV,Air Force,[]
-2025,7,USC,Michigan,"[{'provider': 'DraftKings', 'spread': 1.5, 'formattedSpread': 'Michigan -1.5', 'spreadOpen': 1.5, 'overUnder': None, 'overUnderOpen': None, 'homeMoneyline': None, 'awayMoneyline': None}]"
-2025,7,UTEP,Liberty,[]
+2025,7,USC,Michigan,"[{""provider"":""DraftKings"",""spread"":-2.5,""formattedSpread"":""USC -2.5"",""overUnder"":null,""homeMoneyline"":null,""awayMoneyline"":null},{""provider"":""FanDuel"",""spread"":-1.5,""formattedSpread"":""USC -1.5"",""overUnder"":54.5,""homeMoneyline"":-126,""awayMoneyline"":105},{""provider"":""Paddy Power"",""spread"":null,""formattedSpread"":"""",""overUnder"":null,""homeMoneyline"":-120,""awayMoneyline"":100},{""provider"":""Fliff"",""spread"":-1.5,""formattedSpread"":""USC -1.5"",""overUnder"":null,""homeMoneyline"":null,""awayMoneyline"":null}]"
+2025,7,UTEP,Liberty,"[{""provider"":""FanDuel"",""spread"":2.5,""formattedSpread"":""UTEP +2.5"",""overUnder"":47.5,""homeMoneyline"":114,""awayMoneyline"":-137},{""provider"":""Paddy Power"",""spread"":null,""formattedSpread"":"""",""overUnder"":null,""homeMoneyline"":110,""awayMoneyline"":-133},{""provider"":""Fliff"",""spread"":2.5,""formattedSpread"":""UTEP +2.5"",""overUnder"":47.5,""homeMoneyline"":110,""awayMoneyline"":-140}]"
 2025,7,UTSA,Rice,[]
-2025,7,Utah,Arizona State,"[{'provider': 'DraftKings', 'spread': -2.5, 'formattedSpread': 'Utah -2.5', 'spreadOpen': -2.5, 'overUnder': None, 'overUnderOpen': None, 'homeMoneyline': None, 'awayMoneyline': None}]"
+2025,7,Utah,Arizona State,"[{""provider"":""DraftKings"",""spread"":-4.5,""formattedSpread"":""Utah -4.5"",""overUnder"":null,""homeMoneyline"":null,""awayMoneyline"":null},{""provider"":""FanDuel"",""spread"":-4.5,""formattedSpread"":""Utah -4.5"",""overUnder"":50.5,""homeMoneyline"":-166,""awayMoneyline"":138},{""provider"":""Paddy Power"",""spread"":null,""formattedSpread"":"""",""overUnder"":null,""homeMoneyline"":-167,""awayMoneyline"":138}]"
 2025,7,Washington,Rutgers,[]
 2025,7,Western Michigan,Ball State,[]
 2025,7,Wisconsin,Iowa,[]

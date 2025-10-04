@@ -1,11 +1,11 @@
 season,week,home_team,away_team,has_odds,provider_count,providers
-2025,7,Middle Tennessee,Missouri State,False,0,
-2025,7,UTEP,Liberty,False,0,
-2025,7,Georgia Southern,Southern Miss,False,0,
-2025,7,Tulane,East Carolina,False,0,
-2025,7,Kennesaw State,Louisiana Tech,False,0,
+2025,7,Middle Tennessee,Missouri State,True,2,"FanDuel,Paddy Power"
+2025,7,UTEP,Liberty,True,3,"FanDuel,Fliff,Paddy Power"
+2025,7,Georgia Southern,Southern Miss,True,3,"FanDuel,Fliff,Paddy Power"
+2025,7,Tulane,East Carolina,True,4,"DraftKings,FanDuel,Fliff,Paddy Power"
+2025,7,Kennesaw State,Louisiana Tech,True,3,"FanDuel,Fliff,Paddy Power"
 2025,7,Southeastern Oklahoma State,Harding University,False,0,
-2025,7,Sam Houston,Jacksonville State,False,0,
+2025,7,Sam Houston,Jacksonville State,True,3,"FanDuel,Fliff,Paddy Power"
 2025,7,Harvard,Cornell,False,0,
 2025,7,Stevenson,Kings College (PA),False,0,
 2025,7,North Texas,South Florida,False,0,
@@ -13,7 +13,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,7,Washington,Rutgers,False,0,
 2025,7,Akron,Miami (OH),False,0,
 2025,7,Arizona,BYU,False,0,
-2025,7,Auburn,Georgia,True,2,"DraftKings,ESPN Bet"
+2025,7,Auburn,Georgia,True,5,"BoyleSports,DraftKings,FanDuel,Fliff,Paddy Power"
 2025,7,Boise State,New Mexico,False,0,
 2025,7,Boston College,Clemson,False,0,
 2025,7,Bowling Green,Toledo,False,0,
@@ -36,11 +36,11 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,7,Hawai'i,Utah State,False,0,
 2025,7,Hendrix College,Austin,False,0,
 2025,7,Idaho,Northern Colorado,False,0,
-2025,7,Illinois,Ohio State,True,1,ESPN Bet
+2025,7,Illinois,Ohio State,True,4,"DraftKings,FanDuel,Fliff,Paddy Power"
 2025,7,James Madison,Louisiana,False,0,
 2025,7,Kansas State,TCU,False,0,
 2025,7,Kent State,Massachusetts,False,0,
-2025,7,LSU,South Carolina,False,0,
+2025,7,LSU,South Carolina,True,3,"DraftKings,FanDuel,Paddy Power"
 2025,7,Marshall,Old Dominion,False,0,
 2025,7,Maryland,Nebraska,False,0,
 2025,7,Merrimack,Maine,False,0,
@@ -51,7 +51,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,7,Murray State,Illinois State,False,0,
 2025,7,North Alabama,Central Arkansas,False,0,
 2025,7,Oklahoma State,Houston,False,0,
-2025,7,Oregon,Indiana,True,2,"DraftKings,ESPN Bet"
+2025,7,Oregon,Indiana,True,4,"DraftKings,FanDuel,Fliff,Paddy Power"
 2025,7,Penn State,Northwestern,False,0,
 2025,7,Pennsylvania,Marist,False,0,
 2025,7,Robert Morris,Central Connecticut,False,0,
@@ -59,15 +59,15 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,7,South Dakota State,Northern Iowa,False,0,
 2025,7,St. Anselm,Franklin Pierce,False,0,
 2025,7,Temple,Navy,False,0,
-2025,7,Tennessee,Arkansas,False,0,
-2025,7,Texas A&M,Florida,False,0,
+2025,7,Tennessee,Arkansas,True,4,"DraftKings,FanDuel,Fliff,Paddy Power"
+2025,7,Texas A&M,Florida,True,1,DraftKings
 2025,7,Texas State,Troy,False,0,
 2025,7,Texas Tech,Kansas,False,0,
 2025,7,Towson,Monmouth,False,0,
 2025,7,UC Davis,Northern Arizona,False,0,
-2025,7,USC,Michigan,True,1,DraftKings
+2025,7,USC,Michigan,True,4,"DraftKings,FanDuel,Fliff,Paddy Power"
 2025,7,UTSA,Rice,False,0,
-2025,7,Utah,Arizona State,True,1,DraftKings
+2025,7,Utah,Arizona State,True,3,"DraftKings,FanDuel,Paddy Power"
 2025,7,Wagner,Mercyhurst,False,0,
 2025,7,Weber State,Sacramento State,False,0,
 2025,7,Western Michigan,Ball State,False,0,
@@ -83,7 +83,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,7,Johns Hopkins University,Carnegie Mellon,False,0,
 2025,7,Lincoln (MO),Northeastern State,False,0,
 2025,7,Michigan State,UCLA,False,0,
-2025,7,Missouri,Alabama,False,0,
+2025,7,Missouri,Alabama,True,3,"DraftKings,FanDuel,Paddy Power"
 2025,7,North Carolina Wesleyan,Belhaven,False,0,
 2025,7,Northwood (MI),Lake Erie,False,0,
 2025,7,Seton Hill,Slippery Rock,False,0,
@@ -97,7 +97,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,7,Wittenberg,John Carroll University,False,0,
 2025,7,Worcester St,Fitchburg State,False,0,
 2025,7,Lafayette,Bucknell,False,0,
-2025,7,Ole Miss,Washington State,False,0,
+2025,7,Ole Miss,Washington State,True,1,FanDuel
 2025,7,Albany State GA,Clark Atlanta,False,0,
 2025,7,Ashland,Thomas More College,False,0,
 2025,7,Augsburg,Bethel (MN),False,0,
@@ -243,7 +243,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,7,Notre Dame,NC State,False,0,
 2025,7,Oregon State,Wake Forest,False,0,
 2025,7,Southern Arkansas,Southwestern Oklahoma State,False,0,
-2025,7,Texas,Oklahoma,True,2,"DraftKings,ESPN Bet"
+2025,7,Texas,Oklahoma,True,2,"DraftKings,Fliff"
 2025,7,UNLV,Air Force,False,0,
 2025,7,CSU Pueblo,Fort Lewis,False,0,
 2025,7,Charleston Southern,Tennessee Tech,False,0,
