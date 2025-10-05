@@ -54,7 +54,7 @@ timestamp,season,week,home_team,away_team,market,side,price_american,line,provid
 2025-09-01T15:18:17.280502,2025,12,Alabama,Oklahoma,ML,Away,340,,DraftKings,0.5129,0.2273,1.2568,0.025,1000.0,12.5,open,pending,0.0
 2025-09-01T15:18:17.280502,2025,5,Penn State,Oregon,ML,Away,170,,DraftKings,0.8008,0.3704,1.1622,0.1,1000.0,50.0,closed,win,85.0
 2025-09-01T15:18:17.280502,2025,12,Alabama,Oklahoma,ML,Away,320,,ESPN Bet,0.5129,0.2381,1.1542,0.025,1000.0,12.5,open,pending,0.0
-2025-09-01T15:18:17.280502,2025,6,Alabama,Vanderbilt,Spread,Home,-110,-24.0,ESPN Bet,0.9996,0.5238,0.9083,0.1,1000.0,50.0,open,pending,0.0
+2025-09-01T15:18:17.280502,2025,6,Alabama,Vanderbilt,Spread,Home,-110,-24.0,ESPN Bet,0.9996,0.5238,0.9083,0.1,1000.0,50.0,closed,win,45.45
 2025-09-01T15:18:17.280502,2025,4,Oregon,Oregon State,Spread,Home,-110,-26.5,DraftKings,0.9995,0.5238,0.9081,0.1,1000.0,50.0,closed,win,45.45
 2025-09-01T15:18:17.280502,2025,7,Illinois,Ohio State,Spread,Away,-110,13.5,ESPN Bet,0.9994,0.5238,0.9079,0.1,1000.0,50.0,open,pending,0.0
 2025-09-01T15:18:17.280502,2025,14,Georgia Tech,Georgia,Spread,Away,-110,13.5,ESPN Bet,0.9982,0.5238,0.9056,0.1,1000.0,50.0,open,pending,0.0
@@ -73,13 +73,13 @@ timestamp,season,week,home_team,away_team,market,side,price_american,line,provid
 2025-09-01T15:18:17.280502,2025,8,Alabama,Tennessee,Spread,Home,-110,-12.5,DraftKings,0.9692,0.5238,0.8502,0.1,1000.0,50.0,open,pending,0.0
 2025-09-01T15:18:17.280502,2025,14,Auburn,Alabama,Spread,Away,-110,5.5,ESPN Bet,0.968,0.5238,0.8479,0.1,1000.0,50.0,open,pending,0.0
 2025-09-01T15:18:17.280502,2025,8,Alabama,Tennessee,Spread,Home,-110,-11.5,ESPN Bet,0.9639,0.5238,0.8401,0.1,1000.0,50.0,open,pending,0.0
-2025-09-01T15:18:17.280502,2025,6,North Carolina,Clemson,Spread,Away,-110,13.5,DraftKings,0.9625,0.5238,0.8376,0.1,1000.0,50.0,open,pending,0.0
+2025-09-01T15:18:17.280502,2025,6,North Carolina,Clemson,Spread,Away,-110,13.5,DraftKings,0.9625,0.5238,0.8376,0.1,1000.0,50.0,closed,win,45.45
 2025-09-02T13:47:06.979965,2025,7,Texas,Oklahoma,ML,Away,230,,ESPN Bet,0.852,0.303,1.8115,0.1,1000.0,50.0,open,pending,0.0
 2025-09-02T13:47:06.979965,2025,5,Penn State,Oregon,ML,Away,190,,ESPN Bet,0.8008,0.3448,1.3224,0.1,1000.0,50.0,closed,win,95.0
 2025-09-02T13:47:06.979965,2025,12,Alabama,Oklahoma,ML,Away,340,,DraftKings,0.5129,0.2273,1.2568,0.025,1000.0,12.5,open,pending,0.0
 2025-09-02T13:47:06.979965,2025,5,Penn State,Oregon,ML,Away,170,,DraftKings,0.8008,0.3704,1.1622,0.1,1000.0,50.0,closed,win,85.0
 2025-09-02T13:47:06.979965,2025,12,Alabama,Oklahoma,ML,Away,320,,ESPN Bet,0.5129,0.2381,1.1542,0.025,1000.0,12.5,open,pending,0.0
-2025-09-02T13:47:06.979965,2025,6,Alabama,Vanderbilt,Spread,Home,-110,-24.0,ESPN Bet,0.9996,0.5238,0.9083,0.1,1000.0,50.0,open,pending,0.0
+2025-09-02T13:47:06.979965,2025,6,Alabama,Vanderbilt,Spread,Home,-110,-24.0,ESPN Bet,0.9996,0.5238,0.9083,0.1,1000.0,50.0,closed,win,45.45
 2025-09-02T13:47:06.979965,2025,4,Oregon,Oregon State,Spread,Home,-110,-26.5,DraftKings,0.9995,0.5238,0.9081,0.1,1000.0,50.0,closed,win,45.45
 2025-09-02T13:47:06.979965,2025,7,Illinois,Ohio State,Spread,Away,-110,13.5,ESPN Bet,0.9994,0.5238,0.9079,0.1,1000.0,50.0,open,pending,0.0
 2025-09-02T13:47:06.979965,2025,14,Georgia Tech,Georgia,Spread,Away,-110,13.5,ESPN Bet,0.9982,0.5238,0.9056,0.1,1000.0,50.0,open,pending,0.0
@@ -98,7 +98,7 @@ timestamp,season,week,home_team,away_team,market,side,price_american,line,provid
 2025-09-02T13:47:06.979965,2025,8,Alabama,Tennessee,Spread,Home,-110,-12.5,DraftKings,0.9692,0.5238,0.8502,0.1,1000.0,50.0,open,pending,0.0
 2025-09-02T13:47:06.979965,2025,14,Auburn,Alabama,Spread,Away,-110,5.5,ESPN Bet,0.968,0.5238,0.8479,0.1,1000.0,50.0,open,pending,0.0
 2025-09-02T13:47:06.979965,2025,8,Alabama,Tennessee,Spread,Home,-110,-11.5,ESPN Bet,0.9639,0.5238,0.8401,0.1,1000.0,50.0,open,pending,0.0
-2025-09-02T13:47:06.979965,2025,6,North Carolina,Clemson,Spread,Away,-110,13.5,DraftKings,0.9625,0.5238,0.8376,0.1,1000.0,50.0,open,pending,0.0
+2025-09-02T13:47:06.979965,2025,6,North Carolina,Clemson,Spread,Away,-110,13.5,DraftKings,0.9625,0.5238,0.8376,0.1,1000.0,50.0,closed,win,45.45
 2025-09-25T15:01:00.096382+00:00,2025,5,Oklahoma State,Baylor,ML,Home,1042,,MyBookie.ag,0.995,0.0876,10.3629,0.025,1000.0,12.5,closed,loss,-12.5
 2025-09-25T15:01:00.096382+00:00,2025,5,Oklahoma State,Baylor,ML,Home,1000,,Hard Rock Bet,0.995,0.0909,9.945,0.025,1000.0,12.5,closed,loss,-12.5
 2025-09-25T15:01:00.096382+00:00,2025,5,Oklahoma State,Baylor,ML,Home,900,,Ladbrokes,0.995,0.1,8.95,0.025,1000.0,12.5,closed,loss,-12.5
