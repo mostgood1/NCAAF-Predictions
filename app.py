@@ -379,7 +379,9 @@ def _apply_week0_label(df: pd.DataFrame) -> pd.DataFrame:
 
 def _infer_current_week(default: int | None = None) -> int | None:
     """Infer the current (upcoming) week using earliest game date per week relative to today.
-    Strategy: choose the smallest week whose earliest game date is >= (today - 2 days).
+    Strategy: choose the smallest week whose earliest game date is >= today (i.e., the next
+    upcoming week once the prior week's earliest date is in the past). This advances the
+    default earlier in the week (e.g., on Monday) instead of waiting two extra days.
     Fallback to the min available week, else provided default.
     """
     try:
@@ -398,7 +400,8 @@ def _infer_current_week(default: int | None = None) -> int | None:
                     week_min_dates[int(w)] = grp['start_dt'].min().date()
                 except Exception:
                     continue
-        candidate_weeks = [w for w,d in week_min_dates.items() if d >= (today - _dt.timedelta(days=2))]
+        # Consider as candidates only weeks whose earliest game date is today or later
+        candidate_weeks = [w for w, d in week_min_dates.items() if d >= today]
         if candidate_weeks:
             return min(candidate_weeks)
         # Fallback to min week
