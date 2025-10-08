@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2025-10-07T14:27:00.009881Z",
+  "generated_at_utc": "2025-10-08T12:36:42.125892Z",
   "counts": {
     "train": 360,
     "val": 90
@@ -7,7 +7,7 @@
   "margin_model": {
     "path": "rf_v1_margin.joblib",
     "train": {
-      "mae": 6.04579719830067,
+      "mae": 6.045797198300672,
       "rmse": 7.735832328331357,
       "count": 360
     },
@@ -20,7 +20,7 @@
   "home_pts_model": {
     "path": "rf_v1_home_pts.joblib",
     "train": {
-      "mae": 6.045797198300671,
+      "mae": 6.045797198300672,
       "rmse": 7.735832328331357,
       "count": 360
     },
