@@ -18,6 +18,10 @@ from typing import Optional, Tuple, List
 import requests
 import pandas as pd
 from datetime import datetime, timezone
+try:
+    from zoneinfo import ZoneInfo  # Python 3.9+
+except Exception:
+    ZoneInfo = None
 
 BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__))).parent.parent
 DATA_DIR = BASE_DIR / 'data'
@@ -443,17 +447,38 @@ def compute_weather_adjustment(temp_f: Optional[float], wind_mph: Optional[float
         return None
 
 def _parse_start(dt_str: str) -> Optional[datetime]:
-    if not dt_str or str(dt_str).lower() in ('nan','nat','none','null'): return None
-    s = str(dt_str).replace(' ', 'T')
+    """Parse to timezone-aware UTC datetime, preferring America/New_York for naive values."""
+    if not dt_str or str(dt_str).lower() in ('nan','nat','none','null'):
+        return None
+    s = str(dt_str).strip().replace(' ', 'T')
+    dt_obj: Optional[datetime] = None
     try:
         if s.endswith('Z'):
-            return datetime.fromisoformat(s.replace('Z','+00:00'))
-        return datetime.fromisoformat(s)
+            dt_obj = datetime.fromisoformat(s.replace('Z','+00:00'))
+        else:
+            dt_obj = datetime.fromisoformat(s)
     except Exception:
         try:
-            return pd.to_datetime(dt_str, errors='coerce').to_pydatetime()
+            val = pd.to_datetime(s, errors='coerce')
+            dt_obj = None if pd.isna(val) else val.to_pydatetime()
         except Exception:
-            return None
+            dt_obj = None
+    if not dt_obj:
+        return None
+    # Localize naive to America/New_York, else pass-through tz, then convert to UTC
+    if dt_obj.tzinfo is None:
+        try:
+            if ZoneInfo is not None:
+                dt_obj = dt_obj.replace(tzinfo=ZoneInfo('America/New_York'))
+            else:
+                # Fallback: assume UTC to avoid double-shifting
+                dt_obj = dt_obj.replace(tzinfo=timezone.utc)
+        except Exception:
+            dt_obj = dt_obj.replace(tzinfo=timezone.utc)
+    try:
+        return dt_obj.astimezone(timezone.utc)
+    except Exception:
+        return dt_obj
 
 def enrich_dataframe(df: pd.DataFrame, limit: int = 150) -> pd.DataFrame:
     if df.empty:
@@ -467,7 +492,8 @@ def enrich_dataframe(df: pd.DataFrame, limit: int = 150) -> pd.DataFrame:
     todo_idx = df[(df['weather_temp'].isna()) & (df['weather_wind'].isna())].head(limit).index
     for idx in todo_idx:
         row = df.loc[idx]
-        start_dt = _parse_start(row.get('start_date') or row.get('start_date_api'))
+        # Prefer API kickoff time when available
+        start_dt = _parse_start(row.get('start_date_api') or row.get('start_date'))
         if not start_dt:
             df.at[idx,'enrichment_failed'] = True
             continue
@@ -517,7 +543,8 @@ def enrich_fbs_games(df: pd.DataFrame, batch: int = 150, max_loops: int = 20, pe
             break
         for idx in target_idx:
             row = df.loc[idx]
-            start_dt = _parse_start(row.get('start_date') or row.get('start_date_api'))
+            # Prefer API kickoff time when available
+            start_dt = _parse_start(row.get('start_date_api') or row.get('start_date'))
             if not start_dt:
                 df.at[idx,'enrichment_failed'] = True
                 if CAPTURE_DEBUG: df.at[idx,'weather_debug_reason'] = 'no_start_date'

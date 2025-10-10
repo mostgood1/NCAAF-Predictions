@@ -156,6 +156,13 @@ def _load_env_file(path: str):
 _load_env_file(os.path.join(BASE_DIR, '.env'))
 _load_env_file(os.path.join(BASE_DIR, '.env.local'))
 
+# Time parsing safety: avoid treating naive start_date values as UTC unless explicitly configured
+# This prevents week 7+ kickoff times from shifting due to naive->UTC assumption.
+try:
+    os.environ.setdefault('START_DATE_NAIVE_IS_UTC_FROM_WEEK', '100')
+except Exception:
+    pass
+
 # Secrets fallback (non-committed): load odds api key from secrets/ if env var absent
 try:
     if 'ODDS_API_KEY' not in os.environ:
