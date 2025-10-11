@@ -1,44 +1,44 @@
 season,week,home_team,away_team,has_odds,provider_count,providers
-2025,8,Liberty,New Mexico State,False,0,
-2025,8,South Alabama,Arkansas State,False,0,
-2025,8,Western Kentucky,Florida International,False,0,
-2025,8,Jacksonville State,Delaware,False,0,
-2025,8,Sam Houston,UTEP,False,0,
+2025,8,Liberty,New Mexico State,True,6,"Betway,BoyleSports,Coolbet,FanDuel,Fliff,Paddy Power"
+2025,8,South Alabama,Arkansas State,True,6,"Betway,BoyleSports,Coolbet,FanDuel,Fliff,Paddy Power"
+2025,8,Western Kentucky,Florida International,True,2,"Coolbet,FanDuel"
+2025,8,Jacksonville State,Delaware,True,4,"Betway,FanDuel,Fliff,Paddy Power"
+2025,8,Sam Houston,UTEP,True,5,"BoyleSports,Coolbet,FanDuel,Fliff,Paddy Power"
 2025,8,Olivet College,Trine University,False,0,
 2025,8,Southern Nazarene,Southwestern Oklahoma State,False,0,
-2025,8,East Carolina,Tulsa,False,0,
+2025,8,East Carolina,Tulsa,True,5,"Betway,Coolbet,FanDuel,Fliff,Paddy Power"
 2025,8,Maine Maritime,Biddeford,False,0,
-2025,8,Miami,Louisville,True,1,DraftKings
+2025,8,Miami,Louisville,True,5,"Coolbet,DraftKings,FanDuel,Fliff,Paddy Power"
 2025,8,Minnesota,Nebraska,False,0,
 2025,8,Wisconsin-Whitewater,Wisconsin-Stout,False,0,
 2025,8,Utah State,San José State,False,0,
-2025,8,California,North Carolina,False,0,
-2025,8,Alabama,Tennessee,True,2,"DraftKings,ESPN Bet"
+2025,8,California,North Carolina,True,3,"Coolbet,FanDuel,Paddy Power"
+2025,8,Alabama,Tennessee,True,4,"DraftKings,FanDuel,Fliff,Paddy Power"
 2025,8,Angelo State,Midwestern State,False,0,
 2025,8,App State,Coastal Carolina,False,0,
 2025,8,Arizona State,Texas Tech,True,1,DraftKings
 2025,8,Arkansas,Texas A&M,False,0,
-2025,8,Auburn,Missouri,False,0,
-2025,8,BYU,Utah,False,0,
+2025,8,Auburn,Missouri,True,2,"DraftKings,Fliff"
+2025,8,BYU,Utah,True,6,"Betfair,Coolbet,DraftKings,FanDuel,Fliff,Paddy Power"
 2025,8,Ball State,Akron,False,0,
 2025,8,Bethany (WV),Hiram College,False,0,
-2025,8,Boise State,UNLV,False,0,
+2025,8,Boise State,UNLV,True,2,"DraftKings,Fliff"
 2025,8,Boston College,UConn,False,0,
 2025,8,Bowling Green,Central Michigan,False,0,
 2025,8,Charlotte,Temple,False,0,
 2025,8,Clemson,SMU,True,1,DraftKings
 2025,8,Colorado State,Hawai'i,False,0,
 2025,8,Cornell,Bucknell,False,0,
-2025,8,Duke,Georgia Tech,False,0,
+2025,8,Duke,Georgia Tech,True,5,"Coolbet,DraftKings,FanDuel,Fliff,Paddy Power"
 2025,8,Florida,Mississippi State,False,0,
-2025,8,Georgia,Ole Miss,True,2,"DraftKings,ESPN Bet"
+2025,8,Georgia,Ole Miss,True,5,"BoyleSports,DraftKings,FanDuel,Fliff,Paddy Power"
 2025,8,Georgia Southern,Georgia State,False,0,
 2025,8,Glenville State,Concord University,False,0,
 2025,8,Houston,Arizona,False,0,
 2025,8,Incarnate Word,East Texas A&M,False,0,
 2025,8,Indiana,Michigan State,False,0,
 2025,8,Iowa,Penn State,True,1,ESPN Bet
-2025,8,James Madison,Old Dominion,False,0,
+2025,8,James Madison,Old Dominion,True,5,"Coolbet,DraftKings,FanDuel,Fliff,Paddy Power"
 2025,8,Kentucky,Texas,False,0,
 2025,8,Kentucky State,Franklin Pierce,False,0,
 2025,8,LYONCOLL,CENTENARY,False,0,
@@ -76,7 +76,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,8,UCF,West Virginia,False,0,
 2025,8,UCLA,Maryland,False,0,
 2025,8,UL Monroe,Troy,False,0,
-2025,8,Vanderbilt,LSU,False,0,
+2025,8,Vanderbilt,LSU,True,1,DraftKings
 2025,8,Wagner,Central Connecticut,False,0,
 2025,8,West Alabama,West Florida,False,0,
 2025,8,Wisconsin,Ohio State,False,0,
@@ -284,7 +284,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,8,Missouri Western,Pittsburg St,False,0,
 2025,8,Stephen F. Austin,Nicholls,False,0,
 2025,8,Tarleton State,West Georgia,False,0,
-2025,8,Notre Dame,USC,True,2,"DraftKings,ESPN Bet"
+2025,8,Notre Dame,USC,True,4,"DraftKings,FanDuel,Fliff,Paddy Power"
 2025,8,Central Oklahoma,Emporia State University,False,0,
 2025,8,West Texas A&M,Eastern New Mexico,False,0,
 2025,8,Southern Utah,Abilene Christian,False,0,
