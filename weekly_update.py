@@ -143,6 +143,20 @@ def weekly_update(prior_week: int | None, upcoming_week: int | None) -> dict:
         upd = {'error': f'update_scores_failed: {e}'}
     results['update_scores'] = upd
 
+    # Refresh kickoff times for upcoming week to avoid UTC drift before lines/weather
+    if upcoming_week is not None:
+        rk = _run_script_if_exists('scripts/refresh_kickoff_times.py', ['--weeks', str(upcoming_week)])
+        if rk.get('skipped') == 'not_found':
+            # fallback to in-app helper
+            try:
+                res = webapp._refresh_schedule_kickoffs(week=upcoming_week, overwrite=True)
+                rk = res if isinstance(res, dict) else {'status': 'ok', 'details': res}
+            except Exception as e:
+                rk = {'error': f'kickoff_refresh_failed: {e}'}
+        results['refresh_kickoffs'] = rk
+    else:
+        results['refresh_kickoffs'] = {'skipped': 'no_upcoming_week'}
+
     # Fetch betting lines for upcoming week (if script exists)
     if upcoming_week is not None:
         results['fetch_lines'] = _run_script_if_exists('fetch_2025_lines.py', ['--week', str(upcoming_week), '--debug'])
@@ -240,6 +254,7 @@ def main():
         print(f"Weekly update (prior={res.get('prior_week')}, upcoming={res.get('upcoming_week')})")
         print(line('archive', {'ok': True}))
         print(line('update_scores', res.get('update_scores', {})))
+        print(line('refresh_kickoffs', res.get('refresh_kickoffs', {})))
         print(line('fetch_lines', res.get('fetch_lines', {})))
         print(line('weather', res.get('weather', {})))
         print(line('merge_features', res.get('merge_features', {})))
