@@ -3380,7 +3380,12 @@ def index():
         except Exception:
             pass
         week_games = pred_df[pred_df['week']==int(selected_week)].copy() if selected_week is not None else pred_df.copy()
-        week_games['date_only'] = week_games.get('start_date','').astype(str).str[:10]
+        # Prefer API kickoff for date derivation
+        if 'start_date_api' in week_games.columns:
+            base_dates = week_games['start_date_api'].where(week_games['start_date_api'].notna(), week_games.get('start_date'))
+        else:
+            base_dates = week_games.get('start_date','')
+        week_games['date_only'] = base_dates.astype(str).str[:10]
         all_dates = sorted([d for d in week_games['date_only'].dropna().unique() if d])
         selected_date = request.args.get('date','')
         selected_conference = request.args.get('conference','')
@@ -3422,7 +3427,11 @@ def index():
             filtered_games = filtered_games[filtered_games.apply(_both_fbs, axis=1)]
         try:
             if {'week','home_team','away_team'}.issubset(filtered_games.columns):
-                filtered_games = filtered_games.sort_values(by=['start_date','home_team','away_team']).drop_duplicates(subset=['week','home_team','away_team'], keep='first')
+                if 'start_date_api' in filtered_games.columns:
+                    filtered_games['_sort_dt'] = filtered_games['start_date_api'].where(filtered_games['start_date_api'].notna(), filtered_games.get('start_date'))
+                else:
+                    filtered_games['_sort_dt'] = filtered_games.get('start_date')
+                filtered_games = filtered_games.sort_values(by=['_sort_dt','home_team','away_team']).drop_duplicates(subset=['week','home_team','away_team'], keep='first').drop(columns=['_sort_dt'], errors='ignore')
         except Exception:
             pass
         if not want_full and not show_all:
@@ -3444,7 +3453,11 @@ def index():
         hide_both_unknown = not include_non_fbs
         sort_by = request.form.get('sort_by', 'time')
         week_games = pred_df[pred_df['week'] == int(selected_week)].copy() if selected_week else pred_df.copy()
-        week_games['date_only'] = week_games.get('start_date','').astype(str).str[:10]
+        if 'start_date_api' in week_games.columns:
+            base_dates = week_games['start_date_api'].where(week_games['start_date_api'].notna(), week_games.get('start_date'))
+        else:
+            base_dates = week_games.get('start_date','')
+        week_games['date_only'] = base_dates.astype(str).str[:10]
         all_dates = sorted([d for d in week_games['date_only'].dropna().unique() if d])
         filtered_games = week_games.copy()
         if selected_date and not show_all:
