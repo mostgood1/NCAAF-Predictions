@@ -203,6 +203,48 @@ def _healthz():
         # Minimal fall-back response if jsonify import fails for any reason
         return f"ok {BUILD_TIME} {BUILD_COMMIT}", 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
+# Debug endpoint: show current pred source and local enhanced candidates (guarded by DEBUG_PRED_SOURCE)
+@app.route('/api/debug-pred-source')
+def _debug_pred_source():
+    try:
+        from flask import jsonify as _jsonify
+        if os.environ.get('DEBUG_PRED_SOURCE', '').strip() != '1':
+            return _jsonify({'error': 'disabled'}), 403
+        info = {
+            'pred_source': PRED_SOURCE,
+            'rows': int(pred_df.shape[0]) if isinstance(pred_df, pd.DataFrame) else 0,
+        }
+        try:
+            if isinstance(pred_df, pd.DataFrame) and not pred_df.empty and 'week' in pred_df.columns:
+                info['weeks_min'] = int(pred_df['week'].min())
+                info['weeks_max'] = int(pred_df['week'].max())
+                info['w8_rows'] = int(pred_df[pred_df['week'] == 8].shape[0])
+        except Exception:
+            pass
+        # List candidate enhanced files (excluding with_scores)
+        try:
+            pattern = os.path.join(DATA_DIR, 'college_football_schedule_2025_predicted_totals_enhanced*.csv')
+            cands = [p for p in glob.glob(pattern) if not p.endswith('with_scores.csv')]
+            lst = []
+            for p in sorted(cands):
+                try:
+                    lst.append({
+                        'name': os.path.basename(p),
+                        'size': os.path.getsize(p),
+                        'mtime': os.path.getmtime(p),
+                    })
+                except Exception:
+                    continue
+            info['enhanced_files'] = lst
+        except Exception:
+            pass
+        return _jsonify(info)
+    except Exception as e:
+        try:
+            return _jsonify({'error': str(e)}), 500
+        except Exception:
+            return str(e), 500, {'Content-Type': 'text/plain; charset=utf-8'}
+
 def _ensure_cfbd_key():
     """Ensure CFBD_API_KEY (or compatible token) is present; if missing, re-read .env files.
     This function previously became corrupted during a large patch; restored to a minimal safe helper.
@@ -447,14 +489,24 @@ def _load_predictions_df() -> pd.DataFrame:
                 else:
                     cand_files = all_cands  # last resort
             if cand_files:
-                # Prefer the largest file (proxy for most rows/complete season), tie-break by mtime
+                # Prefer newest by embedded timestamp when present; tie-break by size then mtime
+                def _parse_ts_from_name(p: str) -> int:
+                    try:
+                        b = os.path.basename(p)
+                        m = _re.search(r'_([0-9]{8}T[0-9]{6})Z', b)
+                        if not m:
+                            return -1
+                        s = m.group(1)  # e.g., 20251014T134052
+                        return int(s.replace('T',''))  # 20251014134052
+                    except Exception:
+                        return -1
                 def _sz(p):
                     try: return os.path.getsize(p)
                     except Exception: return -1
                 def _mt(p):
                     try: return os.path.getmtime(p)
                     except Exception: return 0
-                cand_files.sort(key=lambda p: (_sz(p), _mt(p)), reverse=True)
+                cand_files.sort(key=lambda p: (_parse_ts_from_name(p), _sz(p), _mt(p)), reverse=True)
                 chosen_path = cand_files[0]
         except Exception:
             chosen_path = None
@@ -502,8 +554,16 @@ def _load_predictions_df() -> pd.DataFrame:
     except Exception as e:
         print(f"[app] Failed to read with_scores: {e}")
 
+    # If scores file is clearly more complete (more rows), prefer it as base even if enhanced exists
+    prefer_scores_base = False
+    try:
+        if isinstance(df_scores, pd.DataFrame) and not df_scores.empty and isinstance(df_enh, pd.DataFrame) and not df_enh.empty:
+            prefer_scores_base = (len(df_scores) > len(df_enh))
+    except Exception:
+        prefer_scores_base = False
+
     # Preferred path: have enhanced; merge in actuals if available
-    if df_enh is not None and isinstance(df_enh, pd.DataFrame) and not df_enh.empty:
+    if not prefer_scores_base and df_enh is not None and isinstance(df_enh, pd.DataFrame) and not df_enh.empty:
         df = df_enh.copy()
         # Early duplicate removal
         try:
@@ -605,6 +665,15 @@ def _load_predictions_df() -> pd.DataFrame:
             df = df.sort_values(by=['season','week','home_team','away_team']).drop_duplicates(subset=['season','week','home_team','away_team'], keep='first')
             if len(df) != before:
                 print(f"[load] Post-merge duplicate removal (no start_date): {before-len(df)} rows dropped")
+    except Exception:
+        pass
+    # Optional debug log for source selection and coverage
+    try:
+        if os.environ.get('DEBUG_PRED_SOURCE', '').strip() == '1':
+            _wmin = int(df['week'].min()) if 'week' in df.columns and not df.empty else None
+            _wmax = int(df['week'].max()) if 'week' in df.columns and not df.empty else None
+            _w8 = int(df[df.get('week', 0) == 8].shape[0]) if 'week' in df.columns and not df.empty else 0
+            print(f"[load] PRED_SOURCE={PRED_SOURCE} prefer_scores_base={prefer_scores_base} rows={len(df)} minW={_wmin} maxW={_wmax} w8={_w8}")
     except Exception:
         pass
     return df
