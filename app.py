@@ -447,7 +447,14 @@ def _load_predictions_df() -> pd.DataFrame:
                 else:
                     cand_files = all_cands  # last resort
             if cand_files:
-                cand_files.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+                # Prefer the largest file (proxy for most rows/complete season), tie-break by mtime
+                def _sz(p):
+                    try: return os.path.getsize(p)
+                    except Exception: return -1
+                def _mt(p):
+                    try: return os.path.getmtime(p)
+                    except Exception: return 0
+                cand_files.sort(key=lambda p: (_sz(p), _mt(p)), reverse=True)
                 chosen_path = cand_files[0]
         except Exception:
             chosen_path = None
@@ -3299,7 +3306,15 @@ def index():
         return '', 200
     # Default to upcoming games for the current week if not POST
     import datetime as dt
-    weeks = sorted(pred_df['week'].dropna().unique())
+    # Build weeks set from rows that have a usable date (prefer API kickoff); avoid phantom weeks with no dates
+    try:
+        if 'start_date_api' in pred_df.columns:
+            has_date = pred_df['start_date_api'].notna() | pred_df.get('start_date', pd.Series([False]*len(pred_df))).notna()
+        else:
+            has_date = pred_df.get('start_date', pd.Series([False]*len(pred_df))).notna()
+        weeks = sorted(pd.to_numeric(pred_df.loc[has_date, 'week'], errors='coerce').dropna().unique())
+    except Exception:
+        weeks = sorted(pred_df['week'].dropna().unique())
     selected_week = weeks[0] if weeks else None
     if request.method == 'GET':
         # Query param driven (read-only)
@@ -3322,17 +3337,21 @@ def index():
                 # Strategy: choose the smallest week whose earliest game date is >= (today - 2 days).
                 today = dt.date.today()
                 week_min_dates = {}
-                if 'start_date' in pred_df.columns:
-                    tmp = pred_df[['week','start_date']].dropna().copy()
-                    # Coerce start_date to datetime safely
-                    tmp['start_dt'] = pd.to_datetime(tmp['start_date'], errors='coerce', utc=True)
+                # Prefer API kickoff when available
+                if 'start_date' in pred_df.columns or 'start_date_api' in pred_df.columns:
+                    use_col = 'start_date_api' if 'start_date_api' in pred_df.columns else 'start_date'
+                    tmp = pred_df[['week', use_col]].dropna().copy()
+                    tmp.rename(columns={use_col:'_start'}, inplace=True)
+                    # Coerce to datetime safely (assume UTC where needed)
+                    tmp['start_dt'] = pd.to_datetime(tmp['_start'], errors='coerce', utc=True)
                     tmp = tmp.dropna(subset=['start_dt'])
                     for w, grp in tmp.groupby('week'):
                         try:
                             week_min_dates[int(w)] = grp['start_dt'].min().date()
                         except Exception:
                             continue
-                candidate_weeks = [w for w,d in week_min_dates.items() if d >= (today - dt.timedelta(days=2))]
+                # Allow a slightly larger look-back window so the site doesn’t default to an early week
+                candidate_weeks = [w for w,d in week_min_dates.items() if d >= (today - dt.timedelta(days=4))]
                 if candidate_weeks:
                     selected_week = min(candidate_weeks)
             except Exception:
