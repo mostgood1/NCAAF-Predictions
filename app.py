@@ -57,6 +57,7 @@ import time
 import joblib
 from pathlib import Path
 import glob
+import warnings
 
 app = Flask(__name__)
 
@@ -604,7 +605,10 @@ def _load_predictions_df() -> pd.DataFrame:
                             if df.empty:
                                 df = extra_nonempty.copy()
                             else:
-                                df = pd.concat([df, extra_nonempty], ignore_index=True)
+                                # Suppress pandas concat FutureWarning about empty/all-NA dtype inference
+                                with warnings.catch_warnings():
+                                    warnings.simplefilter("ignore", FutureWarning)
+                                    df = pd.concat([df, extra_nonempty], ignore_index=True)
         except Exception:
             pass
         if actuals_df is not None and not actuals_df.empty:
@@ -4005,8 +4009,9 @@ def index():
                 document.querySelectorAll('.local-time').forEach(el=>{
                     let s = (el.getAttribute('data-iso')||'').trim();
                     if(!s) return;
-                    if(s.indexOf('T') === -1 && /^\d{4}-\d{2}-\d{2} /.test(s)) s = s.replace(' ', 'T');
-                    if(!/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) s = s + 'Z';
+                    // Use RegExp constructors to avoid inline escape issues in Python templates
+                    if(s.indexOf('T') === -1 && (new RegExp('^\\d{4}-\\d{2}-\\d{2} ')).test(s)) s = s.replace(' ', 'T');
+                    if(!(new RegExp('[zZ]|[+\-]\\d{2}:?\\d{2}$')).test(s)) s = s + 'Z';
                     const d = new Date(s);
                     if(!isNaN(d)) el.textContent = d.toLocaleString(undefined, opts);
                 });
@@ -4405,6 +4410,12 @@ def index():
                             const confOk = (!hideUnknown || !(hc==='Unknown' && ac==='Unknown'));
                             c.style.display = (dateOk && confOk) ? '' : 'none';
                         });
+                        // If client-side filters hide all cards, clear local date filter and re-apply
+                        const anyVisible = cardsAll.some(c => c.style.display !== 'none');
+                        if(!anyVisible){
+                            if(dateSel && dateSel.value){ dateSel.value = ''; sessionStorage.setItem('selectedLocalDate', ''); }
+                            cardsAll.forEach(c=>{ c.style.display = ''; });
+                        }
                         recalcSummary();
                         rebuildDateDividers();
                     }
