@@ -3484,7 +3484,8 @@ def index():
         selected_date = request.args.get('date','')
         selected_conference = request.args.get('conference','')
         show_all = request.args.get('show_all','0').lower() in ('1','true','yes')
-        include_non_fbs = request.args.get('include_non_fbs','0').lower() in ('1','true','yes')
+        # Default to including Non-FBS/Unknown so weeks never render empty by default
+        include_non_fbs = request.args.get('include_non_fbs','1').lower() in ('1','true','yes')
         hide_both_unknown = not include_non_fbs  # deprecated flag retained for minimal downstream condition usage
         want_full = request.args.get('full','0').lower() in ('1','true','yes')
         sort_by = request.args.get('sort_by','time')
@@ -3499,7 +3500,15 @@ def index():
         elif eff_filter == 'upcoming':
             filtered_games = filtered_games[(filtered_games['actual_home_points'].isna()) & (filtered_games['actual_away_points'].isna())]
         if hide_both_unknown:
-            filtered_games = filtered_games[~((filtered_games['home_conference']=='Unknown') & (filtered_games['away_conference']=='Unknown'))]
+            # Apply filter cautiously; if it removes everything, keep the original list
+            _pre = len(filtered_games)
+            try:
+                _tmp = filtered_games[~((filtered_games['home_conference']=='Unknown') & (filtered_games['away_conference']=='Unknown'))]
+                if len(_tmp) > 0:
+                    filtered_games = _tmp
+            except Exception:
+                # If columns are missing, skip filter
+                pass
         # Optional matchup filter (currently only supports FBSvFBS like API endpoint)
         matchup_filter = request.args.get('matchup','').strip().lower()
         if matchup_filter == 'fbsvfbs' and {'home_conference','away_conference'}.issubset(filtered_games.columns):
