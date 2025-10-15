@@ -197,6 +197,34 @@ def weekly_update(prior_week: int | None, upcoming_week: int | None) -> dict:
     else:
         results['reload'] = {'status': 'ok', 'rows': int(len(webapp.pred_df))}
 
+    # Post-reload sanity: ensure upcoming week has FBS-involved games available
+    try:
+        fbs_confs = {
+            'acc','sec','big ten','big 12','pac 12','american','mountain west','sun belt','mac','conference usa','independent','independents','fbs independents','independent (fbs)'
+        }
+        fbs_indies = {'notre dame','army','navy','umass','uconn','new mexico state'}
+        def _is_fbs(team, conf):
+            try:
+                t = str(team or '').strip().lower()
+                c = str(conf or '').strip().lower()
+                return c in fbs_confs or t in fbs_indies
+            except Exception:
+                return False
+        df = webapp.pred_df
+        wk = upcoming_week
+        wk_df = df[df.get('week', -1) == wk] if wk is not None else df.iloc[0:0]
+        total = int(len(wk_df))
+        fbs_involved = int(wk_df.apply(lambda r: (_is_fbs(r.get('home_team'), r.get('home_conference')) or _is_fbs(r.get('away_team'), r.get('away_conference'))), axis=1).sum()) if total > 0 else 0
+        fbsvfbs = int(wk_df.apply(lambda r: (_is_fbs(r.get('home_team'), r.get('home_conference')) and _is_fbs(r.get('away_team'), r.get('away_conference'))), axis=1).sum()) if total > 0 else 0
+        results['sanity'] = {
+            'upcoming_week': wk,
+            'total_rows_week': total,
+            'fbs_involved_count': fbs_involved,
+            'fbsvfbs_count': fbsvfbs,
+        }
+    except Exception as e:
+        results['sanity'] = {'error': f'sanity_check_failed: {e}'}
+
     # Produce a recommendations snapshot (non-destructive) for visibility
     try:
         recs = webapp.compute_recommendations(week=upcoming_week, bankroll=1000.0, kelly_factor=0.5, ev_threshold=0.02)
@@ -268,6 +296,12 @@ def main():
         print(line('retune_models', res.get('retune_models', {})))
         print(line('generate_predictions', res.get('generate_predictions', {})))
         print(line('reload', res.get('reload', {})))
+        if 'sanity' in res:
+            s = res.get('sanity', {})
+            if isinstance(s, dict) and 'error' in s:
+                print(f"- sanity: ERROR: {s['error']}")
+            elif isinstance(s, dict):
+                print(f"- sanity: wk={s.get('upcoming_week')} total={s.get('total_rows_week')} fbs-involved={s.get('fbs_involved_count')} fbsvfbs={s.get('fbsvfbs_count')}")
         if 'recommendations_snapshot' in res:
             print(line('recommendations_snapshot', res.get('recommendations_snapshot', {})))
         if 'offline_artifacts' in res:
