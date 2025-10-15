@@ -3399,13 +3399,11 @@ def index():
                     explicit_week_selected = True
         except Exception:
             pass
-        # If no explicit week chosen, pick the "current" (upcoming) week instead of earliest or last-completed.
+        # If no explicit week chosen, pick the "current" (upcoming) week using kickoff dates.
         if week_q is None:
             try:
-                # Determine current week based on earliest game date for each week.
-                # Strategy: choose the smallest week whose earliest game date is >= (today - 2 days).
                 today = dt.date.today()
-                week_min_dates = {}
+                week_min_dates, week_max_dates = {}, {}
                 # Prefer API kickoff when available
                 if 'start_date' in pred_df.columns or 'start_date_api' in pred_df.columns:
                     use_col = 'start_date_api' if 'start_date_api' in pred_df.columns else 'start_date'
@@ -3416,13 +3414,23 @@ def index():
                     tmp = tmp.dropna(subset=['start_dt'])
                     for w, grp in tmp.groupby('week'):
                         try:
-                            week_min_dates[int(w)] = grp['start_dt'].min().date()
+                            mi = grp['start_dt'].min().date()
+                            ma = grp['start_dt'].max().date()
+                            wi = int(w)
+                            week_min_dates[wi] = mi
+                            week_max_dates[wi] = ma
                         except Exception:
                             continue
-                # Allow a slightly larger look-back window so the site doesn’t default to an early week
-                candidate_weeks = [w for w,d in week_min_dates.items() if d >= (today - dt.timedelta(days=4))]
-                if candidate_weeks:
-                    selected_week = min(candidate_weeks)
+                # Primary: the nearest upcoming week (earliest kickoff on/after today)
+                upcoming = sorted([w for w, d in week_min_dates.items() if d >= today])
+                if upcoming:
+                    selected_week = upcoming[0]
+                else:
+                    # Fallback: most recent week with games within last 3 days
+                    lookback_days = 3
+                    recent = sorted([w for w, d in week_max_dates.items() if d >= (today - dt.timedelta(days=lookback_days))])
+                    if recent:
+                        selected_week = recent[-1]
             except Exception:
                 pass
         if weeks and selected_week is None:  # auto-pick most recent with finals
