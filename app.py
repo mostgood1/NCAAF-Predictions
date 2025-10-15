@@ -617,6 +617,24 @@ def _load_predictions_df() -> pd.DataFrame:
                 df = df.drop(columns=[c for c in df.columns if c.endswith('_from_scores')])
                 for col in ['actual_home_points','actual_away_points']:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
+                # Freeze predictions for completed games: if with_scores contains predicted points,
+                # copy them over for rows that now have actuals so reconciliation reflects pregame predictions.
+                try:
+                    if isinstance(df_scores, pd.DataFrame) and all(x in df_scores.columns for x in ['predicted_home_points','predicted_away_points']):
+                        preds_from_scores = df_scores[['season','week','home_team','away_team','predicted_home_points','predicted_away_points']].copy()
+                        preds_from_scores = preds_from_scores.rename(columns={
+                            'predicted_home_points':'_pred_home_from_scores',
+                            'predicted_away_points':'_pred_away_from_scores'
+                        })
+                        df = df.merge(preds_from_scores, on=['season','week','home_team','away_team'], how='left')
+                        mask_final = (df['actual_home_points'].notna() & df['actual_away_points'].notna())
+                        if 'predicted_home_points' in df.columns and '_pred_home_from_scores' in df.columns:
+                            df.loc[mask_final, 'predicted_home_points'] = df.loc[mask_final, '_pred_home_from_scores'].where(df.loc[mask_final, '_pred_home_from_scores'].notna(), df.loc[mask_final, 'predicted_home_points'])
+                        if 'predicted_away_points' in df.columns and '_pred_away_from_scores' in df.columns:
+                            df.loc[mask_final, 'predicted_away_points'] = df.loc[mask_final, '_pred_away_from_scores'].where(df.loc[mask_final, '_pred_away_from_scores'].notna(), df.loc[mask_final, 'predicted_away_points'])
+                        df = df.drop(columns=['_pred_home_from_scores','_pred_away_from_scores'], errors='ignore')
+                except Exception:
+                    pass
                 # Missing actuals fallback merge without week
                 try:
                     missing_mask = (df.get('season',0)==2025) & (df['actual_home_points'].isna() | df['actual_away_points'].isna())
@@ -1448,16 +1466,18 @@ def _build_game_card(game_row: pd.Series) -> dict:
             return x is not None and not (isinstance(x, float) and math.isnan(x))
         except Exception:
             return x is not None
-    # Base (legacy) predictions
+    is_final_game = (_is_valid_num(actual_home) and _is_valid_num(actual_away))
+    # Base (legacy) predictions (these are now frozen for finals by the loader)
     predicted_home = _safe_float(game_row.get('predicted_home_points', None))
     predicted_away = _safe_float(game_row.get('predicted_away_points', None))
-    # Prefer model predictions if present
+    # Prefer model predictions only for upcoming games; do NOT override for completed games
     model_home = _safe_float(game_row.get('model_home_points', None))
     model_away = _safe_float(game_row.get('model_away_points', None))
-    if model_home is not None:
-        predicted_home = model_home
-    if model_away is not None:
-        predicted_away = model_away
+    if not is_final_game:
+        if model_home is not None:
+            predicted_home = model_home
+        if model_away is not None:
+            predicted_away = model_away
     predicted_winner = None
     actual_winner = None
     correct_prediction = None
@@ -1695,7 +1715,7 @@ def _build_game_card(game_row: pd.Series) -> dict:
         'actual_home_points': r2(actual_home) if _is_valid_num(actual_home) else None,
         'actual_away_points': r2(actual_away) if _is_valid_num(actual_away) else None,
     # Convenience boolean for template/API so status display isn't dependent on inline set logic
-    'is_final': (_is_valid_num(actual_home) and _is_valid_num(actual_away)),
+    'is_final': is_final_game,
     'predicted_win_margin': r2(_safe_float(game_row.get('model_margin'), game_row.get('predicted_win_margin', ''))),
         'home_win_prob_pct': f"{p_home_win*100:.1f}%" if p_home_win is not None else None,
         'away_win_prob_pct': f"{(1-p_home_win)*100:.1f}%" if p_home_win is not None else None,
