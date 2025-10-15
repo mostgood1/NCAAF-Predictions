@@ -554,16 +554,8 @@ def _load_predictions_df() -> pd.DataFrame:
     except Exception as e:
         print(f"[app] Failed to read with_scores: {e}")
 
-    # If scores file is clearly more complete (more rows), prefer it as base even if enhanced exists
-    prefer_scores_base = False
-    try:
-        if isinstance(df_scores, pd.DataFrame) and not df_scores.empty and isinstance(df_enh, pd.DataFrame) and not df_enh.empty:
-            prefer_scores_base = (len(df_scores) > len(df_enh))
-    except Exception:
-        prefer_scores_base = False
-
-    # Preferred path: have enhanced; merge in actuals if available
-    if not prefer_scores_base and df_enh is not None and isinstance(df_enh, pd.DataFrame) and not df_enh.empty:
+    # Preferred path: have enhanced; union any missing rows from scores, then merge in actuals if available
+    if df_enh is not None and isinstance(df_enh, pd.DataFrame) and not df_enh.empty:
         df = df_enh.copy()
         # Early duplicate removal
         try:
@@ -583,6 +575,24 @@ def _load_predictions_df() -> pd.DataFrame:
         for col in ['actual_home_points','actual_away_points','start_date_api']:
             if col not in df.columns:
                 df[col] = pd.NA
+        # If the with_scores file contains any rows not present in enhanced (e.g., very new schedule rows), union them in first
+        try:
+            if isinstance(df_scores, pd.DataFrame) and not df_scores.empty:
+                key_cols = [c for c in ['season','week','home_team','away_team'] if c in df.columns and c in df_scores.columns]
+                if len(key_cols) >= 4:
+                    # Identify keys present in scores but not in base
+                    base_keys = set(tuple(x) for x in df[key_cols].itertuples(index=False, name=None))
+                    extra = df_scores[~df_scores.apply(lambda r: tuple(r[key_cols]) in base_keys, axis=1)].copy()
+                    if not extra.empty:
+                        # Bring to same columns as df (add missing cols as NA)
+                        for col in df.columns:
+                            if col not in extra.columns:
+                                extra[col] = pd.NA
+                        # Align columns order
+                        extra = extra[df.columns]
+                        df = pd.concat([df, extra], ignore_index=True)
+        except Exception:
+            pass
         if actuals_df is not None and not actuals_df.empty:
             try:
                 df = df.merge(actuals_df, on=['season','week','home_team','away_team'], how='left', suffixes=('', '_from_scores'))
@@ -673,7 +683,7 @@ def _load_predictions_df() -> pd.DataFrame:
             _wmin = int(df['week'].min()) if 'week' in df.columns and not df.empty else None
             _wmax = int(df['week'].max()) if 'week' in df.columns and not df.empty else None
             _w8 = int(df[df.get('week', 0) == 8].shape[0]) if 'week' in df.columns and not df.empty else 0
-            print(f"[load] PRED_SOURCE={PRED_SOURCE} prefer_scores_base={prefer_scores_base} rows={len(df)} minW={_wmin} maxW={_wmax} w8={_w8}")
+            print(f"[load] PRED_SOURCE={PRED_SOURCE} rows={len(df)} minW={_wmin} maxW={_wmax} w8={_w8}")
     except Exception:
         pass
     return df
