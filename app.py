@@ -3597,14 +3597,23 @@ def index():
                 filtered_games = pd.concat([finals_df, upcoming_df.head(80)], ignore_index=True)
             except Exception:
                 filtered_games = filtered_games.head(80)
+        # Final safety: if filters resulted in zero games, fall back to unfiltered week view
+        try:
+            if len(filtered_games) == 0:
+                filtered_games = week_games.copy()
+        except Exception:
+            pass
     else:
         # POST: Use form data to filter games
         filter_type = request.form.get('filter_type', 'all')
         selected_week = int(request.form.get('week', weeks[0] if weeks else 1))
         selected_date = request.form.get('date', '')
         selected_conference = request.form.get('conference', '')
-        show_all = bool(request.form.get('show_all'))
-        include_non_fbs = bool(request.form.get('include_non_fbs'))
+        # Checkboxes: default to include non-FBS unless explicitly unchecked
+        _show_all_raw = request.form.get('show_all')
+        show_all = (str(_show_all_raw).lower() in ('1','true','yes','on'))
+        _inc_nf_raw = request.form.get('include_non_fbs')
+        include_non_fbs = (str(_inc_nf_raw).lower() in ('1','true','yes','on')) or (_inc_nf_raw is None)
         hide_both_unknown = not include_non_fbs
         sort_by = request.form.get('sort_by', 'time')
         week_games = pred_df[pred_df['week'] == int(selected_week)].copy() if selected_week else pred_df.copy()
@@ -3616,9 +3625,13 @@ def index():
         all_dates = sorted([d for d in week_games['date_only'].dropna().unique() if d])
         filtered_games = week_games.copy()
         if selected_date and not show_all:
-            filtered_games = filtered_games[filtered_games['date_only'] == selected_date]
+            tmp = filtered_games[filtered_games['date_only'] == selected_date]
+            if len(tmp) > 0:
+                filtered_games = tmp
         if selected_conference:
-            filtered_games = filtered_games[(filtered_games['home_conference'] == selected_conference) | (filtered_games['away_conference'] == selected_conference)]
+            tmp = filtered_games[(filtered_games['home_conference'] == selected_conference) | (filtered_games['away_conference'] == selected_conference)]
+            if len(tmp) > 0:
+                filtered_games = tmp
         effective_filter = (filter_type if not show_all else 'all')
         if effective_filter == 'completed':
             filtered_games = filtered_games[(filtered_games['actual_home_points'].notnull()) & (filtered_games['actual_away_points'].notnull())]
@@ -3634,6 +3647,12 @@ def index():
                 filtered_games = pred_df[pred_df['season'] == 2025].copy()
             except Exception:
                 pass
+        # If filters resulted in zero games, fall back to unfiltered week view
+        try:
+            if len(filtered_games) == 0:
+                filtered_games = week_games.copy()
+        except Exception:
+            pass
         # Do not cap POST results; user explicitly filtered
 
     # Compute finals banner metrics (based on full week dataset, not filtered slice cap)
