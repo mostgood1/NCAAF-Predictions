@@ -3604,8 +3604,8 @@ def index():
         selected_date = request.args.get('date','')
         selected_conference = request.args.get('conference','')
         show_all = request.args.get('show_all','0').lower() in ('1','true','yes')
-        # Default to including Non-FBS/Unknown so weeks never render empty by default
-        include_non_fbs = request.args.get('include_non_fbs','1').lower() in ('1','true','yes')
+        # Default to hiding Non-FBS (show FBS-involved only by default)
+        include_non_fbs = request.args.get('include_non_fbs','0').lower() in ('1','true','yes')
         hide_both_unknown = not include_non_fbs  # deprecated flag retained for minimal downstream condition usage
         want_full = request.args.get('full','0').lower() in ('1','true','yes')
         sort_by = request.args.get('sort_by','time')
@@ -3648,6 +3648,23 @@ def index():
                 except Exception:
                     return False
             filtered_games = filtered_games[filtered_games.apply(_both_fbs, axis=1)]
+        elif not include_non_fbs and {'home_conference','away_conference'}.issubset(filtered_games.columns):
+            # If we're hiding Non-FBS but not explicitly FBSvFBS, show FBS-involved (at least one FBS team)
+            try:
+                fbs_confs = {
+                    'acc','sec','big ten','big 12','pac 12','american','mountain west','sun belt','mac','conference usa','independent','independents','fbs independents','independent (fbs)'
+                }
+                fbs_indies = {'notre dame','army','navy','umass','uconn','new mexico state'}
+                def _is_fbs(team, conf):
+                    try:
+                        t = str(team or '').strip().lower()
+                        c = str(conf or '').strip().lower()
+                        return c in fbs_confs or t in fbs_indies
+                    except Exception:
+                        return False
+                filtered_games = filtered_games[filtered_games.apply(lambda r: (_is_fbs(r.get('home_team'), r.get('home_conference')) or _is_fbs(r.get('away_team'), r.get('away_conference'))), axis=1)]
+            except Exception:
+                pass
         try:
             if {'week','home_team','away_team'}.issubset(filtered_games.columns):
                 if 'start_date_api' in filtered_games.columns:
@@ -3677,11 +3694,11 @@ def index():
         selected_week = int(request.form.get('week', weeks[0] if weeks else 1))
         selected_date = request.form.get('date', '')
         selected_conference = request.form.get('conference', '')
-        # Checkboxes: default to include non-FBS unless explicitly unchecked
+        # Checkboxes: default to NOT include non-FBS unless explicitly checked
         _show_all_raw = request.form.get('show_all')
         show_all = (str(_show_all_raw).lower() in ('1','true','yes','on'))
         _inc_nf_raw = request.form.get('include_non_fbs')
-        include_non_fbs = (str(_inc_nf_raw).lower() in ('1','true','yes','on')) or (_inc_nf_raw is None)
+        include_non_fbs = (str(_inc_nf_raw).lower() in ('1','true','yes','on'))
         hide_both_unknown = not include_non_fbs
         sort_by = request.form.get('sort_by', 'time')
         week_games = pred_df[pred_df['week'] == int(selected_week)].copy() if selected_week else pred_df.copy()
@@ -3707,9 +3724,25 @@ def index():
             filtered_games = filtered_games[(filtered_games['actual_home_points'].isnull()) & (filtered_games['actual_away_points'].isnull())]
         if hide_both_unknown:
             try:
-                filtered_games = filtered_games[~((filtered_games['home_conference'] == 'Unknown') & (filtered_games['away_conference'] == 'Unknown'))]
+                # Prefer an explicit FBS filter: when hiding Non-FBS, show FBS-involved by default
+                fbs_confs = {
+                    'acc','sec','big ten','big 12','pac 12','american','mountain west','sun belt','mac','conference usa','independent','independents','fbs independents','independent (fbs)'
+                }
+                fbs_indies = {'notre dame','army','navy','umass','uconn','new mexico state'}
+                def _is_fbs(team, conf):
+                    try:
+                        t = str(team or '').strip().lower()
+                        c = str(conf or '').strip().lower()
+                        return c in fbs_confs or t in fbs_indies
+                    except Exception:
+                        return False
+                filtered_games = filtered_games[filtered_games.apply(lambda r: (_is_fbs(r.get('home_team'), r.get('home_conference')) or _is_fbs(r.get('away_team'), r.get('away_conference'))), axis=1)]
             except Exception:
-                pass
+                # Fallback to removing Unknown-vs-Unknown only if above fails
+                try:
+                    filtered_games = filtered_games[~((filtered_games['home_conference'] == 'Unknown') & (filtered_games['away_conference'] == 'Unknown'))]
+                except Exception:
+                    pass
         if show_all and len(filtered_games) <= 1 and 'season' in pred_df.columns:
             try:
                 filtered_games = pred_df[pred_df['season'] == 2025].copy()
