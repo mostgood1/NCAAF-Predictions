@@ -1558,6 +1558,7 @@ def _build_game_card(game_row: pd.Series) -> dict:
         # Note: tie-break leaning to market favorite happens later, after ATS line is computed
     predicted_total_points = None
     total_points_diff = None
+    actual_total_points = None
     if _is_valid_num(actual_home) and _is_valid_num(actual_away):
         try:
             s = actual_home + actual_away
