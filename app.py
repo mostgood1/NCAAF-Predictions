@@ -1333,8 +1333,8 @@ def _build_game_card(game_row: pd.Series) -> dict:
             return f"{float(val):.2f}"
         except Exception:
             return val
-    home_asset = get_team_asset(game_row['home_team'])
-    away_asset = get_team_asset(game_row['away_team'])
+    home_asset = get_team_asset(game_row['home_team']) or {}
+    away_asset = get_team_asset(game_row['away_team']) or {}
     # Normalize alt colors and compute foreground text colors for better contrast
     h_bg = _normalize_hex_color(home_asset.get('alt_color')) or _normalize_hex_color(home_asset.get('color')) or '#e5e7eb'
     a_bg = _normalize_hex_color(away_asset.get('alt_color')) or _normalize_hex_color(away_asset.get('color')) or '#e5e7eb'
@@ -1727,11 +1727,11 @@ def _build_game_card(game_row: pd.Series) -> dict:
         'win_margin_conf_lower': conf_lower,
         'win_margin_conf_upper': conf_upper,
         'win_margin_conf_std': conf_std,
-    'home_logo': home_asset['logo'],
+    'home_logo': home_asset.get('logo',''),
     'home_color': _normalize_hex_color(home_asset.get('color')) or '',
     'home_alt_color': h_bg,
     'home_text_color': h_fg,
-    'away_logo': away_asset['logo'],
+    'away_logo': away_asset.get('logo',''),
     'away_color': _normalize_hex_color(away_asset.get('color')) or '',
     'away_alt_color': a_bg,
     'away_text_color': a_fg,
@@ -4011,6 +4011,7 @@ def index():
                     if(!s) return;
                     // Use RegExp constructors to avoid inline escape issues in Python templates
                     if(s.indexOf('T') === -1 && (new RegExp('^\\d{4}-\\d{2}-\\d{2} ')).test(s)) s = s.replace(' ', 'T');
+                    // Use character class for plus/minus without escaping dash in Python string context
                     if(!(new RegExp('[zZ]|[+\-]\\d{2}:?\\d{2}$')).test(s)) s = s + 'Z';
                     const d = new Date(s);
                     if(!isNaN(d)) el.textContent = d.toLocaleString(undefined, opts);
