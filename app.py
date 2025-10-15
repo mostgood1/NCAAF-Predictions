@@ -3690,6 +3690,97 @@ def index():
         print('[index] sample rows:', [f"{r.away_team} at {r.home_team}" for r in filtered_games.head(3).itertuples()])
     except Exception:
         pass
+    # Minimal safe fallback card when rich builder fails
+    def _fallback_card(row: pd.Series) -> dict:
+        try:
+            def _is_num(x):
+                try:
+                    return x is not None and not (isinstance(x, float) and math.isnan(x))
+                except Exception:
+                    return x is not None
+            raw_api = row.get('start_date_api'); raw_sd = row.get('start_date')
+            week_val_for_time = None
+            try: week_val_for_time = int(row.get('week', 0))
+            except Exception: pass
+            val_api = None if raw_api is None else str(raw_api)
+            val_sd = None if raw_sd is None else str(raw_sd)
+            dt_api_utc = _parse_to_utc_with_context(val_api, assume_naive='eastern', week=week_val_for_time)
+            dt_sd_utc = _parse_to_utc_with_context(val_sd, assume_naive='eastern', week=week_val_for_time)
+            chosen_dt = dt_api_utc or dt_sd_utc
+            sort_ts = chosen_dt.timestamp() if chosen_dt else None
+            start_iso = chosen_dt.isoformat().replace('+00:00','Z') if chosen_dt else ''
+            display_time = chosen_dt.strftime('%a, %b %d, %Y, %I:%M %p UTC') if chosen_dt else (val_sd or val_api or '')
+            ah = row.get('actual_home_points'); aa = row.get('actual_away_points')
+            is_final = _is_num(ah) and _is_num(aa)
+            ph = row.get('predicted_home_points'); pa = row.get('predicted_away_points')
+            try:
+                ph = None if ph is None else float(ph)
+                pa = None if pa is None else float(pa)
+            except Exception:
+                pass
+            return {
+                'home_team': row.get('home_team'),
+                'away_team': row.get('away_team'),
+                'home_conference': row.get('home_conference',''),
+                'away_conference': row.get('away_conference',''),
+                'home_is_fbs': True,
+                'away_is_fbs': True,
+                'matchup_level': 'Unknown',
+                'venue': row.get('venue',''),
+                'game_time': display_time,
+                'start_iso': start_iso,
+                'sort_ts': sort_ts,
+                'predicted_total_points': None,
+                'pred_total_adj': None,
+                'pred_total_pre': None,
+                'actual_total_points': None,
+                'total_points_diff': None,
+                'predicted_home_points': f"{ph:.2f}" if isinstance(ph,(int,float)) else None,
+                'predicted_away_points': f"{pa:.2f}" if isinstance(pa,(int,float)) else None,
+                'actual_home_points': f"{float(ah):.2f}" if _is_num(ah) else None,
+                'actual_away_points': f"{float(aa):.2f}" if _is_num(aa) else None,
+                'is_final': bool(is_final),
+                'predicted_win_margin': None,
+                'home_win_prob_pct': None,
+                'away_win_prob_pct': None,
+                'home_win_prob': None,
+                'win_margin_conf_lower': None,
+                'win_margin_conf_upper': None,
+                'win_margin_conf_std': None,
+                'home_logo': '',
+                'home_color': '',
+                'home_alt_color': '#e5e7eb',
+                'home_text_color': '#111827',
+                'away_logo': '',
+                'away_color': '',
+                'away_alt_color': '#e5e7eb',
+                'away_text_color': '#111827',
+                'betting_lines': [],
+                'ou_line': None,
+                'ou_model_lean': None,
+                'ou_edge': None,
+                'ou_edge_num': None,
+                'ou_actual_result': None,
+                'ou_correct': None,
+                'ats_line': None,
+                'ats_model_lean': None,
+                'ats_edge': None,
+                'ats_edge_num': None,
+                'ats_actual_result': None,
+                'ats_correct': None,
+                'edge_spread': None,
+                'edge_total': None,
+                'edge_moneyline_ev': None,
+                'wx_temp_f': None,
+                'wx_wind_mph': None,
+                'wx_adjust_total': None,
+                'predicted_winner': None,
+                'actual_winner': None,
+                'correct_prediction': None,
+            }
+        except Exception:
+            return None
+
     for _, game_row in filtered_games.iterrows():
         try:
             card = _build_game_card(game_row)
@@ -3700,9 +3791,24 @@ def index():
                 except Exception:
                     pass
             game_cards.append(card)
-        except Exception:
-            # Skip any problematic row but continue rendering others
-            continue
+        except Exception as _card_e:
+            # Fallback: build a minimal card so the UI never empties due to per-row errors
+            try:
+                fb = _fallback_card(game_row)
+                if fb is not None:
+                    if len(game_cards) < 3:
+                        try:
+                            print('[debug-card-fallback]', fb.get('away_team'), 'at', fb.get('home_team'))
+                        except Exception:
+                            pass
+                    game_cards.append(fb)
+                else:
+                    if len(game_cards) < 3:
+                        print('[debug-card-error]', str(_card_e)[:200])
+            except Exception:
+                if len(game_cards) < 3:
+                    print('[debug-card-error2]', str(_card_e)[:200])
+                continue
     # Summary metrics for this view (restrict to games with at least one FBS team)
     summary = { 'winners': {'correct':0,'total':0}, 'ou': {'correct':0,'push':0,'total':0}, 'ats': {'correct':0,'push':0,'total':0} }
     for g in game_cards:
@@ -3733,6 +3839,10 @@ def index():
                 if g.get('ats_correct') is True:
                     summary['ats']['correct'] += 1
 
+    try:
+        print('[index] built cards:', len(game_cards), 'of', len(filtered_games))
+    except Exception:
+        pass
     # Compute summary percentages
     try:
         for key in ('winners','ou','ats'):
@@ -4012,7 +4122,8 @@ def index():
                     // Use RegExp constructors to avoid inline escape issues in Python templates
                     if(s.indexOf('T') === -1 && (new RegExp('^\\d{4}-\\d{2}-\\d{2} ')).test(s)) s = s.replace(' ', 'T');
                     // Use character class for plus/minus without escaping dash in Python string context
-                    if(!(new RegExp('[zZ]|[+\-]\\d{2}:?\\d{2}$')).test(s)) s = s + 'Z';
+                    // Safe plus/minus class without Python escape pitfalls
+                    if(!(new RegExp('[zZ]|[+-]\\d{2}:?\\d{2}$')).test(s)) s = s + 'Z';
                     const d = new Date(s);
                     if(!isNaN(d)) el.textContent = d.toLocaleString(undefined, opts);
                 });
