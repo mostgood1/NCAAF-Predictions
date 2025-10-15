@@ -590,7 +590,11 @@ def _load_predictions_df() -> pd.DataFrame:
                                 extra[col] = pd.NA
                         # Align columns order
                         extra = extra[df.columns]
-                        df = pd.concat([df, extra], ignore_index=True)
+                        # Avoid pandas FutureWarning for concat with empty/all-NA by assigning directly when base is empty
+                        if df.empty:
+                            df = extra.copy()
+                        else:
+                            df = pd.concat([df, extra], ignore_index=True)
         except Exception:
             pass
         if actuals_df is not None and not actuals_df.empty:
