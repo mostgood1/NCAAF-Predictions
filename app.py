@@ -592,6 +592,13 @@ def _load_predictions_df() -> pd.DataFrame:
                         extra = extra[df.columns]
                         # Drop rows that are entirely NA to avoid pandas FutureWarning on all-NA entries
                         extra_nonempty = extra.dropna(how='all')
+                        # Also drop columns that are entirely NA in the extra frame; df still contributes these columns
+                        try:
+                            all_na_cols = [c for c in extra_nonempty.columns if extra_nonempty[c].isna().all()]
+                            if all_na_cols:
+                                extra_nonempty = extra_nonempty.drop(columns=all_na_cols)
+                        except Exception:
+                            pass
                         if not extra_nonempty.empty:
                             # Avoid pandas FutureWarning for concat with empty/all-NA by assigning directly when base is empty
                             if df.empty:
