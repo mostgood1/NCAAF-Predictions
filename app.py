@@ -1454,27 +1454,7 @@ def _build_game_card(game_row: pd.Series) -> dict:
             predicted_winner = game_row['away_team']
         else:
             predicted_winner = None
-        # Tie-break: if model margin is tiny, lean to market favorite when available
-        try:
-            pred_margin_tmp = (predicted_home - predicted_away)
-            if abs(pred_margin_tmp) < 0.5 and ats_home_line is not None:
-                # Negative home line => home favorite; positive => away favorite
-                if ats_home_line < 0:
-                    predicted_winner = game_row['home_team']
-                elif ats_home_line > 0:
-                    predicted_winner = game_row['away_team']
-        except Exception:
-            pass
-    # Win probability: robust computation with clamp and file-prob sanity check
-    p_home_win = _compute_home_win_prob(game_row)
-    if _is_valid_num(actual_home) and _is_valid_num(actual_away):
-        if actual_home > actual_away:
-            actual_winner = game_row['home_team']
-        elif actual_home < actual_away:
-            actual_winner = game_row['away_team']
-    if predicted_winner and actual_winner:
-        correct_prediction = (predicted_winner == actual_winner)
-    actual_total_points = None
+        # Note: tie-break leaning to market favorite happens later, after ATS line is computed
     predicted_total_points = None
     total_points_diff = None
     if _is_valid_num(actual_home) and _is_valid_num(actual_away):
@@ -1650,6 +1630,19 @@ def _build_game_card(game_row: pd.Series) -> dict:
         if v is None:
             return None
         return f"Home {float(v):+0.1f}".replace('+', '+').replace('-0.0', '0.0')
+    # After ATS aggregation, apply tie-break if model margin is tiny and a market line exists
+    try:
+        if ats_home_line is not None and predicted_home is not None and predicted_away is not None:
+            pred_margin_tmp = (predicted_home - predicted_away)
+            if abs(pred_margin_tmp) < 0.5:
+                if ats_home_line < 0:
+                    predicted_winner = game_row['home_team']
+                elif ats_home_line > 0:
+                    predicted_winner = game_row['away_team']
+    except Exception:
+        pass
+    # Win probability: compute before building return dict
+    p_home_win = _compute_home_win_prob(game_row)
     return {
         'home_team': game_row['home_team'],
         'away_team': game_row['away_team'],
