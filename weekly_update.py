@@ -178,6 +178,13 @@ def weekly_update(prior_week: int | None, upcoming_week: int | None) -> dict:
     # Re-generate enhanced predictions (if generator exists)
     results['generate_predictions'] = _run_script_if_exists('generate_enhanced_predictions.py')
 
+    # Ensure finalized games use pregame predictions by restoring from nearest pre-kickoff snapshots
+    try:
+        restore = _run_script_if_exists('scripts/restore_pregame_predictions.py', ['--write'])
+    except Exception as e:
+        restore = {'error': f'restore_failed: {e}'}
+    results['restore_pregame'] = restore
+
     # Reload predictions and overlay lines in memory for immediate app usage
     try:
         webapp._reload_predictions()

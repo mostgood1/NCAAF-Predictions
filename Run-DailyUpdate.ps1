@@ -179,6 +179,13 @@ try {
         } catch {
             Write-Host "daily_scores_check.py failed: $($_.Exception.Message)" -ForegroundColor Yellow
         }
+        # Always re-freeze pregame predictions for finals using nearest pre-kickoff snapshot
+        try {
+            Write-Host "Restoring pregame predictions for finalized games" -ForegroundColor Cyan
+            & $py (Join-Path $root 'scripts' 'restore_pregame_predictions.py') --write *>&1 | Tee-Object -FilePath $log -Append
+        } catch {
+            Write-Host "restore_pregame_predictions.py failed: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
         # Best-effort: ask local web app (if running) to reload predictions so cards settle now
         try {
             $svcPort = if($env:PORT){ $env:PORT } else { 5051 }
