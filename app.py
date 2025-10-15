@@ -933,34 +933,65 @@ try:
 except Exception:
     # Safe fallback: empty assets to avoid startup crash
     assets_df = pd.DataFrame(columns=['school', 'logo', 'color', 'alt_color'])
+# Build a normalized lookup for robust matching (case-insensitive, &->and, collapse spaces)
+def _norm_school_name(x: str | None) -> str:
+    try:
+        s = str(x or '').strip().lower()
+        s = s.replace('&', 'and')
+        s = s.replace('  ', ' ')
+        s = re.sub(r"\s+", " ", s)
+        return s
+    except Exception:
+        return str(x or '')
+try:
+    if not assets_df.empty and 'school' in assets_df.columns:
+        assets_df['_school_norm'] = assets_df['school'].apply(_norm_school_name)
+        _ASSETS_MAP = { r['_school_norm']: r for _, r in assets_df.iterrows() }
+    else:
+        _ASSETS_MAP = {}
+except Exception:
+    _ASSETS_MAP = {}
 def get_team_asset(team_name):
-    row = assets_df[assets_df['school'] == team_name]
-    if not row.empty:
-        # Ensure external asset URLs are safe for HTTPS contexts
-        def _to_https(url: str | None) -> str:
-            try:
-                if url is None:
-                    return ''
-                s = str(url).strip()
-                if not s:
-                    return ''
-                if s.startswith('//'):
-                    return 'https:' + s
-                if s.startswith('http://'):
-                    return 'https://' + s[len('http://'):]
-                return s
-            except Exception:
+    # Try normalized lookup first, then exact match as fallback
+    key = _norm_school_name(team_name)
+    row = None
+    try:
+        r = _ASSETS_MAP.get(key)
+        if r is not None:
+            row = r
+        else:
+            # Fallback exact match (case sensitive)
+            _rowdf = assets_df[assets_df.get('school','') == team_name]
+            if not _rowdf.empty:
+                row = _rowdf.iloc[0]
+    except Exception:
+        row = None
+    # Ensure external asset URLs are safe for HTTPS contexts
+    def _to_https(url: str | None) -> str:
+        try:
+            if url is None:
                 return ''
-        def clean(v):
-            try:
-                import pandas as _pd
-                return '' if _pd.isna(v) else v
-            except Exception:
-                return v if v is not None else ''
+            s = str(url).strip()
+            if not s:
+                return ''
+            if s.startswith('//'):
+                return 'https:' + s
+            if s.startswith('http://'):
+                return 'https://' + s[len('http://'):]
+            return s
+        except Exception:
+            return ''
+    def clean(v):
+        try:
+            import pandas as _pd
+            return '' if _pd.isna(v) else v
+        except Exception:
+            return v if v is not None else ''
+    if row is not None:
         return {
-            'logo': _to_https(clean(row.iloc[0].get('logo', ''))),
-            'color': clean(row.iloc[0].get('color', '')),
-            'alt_color': clean(row.iloc[0].get('alt_color', ''))
+            'logo': _to_https(clean(row.get('logo', ''))),
+            'color': clean(row.get('color', '')),
+            'alt_color': clean(row.get('alt_color', ''))
         }
     return {'logo': '', 'color': '', 'alt_color': ''}
 
@@ -1107,6 +1138,21 @@ TEAM_ALIASES = {
     'penn state nittany lions': 'penn state', 'oregon ducks': 'oregon',
     'nebraska cornhuskers': 'nebraska', 'michigan wolverines': 'michigan',
     'lsu tigers': 'lsu', 'uconn huskies': 'connecticut', 'delaware blue hens': 'delaware',
+    # Frequent short forms and school-name aliases
+    'usc trojans': 'usc', 'southern california': 'usc', 'ucla bruins': 'ucla',
+    'smu mustangs': 'smu', 'tcu horned frogs': 'tcu',
+    'fiu': 'florida international', 'fiu panthers': 'florida international',
+    'fau': 'florida atlantic', 'fau owls': 'florida atlantic',
+    'unlv rebels': 'unlv', 'nevada las vegas': 'unlv',
+    'utep miners': 'utep', 'texas el paso': 'utep',
+    'uab blazers': 'uab',
+    'san jose st': 'san jose state', 'san jose state spartans': 'san jose state',
+    'san diego st': 'san diego state', 'san diego state aztecs': 'san diego state',
+    'texas st': 'texas state', 'texas state bobcats': 'texas state',
+    'nc state wolfpack': 'nc state', 'north carolina state': 'nc state', 'north carolina state wolfpack': 'nc state',
+    'la tech': 'louisiana tech', 'louisiana tech bulldogs': 'louisiana tech',
+    'syracuse orange': 'syracuse', 'tennessee volunteers': 'tennessee',
+    'washington state cougars': 'washington state', 'washington huskies': 'washington',
 }
 
 def _canon_team(name: str) -> str:
@@ -1297,7 +1343,7 @@ def _overlay_lines_2025_if_present():
 # Attempt to load 2025 lines immediately so weeks 0-2 have odds without manual refresh
 _overlay_lines_2025_if_present()
 def get_betting_lines(year, week, home_team, away_team):
-    def _try(y, w, ht, at):
+    def _try(y, w, ht, at, tried_keys: list):
         k = (int(y), int(w), ht, at)
         o = lines_index.get(k)
         if o is not None:
@@ -1308,23 +1354,40 @@ def get_betting_lines(year, week, home_team, away_team):
         for a,b in ((n_ht, n_at), (c_ht, c_at)):
             v = lines_index_norm.get((int(y), int(w), a, b))
             if v: return v
+            tried_keys.append((int(y), int(w), a, b))
         # try flipped
         for a,b in ((n_at, n_ht), (c_at, c_ht)):
             v = lines_index_norm.get((int(y), int(w), a, b))
             if v: return v
+            tried_keys.append((int(y), int(w), a, b))
         return []
 
     y = int(year)
     w = int(week)
-    odds = _try(y, w, home_team, away_team)
+    tried = []
+    odds = _try(y, w, home_team, away_team, tried)
     if odds:
         return odds
     # Week 0/1 labeling mismatch fallback for 2025
     if y == 2025 and w in (0, 1):
         alt_w = 1 if w == 0 else 0
-        odds_alt = _try(y, alt_w, home_team, away_team)
+        odds_alt = _try(y, alt_w, home_team, away_team, tried)
         if odds_alt:
             return odds_alt
+    # Optional debug to understand why matching failed
+    try:
+        if os.environ.get('DEBUG_ODDS', '0') == '1':
+            n_ht = _norm_team_for_odds(home_team); n_at = _norm_team_for_odds(away_team)
+            c_ht = _canon_team(home_team); c_at = _canon_team(away_team)
+            print('[odds-miss]', {
+                'year': y, 'week': w,
+                'home': home_team, 'away': away_team,
+                'home_norm': n_ht, 'away_norm': n_at,
+                'home_canon': c_ht, 'away_canon': c_at,
+                'tried_norm_keys': tried[:6]
+            })
+    except Exception:
+        pass
     return []
 
 def _build_game_card(game_row: pd.Series) -> dict:
@@ -3718,6 +3781,14 @@ def index():
                 pa = None if pa is None else float(pa)
             except Exception:
                 pass
+            # Pull basic assets to avoid blank logos/colors in fallback
+            ha = get_team_asset(row.get('home_team')) or {}
+            aa = get_team_asset(row.get('away_team')) or {}
+            hb = _normalize_hex_color(ha.get('alt_color')) or _normalize_hex_color(ha.get('color')) or '#e5e7eb'
+            ab = _normalize_hex_color(aa.get('alt_color')) or _normalize_hex_color(aa.get('color')) or '#e5e7eb'
+            ht = _ideal_text_color_for_bg(hb)
+            at = _ideal_text_color_for_bg(ab)
+            p_tot = (ph + pa) if (isinstance(ph,(int,float)) and isinstance(pa,(int,float))) else None
             return {
                 'home_team': row.get('home_team'),
                 'away_team': row.get('away_team'),
@@ -3730,7 +3801,7 @@ def index():
                 'game_time': display_time,
                 'start_iso': start_iso,
                 'sort_ts': sort_ts,
-                'predicted_total_points': None,
+                'predicted_total_points': f"{float(p_tot):.2f}" if isinstance(p_tot,(int,float)) else None,
                 'pred_total_adj': None,
                 'pred_total_pre': None,
                 'actual_total_points': None,
@@ -3747,14 +3818,14 @@ def index():
                 'win_margin_conf_lower': None,
                 'win_margin_conf_upper': None,
                 'win_margin_conf_std': None,
-                'home_logo': '',
-                'home_color': '',
-                'home_alt_color': '#e5e7eb',
-                'home_text_color': '#111827',
-                'away_logo': '',
-                'away_color': '',
-                'away_alt_color': '#e5e7eb',
-                'away_text_color': '#111827',
+                'home_logo': ha.get('logo',''),
+                'home_color': _normalize_hex_color(ha.get('color')) or '',
+                'home_alt_color': hb,
+                'home_text_color': ht,
+                'away_logo': aa.get('logo',''),
+                'away_color': _normalize_hex_color(aa.get('color')) or '',
+                'away_alt_color': ab,
+                'away_text_color': at,
                 'betting_lines': [],
                 'ou_line': None,
                 'ou_model_lean': None,
