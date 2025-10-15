@@ -1655,6 +1655,22 @@ def _build_game_card(game_row: pd.Series) -> dict:
                     predicted_winner = game_row['away_team']
     except Exception:
         pass
+    # Determine actual winner and correctness once final scores exist (after any tie-break on prediction)
+    try:
+        if _is_valid_num(actual_home) and _is_valid_num(actual_away):
+            if actual_home > actual_away:
+                actual_winner = game_row['home_team']
+            elif actual_away > actual_home:
+                actual_winner = game_row['away_team']
+            else:
+                actual_winner = None
+            if predicted_winner is not None and actual_winner is not None:
+                correct_prediction = (predicted_winner == actual_winner)
+            else:
+                correct_prediction = None
+    except Exception:
+        actual_winner = None
+        correct_prediction = None
     # Win probability: compute before building return dict
     p_home_win = _compute_home_win_prob(game_row)
     return {
@@ -3392,15 +3408,20 @@ def index():
         return '', 200
     # Default to upcoming games for the current week if not POST
     import datetime as dt
-    # Build weeks set from rows that have a usable date (prefer API kickoff); avoid phantom weeks with no dates
+    # Build weeks set from all 2025 rows (don’t require dates so late weeks still appear)
     try:
-        if 'start_date_api' in pred_df.columns:
-            has_date = pred_df['start_date_api'].notna() | pred_df.get('start_date', pd.Series([False]*len(pred_df))).notna()
-        else:
-            has_date = pred_df.get('start_date', pd.Series([False]*len(pred_df))).notna()
-        weeks = sorted(pd.to_numeric(pred_df.loc[has_date, 'week'], errors='coerce').dropna().unique())
+        base = pred_df.copy()
+        if 'season' in base.columns:
+            try:
+                base = base[pd.to_numeric(base['season'], errors='coerce') == 2025]
+            except Exception:
+                pass
+        weeks = sorted(int(w) for w in pd.to_numeric(base.get('week'), errors='coerce').dropna().unique())
     except Exception:
-        weeks = sorted(pred_df['week'].dropna().unique())
+        try:
+            weeks = sorted(int(w) for w in pd.to_numeric(pred_df.get('week'), errors='coerce').dropna().unique())
+        except Exception:
+            weeks = []
     selected_week = weeks[0] if weeks else None
     if request.method == 'GET':
         # Query param driven (read-only)
@@ -3416,7 +3437,7 @@ def index():
                     explicit_week_selected = True
         except Exception:
             pass
-        # If no explicit week chosen, pick the "current" (upcoming) week using kickoff dates.
+        # If no explicit week chosen, pick the "current" (upcoming) week using kickoff dates when available.
         if week_q is None:
             try:
                 today = dt.date.today()
@@ -3448,8 +3469,19 @@ def index():
                     recent = sorted([w for w, d in week_max_dates.items() if d >= (today - dt.timedelta(days=lookback_days))])
                     if recent:
                         selected_week = recent[-1]
+                # Final fallback if still None: choose max available week
+                if selected_week is None and weeks:
+                    selected_week = max(weeks)
             except Exception:
                 pass
+        # Ensure selected_week is in the weeks list; if not, snap to nearest valid
+        try:
+            if selected_week is not None and weeks and int(selected_week) not in weeks:
+                # Prefer closest larger (upcoming), else max
+                larger = [w for w in weeks if w >= int(selected_week)]
+                selected_week = (min(larger) if larger else max(weeks))
+        except Exception:
+            pass
         if weeks and selected_week is None:  # auto-pick most recent with finals
             try:
                 finals_counts = {}
