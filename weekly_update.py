@@ -175,6 +175,9 @@ def weekly_update(prior_week: int | None, upcoming_week: int | None) -> dict:
     # Retune models (if script exists)
     results['retune_models'] = _run_script_if_exists('retune_models.py')
 
+    # Train ATS/Totals classifiers (if script exists)
+    results['train_ats_totals'] = _run_script_if_exists('train_ats_totals.py')
+
     # Re-generate enhanced predictions (if generator exists)
     results['generate_predictions'] = _run_script_if_exists('generate_enhanced_predictions.py')
 
@@ -261,6 +264,21 @@ def weekly_update(prior_week: int | None, upcoming_week: int | None) -> dict:
     except Exception as e:
         results['offline_artifacts'] = {'error': str(e)}
 
+    # Evaluate ATS/Totals accuracy for visibility
+    try:
+        eval_script = os.path.join(base, 'scripts', 'evaluate_ats_totals.py')
+        if os.path.exists(eval_script):
+            out = subprocess.run([sys.executable, eval_script], capture_output=True, text=True, check=False)
+            results['evaluation'] = {
+                'returncode': out.returncode,
+                'stdout': out.stdout[-2000:],
+                'stderr': out.stderr[-2000:],
+            }
+        else:
+            results['evaluation'] = {'skipped': 'script_missing'}
+    except Exception as e:
+        results['evaluation'] = {'error': str(e)}
+
     return results
 
 
@@ -295,6 +313,7 @@ def main():
         print(line('merge_features', res.get('merge_features', {})))
         print(line('retune_models', res.get('retune_models', {})))
         print(line('generate_predictions', res.get('generate_predictions', {})))
+        print(line('train_ats_totals', res.get('train_ats_totals', {})))
         print(line('reload', res.get('reload', {})))
         if 'sanity' in res:
             s = res.get('sanity', {})
@@ -306,6 +325,8 @@ def main():
             print(line('recommendations_snapshot', res.get('recommendations_snapshot', {})))
         if 'offline_artifacts' in res:
             print(line('offline_artifacts', res.get('offline_artifacts', {})))
+        if 'evaluation' in res:
+            print(line('evaluation', res.get('evaluation', {})))
 
 
 if __name__ == '__main__':

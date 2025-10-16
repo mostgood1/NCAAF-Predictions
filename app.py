@@ -81,8 +81,10 @@ def _filtered_add_url_rule(rule, endpoint=None, view_func=None, provide_automati
             '/deploy-info',
             '/routes',
             '/healthz',
+            '/metrics/ats_totals',
             '/recommendations/',
             '/recommendations/debug/',
+            '/metrics/ats_totals/',
         }
         if rule in allowed or (isinstance(rule, str) and rule.startswith('/static')):
             return _orig_add_url_rule(rule, endpoint=endpoint, view_func=view_func,
@@ -203,6 +205,40 @@ def _healthz():
     except Exception:
         # Minimal fall-back response if jsonify import fails for any reason
         return f"ok {BUILD_TIME} {BUILD_COMMIT}", 200, {'Content-Type': 'text/plain; charset=utf-8'}
+
+# Serve latest ATS/Totals evaluation metrics if available
+@app.route('/metrics/ats_totals')
+def _metrics_ats_totals():
+    try:
+        mpath = os.path.join(DATA_DIR, 'metrics', 'ats_totals_eval.json')
+        if not os.path.exists(mpath):
+            # Provide minimal structure so dashboards don't break
+            return jsonify({
+                'status': 'missing',
+                'message': 'metrics file not found',
+                'build_time': BUILD_TIME,
+                'commit': BUILD_COMMIT,
+            }), 200
+        with open(mpath, 'r', encoding='utf-8') as f:
+            obj = json.load(f)
+        # Attach build metadata
+        obj = obj if isinstance(obj, dict) else {'data': obj}
+        obj['build_time'] = BUILD_TIME
+        obj['commit'] = BUILD_COMMIT
+        # Echo current prob-source choice for transparency
+        try:
+            obj['selected_sources'] = {
+                'spread': _prob_source_for_market('spread'),
+                'total': _prob_source_for_market('total'),
+            }
+        except Exception:
+            pass
+        return jsonify(obj), 200
+    except Exception as e:
+        try:
+            return jsonify({'error': str(e)}), 200
+        except Exception:
+            return f"error: {e}", 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
 # Debug endpoint: show current pred source and local enhanced candidates (guarded by DEBUG_PRED_SOURCE)
 @app.route('/api/debug-pred-source')
@@ -3079,8 +3115,10 @@ def compute_recommendations(
                 spread_val = None
             ou_val = _safe_float(odds.get('overUnder'))
             dec_110 = 1 + (100/110)
-            if spread_val is not None and sigma_m not in (None, 0, 0.0) and not (isinstance(sigma_m, float) and math.isnan(sigma_m)):
-                p_home_cover = _phi((pred_margin - spread_val) / sigma_m)
+            if spread_val is not None:
+                p_home_cover, src_spread = _predict_spread_prob(row, spread_val, sigma_m)
+                if p_home_cover is None:
+                    continue
                 ev_home = p_home_cover * (dec_110 - 1) - (1 - p_home_cover)
                 kf_home = min(kelly_fraction(p_home_cover, dec_110), kelly_cap)
                 # Edge points filter for spread
@@ -3092,15 +3130,17 @@ def compute_recommendations(
                     pass
                 if spread_dist_ok and ev_home > ev_threshold and kf_home > 0:
                     stake = round(bankroll * kf_home * kelly_factor, 2)
-                    recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'Spread', 'side': 'Home', 'provider': provider, 'price_american': -110, 'model_prob': round(p_home_cover,4), 'implied_prob': round(1/(dec_110),4), 'edge': round(ev_home,4), 'kelly_f': round(kf_home,4), 'stake': stake, 'line': spread_val})
+                    recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'Spread', 'side': 'Home', 'provider': provider, 'price_american': -110, 'model_prob': round(p_home_cover,4), 'implied_prob': round(1/(dec_110),4), 'edge': round(ev_home,4), 'kelly_f': round(kf_home,4), 'stake': stake, 'line': spread_val, 'prob_source': src_spread})
                 p_away_cover = 1 - p_home_cover
                 ev_away = p_away_cover * (dec_110 - 1) - (1 - p_away_cover)
                 kf_away = min(kelly_fraction(p_away_cover, dec_110), kelly_cap)
                 if spread_dist_ok and ev_away > ev_threshold and kf_away > 0:
                     stake = round(bankroll * kf_away * kelly_factor, 2)
-                    recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'Spread', 'side': 'Away', 'provider': provider, 'price_american': -110, 'model_prob': round(p_away_cover,4), 'implied_prob': round(1/(dec_110),4), 'edge': round(ev_away,4), 'kelly_f': round(kf_away,4), 'stake': stake, 'line': spread_val})
+                    recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'Spread', 'side': 'Away', 'provider': provider, 'price_american': -110, 'model_prob': round(p_away_cover,4), 'implied_prob': round(1/(dec_110),4), 'edge': round(ev_away,4), 'kelly_f': round(kf_away,4), 'stake': stake, 'line': spread_val, 'prob_source': src_spread})
             if ou_val is not None:
-                p_over = 1 - _phi((ou_val - pred_total) / sigma_t)
+                p_over, src_total = _predict_total_prob(row, ou_val, pred_total, sigma_t)
+                if p_over is None:
+                    continue
                 ev_over = p_over * (dec_110 - 1) - (1 - p_over)
                 kf_over = min(kelly_fraction(p_over, dec_110), kelly_cap)
                 # Edge points filter for total
@@ -3112,13 +3152,13 @@ def compute_recommendations(
                     pass
                 if total_dist_ok and ev_over > ev_threshold and kf_over > 0:
                     stake = round(bankroll * kf_over * kelly_factor, 2)
-                    recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'Total', 'side': 'Over', 'provider': provider, 'price_american': -110, 'model_prob': round(p_over,4), 'implied_prob': round(1/(dec_110),4), 'edge': round(ev_over,4), 'kelly_f': round(kf_over,4), 'stake': stake, 'line': ou_val})
+                    recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'Total', 'side': 'Over', 'provider': provider, 'price_american': -110, 'model_prob': round(p_over,4), 'implied_prob': round(1/(dec_110),4), 'edge': round(ev_over,4), 'kelly_f': round(kf_over,4), 'stake': stake, 'line': ou_val, 'prob_source': src_total})
                 p_under = 1 - p_over
                 ev_under = p_under * (dec_110 - 1) - (1 - p_under)
                 kf_under = min(kelly_fraction(p_under, dec_110), kelly_cap)
                 if total_dist_ok and ev_under > ev_threshold and kf_under > 0:
                     stake = round(bankroll * kf_under * kelly_factor, 2)
-                    recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'Total', 'side': 'Under', 'provider': provider, 'price_american': -110, 'model_prob': round(p_under,4), 'implied_prob': round(1/(dec_110),4), 'edge': round(ev_under,4), 'kelly_f': round(kf_under,4), 'stake': stake, 'line': ou_val})
+                    recs.append({'season': int(row['season']), 'week': int(row['week']), 'home_team': row['home_team'], 'away_team': row['away_team'], 'market': 'Total', 'side': 'Under', 'provider': provider, 'price_american': -110, 'model_prob': round(p_under,4), 'implied_prob': round(1/(dec_110),4), 'edge': round(ev_under,4), 'kelly_f': round(kf_under,4), 'stake': stake, 'line': ou_val, 'prob_source': src_total})
     recs.sort(key=lambda x: x['edge'], reverse=True)
     return recs
 
@@ -4928,6 +4968,7 @@ def _limit_routes():
             '/healthz',
             '/which-app',
             '/deploy-info',
+            '/metrics/ats_totals',
         ])
         if p in allowed:
             return None
@@ -4952,6 +4993,7 @@ _MODEL_META = {}
 MODELS_DIR = Path(os.path.join(BASE_DIR, 'models'))
 _MODEL_MANIFEST_PATH = MODELS_DIR / 'model_manifest.json'
 _MODEL_PREFIX = 'rf_v1'  # default until manifest loaded
+_ATS_TOTALS_DIR = MODELS_DIR / 'ats_totals'
 
 def _load_model_artifacts():
     global _MODEL_ARTIFACTS, _MODEL_META
@@ -4996,6 +5038,29 @@ def _load_model_artifacts():
             _MODEL_ARTIFACTS['calibration'] = _pd.read_csv(calib)
         except Exception as e:
             print(f"[model-load] calib read error: {e}")
+    # Load ATS/Totals classifiers if present
+    try:
+        ats_path = _ATS_TOTALS_DIR / 'ats_clf.joblib'
+        tot_path = _ATS_TOTALS_DIR / 'totals_clf.joblib'
+        meta_path = _ATS_TOTALS_DIR / 'meta.json'
+        if ats_path.exists():
+            try:
+                _MODEL_ARTIFACTS['ats_clf'] = joblib.load(ats_path)
+            except Exception as e:
+                print(f"[model-load] ats_clf load error: {e}")
+        if tot_path.exists():
+            try:
+                _MODEL_ARTIFACTS['totals_clf'] = joblib.load(tot_path)
+            except Exception as e:
+                print(f"[model-load] totals_clf load error: {e}")
+        if meta_path.exists():
+            try:
+                import json as _json
+                _MODEL_ARTIFACTS['ats_totals_meta'] = _json.loads(meta_path.read_text(encoding='utf-8'))
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 def _predict_proba_from_calibration(margin_pred: float):
     try:
@@ -5018,6 +5083,154 @@ def _predict_proba_from_calibration(margin_pred: float):
         return float(y0 + (y1-y0)*((margin_pred-x0)/(x1-x0)))
     except Exception:
         return None
+
+# ATS/Totals classifier feature set extraction and probability helpers
+def _ats_totals_feat_vector(row: pd.Series) -> list[float] | None:
+    try:
+        meta = _MODEL_ARTIFACTS.get('ats_totals_meta') or {}
+        feat_cols = meta.get('features') or []
+        if not feat_cols:
+            # Fallback: common defaults
+            feat_cols = ['model_margin','model_total_points','model_home_points','model_away_points','model_confidence_score','predicted_home_points','predicted_away_points','predicted_total_points','weather_temp','weather_wind','weather_adjustment','edge','confidence']
+        vals = []
+        for c in feat_cols:
+            v = row.get(c)
+            try:
+                v = float(v)
+                if math.isnan(v) or math.isinf(v):
+                    v = 0.0
+            except Exception:
+                v = 0.0
+            vals.append(v)
+        return vals
+    except Exception:
+        return None
+
+def _predict_p_home_cover(row: pd.Series, spread_val: float, sigma_m: float | None) -> float | None:
+    # Prefer classifier if available
+    clf = _MODEL_ARTIFACTS.get('ats_clf')
+    if clf is not None:
+        X = _ats_totals_feat_vector(row)
+        if X is not None:
+            try:
+                p = float(clf.predict_proba([X])[0][1])
+                # Clamp to avoid degenerate 0/1
+                p = max(0.01, min(0.99, p))
+                return p
+            except Exception:
+                pass
+    # Fallback: Gaussian margin model
+    try:
+        pred_margin = _safe_float(row.get('model_margin'))
+        if pred_margin is None:
+            pred_margin = _safe_float(row.get('predicted_win_margin'))
+        if pred_margin is None:
+            mh = _safe_float(row.get('model_home_points')) or _safe_float(row.get('predicted_home_points'))
+            ma = _safe_float(row.get('model_away_points')) or _safe_float(row.get('predicted_away_points'))
+            if mh is not None and ma is not None:
+                pred_margin = mh - ma
+        if pred_margin is None or sigma_m in (None, 0, 0.0) or (isinstance(sigma_m, float) and math.isnan(sigma_m)):
+            return None
+        return _phi((pred_margin - spread_val) / sigma_m)
+    except Exception:
+        return None
+
+def _predict_p_over(row: pd.Series, ou_val: float, pred_total: float | None, sigma_t: float | None) -> float | None:
+    # Prefer classifier if available
+    clf = _MODEL_ARTIFACTS.get('totals_clf')
+    if clf is not None:
+        X = _ats_totals_feat_vector(row)
+        if X is not None:
+            try:
+                p = float(clf.predict_proba([X])[0][1])
+                p = max(0.01, min(0.99, p))
+                return p
+            except Exception:
+                pass
+    # Fallback: Gaussian total
+    try:
+        if pred_total is None:
+            mh = _safe_float(row.get('model_home_points')) or _safe_float(row.get('predicted_home_points'))
+            ma = _safe_float(row.get('model_away_points')) or _safe_float(row.get('predicted_away_points'))
+            if mh is not None and ma is not None:
+                pred_total = mh + ma
+        if pred_total is None or sigma_t in (None, 0, 0.0) or (isinstance(sigma_t, float) and math.isnan(sigma_t)):
+            return None
+        return 1 - _phi((ou_val - pred_total) / sigma_t)
+    except Exception:
+        return None
+
+# Smart selector: choose classifier or gaussian per market
+def _prob_source_for_market(market: str) -> str:
+    m = market.lower()
+    # Env overrides: ATS/TOTALS can be 'clf' or 'gaussian'
+    if m == 'spread':
+        o = str(os.environ.get('ATS_PROB_SOURCE', '')).strip().lower()
+    else:
+        o = str(os.environ.get('TOTALS_PROB_SOURCE', '')).strip().lower()
+    if o in ('clf','classifier'):
+        return 'clf'
+    if o in ('gaussian','normal'):
+        return 'gaussian'
+    # Otherwise use last evaluation if present
+    try:
+        metrics_path = os.path.join(DATA_DIR, 'metrics', 'ats_totals_eval.json')
+        if os.path.exists(metrics_path):
+            import json as _json
+            with open(metrics_path, 'r', encoding='utf-8') as f:
+                mjs = _json.load(f)
+            if m == 'spread':
+                a = mjs.get('accuracy', {}).get('ats', {})
+            else:
+                a = mjs.get('accuracy', {}).get('totals', {})
+            clf = float(a.get('clf') or 0)
+            gau = float(a.get('gaussian') or 0)
+            return 'clf' if clf >= gau else 'gaussian'
+    except Exception:
+        pass
+    # Default to classifier for spread, gaussian for totals (based on current snapshot)
+    return 'clf' if m == 'spread' else 'gaussian'
+
+def _predict_spread_prob(row: pd.Series, spread_val: float, sigma_m: float | None):
+    src = _prob_source_for_market('spread')
+    if src == 'clf':
+        p = _predict_p_home_cover(row, spread_val, sigma_m)
+        if p is not None:
+            return p, 'clf'
+    # Gaussian fallback explicitly
+    try:
+        pred_margin = _safe_float(row.get('model_margin'))
+        if pred_margin is None:
+            pred_margin = _safe_float(row.get('predicted_win_margin'))
+        if pred_margin is None:
+            mh = _safe_float(row.get('model_home_points')) or _safe_float(row.get('predicted_home_points'))
+            ma = _safe_float(row.get('model_away_points')) or _safe_float(row.get('predicted_away_points'))
+            if mh is not None and ma is not None:
+                pred_margin = mh - ma
+        if pred_margin is None or sigma_m in (None, 0, 0.0) or (isinstance(sigma_m, float) and math.isnan(sigma_m)):
+            return None, 'gaussian'
+        return _phi((pred_margin - spread_val) / sigma_m), 'gaussian'
+    except Exception:
+        return None, 'gaussian'
+
+def _predict_total_prob(row: pd.Series, ou_val: float, pred_total: float | None, sigma_t: float | None):
+    src = _prob_source_for_market('total')
+    if src == 'clf':
+        p = _predict_p_over(row, ou_val, pred_total, sigma_t)
+        if p is not None:
+            return p, 'clf'
+    # Gaussian fallback explicitly
+    try:
+        if pred_total is None:
+            mh = _safe_float(row.get('model_home_points')) or _safe_float(row.get('predicted_home_points'))
+            ma = _safe_float(row.get('model_away_points')) or _safe_float(row.get('predicted_away_points'))
+            if mh is not None and ma is not None:
+                pred_total = mh + ma
+        if pred_total is None or sigma_t in (None, 0, 0.0) or (isinstance(sigma_t, float) and math.isnan(sigma_t)):
+            return None, 'gaussian'
+        return 1 - _phi((ou_val - pred_total) / sigma_t), 'gaussian'
+    except Exception:
+        return None, 'gaussian'
 
 def _overlay_model_predictions(df):
     if not _MODEL_ARTIFACTS:

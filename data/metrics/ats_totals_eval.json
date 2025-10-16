@@ -1,0 +1,28 @@
+{
+  "generated_utc": "2025-10-16T00:17:48.252156+00:00",
+  "samples": {
+    "ats": 400,
+    "totals": 401,
+    "ats_pushes": 4,
+    "totals_pushes": 3
+  },
+  "accuracy": {
+    "ats": {
+      "clf": 0.6725,
+      "gaussian": 0.5225,
+      "clf_correct": 269,
+      "gaussian_correct": 209
+    },
+    "totals": {
+      "clf": 0.8229,
+      "gaussian": 0.7756,
+      "clf_correct": 330,
+      "gaussian_correct": 311
+    }
+  },
+  "coverage": {
+    "with_any_lines": 404,
+    "with_spread": 404,
+    "with_total": 404
+  }
+}

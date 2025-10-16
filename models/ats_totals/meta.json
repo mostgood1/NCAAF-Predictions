@@ -1,0 +1,46 @@
+{
+  "features": [
+    "model_margin",
+    "model_total_points",
+    "model_home_points",
+    "model_away_points",
+    "model_confidence_score",
+    "predicted_home_points",
+    "predicted_away_points",
+    "predicted_total_points",
+    "weather_temp",
+    "weather_wind",
+    "weather_adjustment",
+    "delta_total_pred",
+    "delta_total_model",
+    "abs_delta_total_pred",
+    "abs_delta_total_model",
+    "tempo_proxy_pred",
+    "tempo_proxy_model",
+    "spread_abs",
+    "temp_center",
+    "temp2",
+    "wind2",
+    "cold",
+    "heat",
+    "temp_wind",
+    "is_conference",
+    "week"
+  ],
+  "sizes": {
+    "ats": 400,
+    "totals": 401,
+    "total_rows": 3657
+  },
+  "coverage": {
+    "rows": 3657,
+    "with_spread_any": 493,
+    "with_total_any": 489,
+    "completed": 506,
+    "completed_with_spread": 404,
+    "completed_with_total": 404
+  },
+  "notes": "Probabilities: ATS -> P(Home covers), Totals -> P(Over). Pushes dropped.",
+  "ats_model": "saved",
+  "totals_model": "saved"
+}
