@@ -1,28 +1,28 @@
 {
-  "generated_utc": "2025-10-16T15:11:22.871912+00:00",
+  "generated_utc": "2025-10-17T15:06:40.956430+00:00",
   "samples": {
-    "ats": 400,
-    "totals": 401,
+    "ats": 406,
+    "totals": 407,
     "ats_pushes": 4,
     "totals_pushes": 3
   },
   "accuracy": {
     "ats": {
-      "clf": 0.6725,
-      "gaussian": 0.5225,
-      "clf_correct": 269,
-      "gaussian_correct": 209
+      "clf": 0.5936,
+      "gaussian": 0.5172,
+      "clf_correct": 241,
+      "gaussian_correct": 210
     },
     "totals": {
-      "clf": 0.8229,
-      "gaussian": 0.7756,
-      "clf_correct": 330,
-      "gaussian_correct": 311
+      "clf": 0.4988,
+      "gaussian": 0.7961,
+      "clf_correct": 203,
+      "gaussian_correct": 324
     }
   },
   "coverage": {
-    "with_any_lines": 404,
-    "with_spread": 404,
-    "with_total": 404
+    "with_any_lines": 410,
+    "with_spread": 410,
+    "with_total": 410
   }
 }

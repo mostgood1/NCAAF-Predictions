@@ -15,7 +15,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,9,Buffalo,Akron,False,0,
 2025,9,Central Michigan,Massachusetts,False,0,
 2025,9,Chapman,Claremont-Mudd-Scripps College,False,0,
-2025,9,Cincinnati,Baylor,False,0,
+2025,9,Cincinnati,Baylor,True,1,DraftKings
 2025,9,Concord University,West Virginia Wesleyan,False,0,
 2025,9,Cornell,Brown,False,0,
 2025,9,East Tennessee State,Wofford,False,0,
@@ -31,22 +31,22 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,9,Howard,Morgan State,False,0,
 2025,9,Idaho,Portland State,False,0,
 2025,9,Idaho State,Northern Arizona,False,0,
-2025,9,Indiana,UCLA,False,0,
+2025,9,Indiana,UCLA,True,6,"Betsson,Coolbet,DraftKings,FanDuel,Nordic Bet,Paddy Power"
 2025,9,Iowa,Minnesota,False,0,
-2025,9,Iowa State,BYU,False,0,
-2025,9,Kansas,Kansas State,True,2,"DraftKings,ESPN Bet"
+2025,9,Iowa State,BYU,True,1,DraftKings
+2025,9,Kansas,Kansas State,True,1,DraftKings
 2025,9,Kent State,Bowling Green,False,0,
 2025,9,Kentucky,Tennessee,False,0,
-2025,9,LSU,Texas A&M,True,2,"DraftKings,ESPN Bet"
+2025,9,LSU,Texas A&M,True,1,DraftKings
 2025,9,Lincoln (PA),Elizabeth City State,False,0,
 2025,9,Louisville,Boston College,False,0,
 2025,9,Marist,Drake,False,0,
-2025,9,Memphis,South Florida,False,0,
+2025,9,Memphis,South Florida,True,3,"DraftKings,FanDuel,Paddy Power"
 2025,9,Mercyhurst,Stonehill,False,0,
 2025,9,Miami,Stanford,False,0,
 2025,9,Miami (OH),Western Michigan,False,0,
-2025,9,Michigan State,Michigan,True,2,"DraftKings,ESPN Bet"
-2025,9,Mississippi State,Texas,False,0,
+2025,9,Michigan State,Michigan,True,1,DraftKings
+2025,9,Mississippi State,Texas,True,1,DraftKings
 2025,9,Missouri Southern State,Missouri Western,False,0,
 2025,9,Nebraska,Northwestern,False,0,
 2025,9,New Mexico,Utah State,False,0,
@@ -57,7 +57,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,9,North Carolina Central,Delaware State,False,0,
 2025,9,Northern Colorado,UC Davis,False,0,
 2025,9,Northern Illinois,Ball State,False,0,
-2025,9,Oklahoma,Ole Miss,False,0,
+2025,9,Oklahoma,Ole Miss,True,1,DraftKings
 2025,9,Old Dominion,App State,False,0,
 2025,9,Oregon,Wisconsin,False,0,
 2025,9,Pittsburgh,NC State,False,0,
@@ -78,10 +78,10 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,9,Tulsa,Temple,False,0,
 2025,9,UT Rio Grande Valley,Incarnate Word,False,0,
 2025,9,Utah,Colorado,True,1,ESPN Bet
-2025,9,Vanderbilt,Missouri,False,0,
+2025,9,Vanderbilt,Missouri,True,1,DraftKings
 2025,9,Wagner,Duquesne,False,0,
 2025,9,Wake Forest,SMU,False,0,
-2025,9,Washington,Illinois,False,0,
+2025,9,Washington,Illinois,True,1,DraftKings
 2025,9,West Alabama,Delta State,False,0,
 2025,9,West Virginia,TCU,False,0,
 2025,9,Albright,FDU-Florham,False,0,

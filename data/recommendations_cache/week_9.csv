@@ -1,10 +1,19 @@
 season,week,home_team,away_team,market,side,provider,price_american,line,model_prob,implied_prob,edge,kelly_f,stake,start_iso,display_date,result_txt
-2025,9,Michigan State,Michigan,ML,Home,ESPN Bet,240,,0.6855,0.2941,1.3306,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
-2025,9,Utah,Colorado,Spread,Home,ESPN Bet,-110,-8.5,0.9991,0.5238,0.9073,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
-2025,9,LSU,Texas A&M,Spread,Home,DraftKings,-110,-5.5,0.9981,0.5238,0.9054,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
-2025,9,South Carolina,Alabama,Spread,Home,DraftKings,-110,7.5,0.9441,0.5238,0.8025,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
-2025,9,Michigan State,Michigan,Spread,Home,ESPN Bet,-110,8.0,0.9299,0.5238,0.7752,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
-2025,9,Kansas,Kansas State,Spread,Home,DraftKings,-110,4.0,0.8955,0.5238,0.7097,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
-2025,9,LSU,Texas A&M,ML,Home,ESPN Bet,-190,,0.8794,0.6552,0.3423,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
-2025,9,Kansas,Kansas State,Total,Under,ESPN Bet,-110,53.5,0.6112,0.5238,0.1668,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
-2025,9,Utah,Colorado,ML,Home,ESPN Bet,-300,,0.7906,0.75,0.0541,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Indiana,UCLA,ML,Away,FanDuel,1200,,0.3501,0.0769,3.5518,0.025,12.5,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Indiana,UCLA,Spread,Home,FanDuel,-110,-24.5,0.9999,0.5238,0.909,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Memphis,South Florida,Spread,Home,FanDuel,-110,-3.5,0.9996,0.5238,0.9083,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
+2025,9,Washington,Illinois,Spread,Home,DraftKings,-110,-4.5,0.9996,0.5238,0.9082,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Utah,Colorado,Spread,Home,ESPN Bet,-110,-8.5,0.999,0.5238,0.9072,0.1,50.0,2025-10-26T02:15:00Z,2025-10-26,—
+2025,9,Cincinnati,Baylor,Spread,Home,DraftKings,-110,-3.5,0.9978,0.5238,0.9049,0.1,50.0,2025-10-25T20:00:00Z,2025-10-25,—
+2025,9,Oklahoma,Ole Miss,Spread,Home,DraftKings,-110,-2.5,0.9957,0.5238,0.9008,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
+2025,9,LSU,Texas A&M,Spread,Home,DraftKings,-110,-1.5,0.9951,0.5238,0.8997,0.1,50.0,2025-10-25T23:30:00Z,2025-10-25,—
+2025,9,Iowa State,BYU,Spread,Home,DraftKings,-110,1.5,0.9769,0.5238,0.865,0.1,50.0,2025-10-25T19:30:00Z,2025-10-25,—
+2025,9,Vanderbilt,Missouri,Spread,Home,DraftKings,-110,-1.5,0.9753,0.5238,0.862,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Kansas,Kansas State,Spread,Home,DraftKings,-110,2.5,0.9748,0.5238,0.8609,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
+2025,9,Mississippi State,Texas,Spread,Home,DraftKings,-110,8.5,0.9604,0.5238,0.8334,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,South Carolina,Alabama,Spread,Home,DraftKings,-110,10.0,0.9344,0.5238,0.7839,0.1,50.0,2025-10-25T19:30:00Z,2025-10-25,—
+2025,9,Michigan State,Michigan,Spread,Home,DraftKings,-110,12.5,0.8949,0.5238,0.7084,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Memphis,South Florida,ML,Home,FanDuel,-152,,0.9458,0.6032,0.568,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
+2025,9,Memphis,South Florida,Total,Under,FanDuel,-110,69.5,0.794,0.5238,0.5158,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
+2025,9,Indiana,UCLA,Total,Under,Coolbet,-110,55.0,0.6574,0.5238,0.255,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Utah,Colorado,ML,Home,ESPN Bet,-300,,0.7722,0.75,0.0296,0.0887,44.33,2025-10-26T02:15:00Z,2025-10-26,—
