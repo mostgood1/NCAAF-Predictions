@@ -31,7 +31,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,9,Howard,Morgan State,False,0,
 2025,9,Idaho,Portland State,False,0,
 2025,9,Idaho State,Northern Arizona,False,0,
-2025,9,Indiana,UCLA,True,6,"Betsson,Coolbet,DraftKings,FanDuel,Nordic Bet,Paddy Power"
+2025,9,Indiana,UCLA,True,4,"Coolbet,DraftKings,FanDuel,Paddy Power"
 2025,9,Iowa,Minnesota,False,0,
 2025,9,Iowa State,BYU,True,1,DraftKings
 2025,9,Kansas,Kansas State,True,1,DraftKings
@@ -41,7 +41,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,9,Lincoln (PA),Elizabeth City State,False,0,
 2025,9,Louisville,Boston College,False,0,
 2025,9,Marist,Drake,False,0,
-2025,9,Memphis,South Florida,True,3,"DraftKings,FanDuel,Paddy Power"
+2025,9,Memphis,South Florida,True,4,"Coolbet,DraftKings,FanDuel,Paddy Power"
 2025,9,Mercyhurst,Stonehill,False,0,
 2025,9,Miami,Stanford,False,0,
 2025,9,Miami (OH),Western Michigan,False,0,
