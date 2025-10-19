@@ -1,19 +1,94 @@
 season,week,home_team,away_team,market,side,provider,price_american,line,model_prob,implied_prob,edge,kelly_f,stake,start_iso,display_date,result_txt
-2025,9,Indiana,UCLA,ML,Away,FanDuel,1200,,0.3403,0.0769,3.4245,0.025,12.5,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Indiana,UCLA,ML,Away,FanDuel,1400,,0.3927,0.0667,4.8901,0.025,12.5,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,North Carolina,Virginia,ML,Home,MyBookie.ag,310,,0.9046,0.2439,2.7087,0.025,12.5,2025-10-25T16:00:00Z,2025-10-25,—
+2025,9,South Carolina,Alabama,ML,Home,Hard Rock Bet,425,,0.6982,0.1905,2.6654,0.025,12.5,2025-10-25T19:30:00Z,2025-10-25,—
+2025,9,Kentucky,Tennessee,ML,Home,MyBookie.ag,275,,0.8887,0.2667,2.3325,0.1,50.0,2025-10-25T23:45:00Z,2025-10-25,—
+2025,9,Michigan State,Michigan,ML,Home,FanDuel,375,,0.6628,0.2105,2.1482,0.025,12.5,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Georgia Tech,Syracuse,ML,Away,Marathon Bet,595,,0.379,0.1439,1.6341,0.025,12.5,2025-10-25T16:00:00Z,2025-10-25,—
+2025,9,West Virginia,TCU,ML,Home,Hard Rock Bet,475,,0.4537,0.1739,1.6087,0.025,12.5,2025-10-25T22:00:00Z,2025-10-25,—
+2025,9,Georgia State,South Alabama,ML,Home,Betway,200,,0.7652,0.3333,1.2956,0.1,50.0,2025-10-23T23:30:00Z,2025-10-23,—
+2025,9,Mississippi State,Texas,ML,Home,FanDuel,220,,0.6878,0.3125,1.201,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Memphis,South Florida,ML,Home,Hard Rock Bet,130,,0.9493,0.4348,1.1833,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
+2025,9,LSU,Texas A&M,ML,Home,FanDuel,120,,0.8917,0.4545,0.9616,0.1,50.0,2025-10-25T23:30:00Z,2025-10-25,—
+2025,9,Oregon,Wisconsin,Spread,Home,FanDuel,-110,-32.5,1.0,0.5238,0.9091,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Southern Miss,UL Monroe,Spread,Home,Betsson,-110,-13.5,1.0,0.5238,0.9091,0.1,50.0,2025-10-25T19:30:00Z,2025-10-25,—
+2025,9,Texas Tech,Oklahoma State,Spread,Home,FanDuel,-110,-37.5,1.0,0.5238,0.9091,0.1,50.0,2025-10-25T20:00:00Z,2025-10-25,—
 2025,9,Indiana,UCLA,Spread,Home,FanDuel,-110,-24.5,0.9999,0.5238,0.909,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
-2025,9,Memphis,South Florida,Spread,Home,FanDuel,-110,-3.5,0.9996,0.5238,0.9082,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
-2025,9,Washington,Illinois,Spread,Home,DraftKings,-110,-4.5,0.9996,0.5238,0.9082,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
-2025,9,Utah,Colorado,Spread,Home,ESPN Bet,-110,-8.5,0.9991,0.5238,0.9073,0.1,50.0,2025-10-26T02:15:00Z,2025-10-26,—
-2025,9,Cincinnati,Baylor,Spread,Home,DraftKings,-110,-3.5,0.998,0.5238,0.9053,0.1,50.0,2025-10-25T20:00:00Z,2025-10-25,—
-2025,9,Oklahoma,Ole Miss,Spread,Home,DraftKings,-110,-2.5,0.9961,0.5238,0.9017,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
-2025,9,LSU,Texas A&M,Spread,Home,DraftKings,-110,1.5,0.9907,0.5238,0.8914,0.1,50.0,2025-10-25T23:30:00Z,2025-10-25,—
-2025,9,Iowa State,BYU,Spread,Home,DraftKings,-110,-1.5,0.9864,0.5238,0.8831,0.1,50.0,2025-10-25T19:30:00Z,2025-10-25,—
-2025,9,Vanderbilt,Missouri,Spread,Home,DraftKings,-110,-1.5,0.9797,0.5238,0.8703,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
-2025,9,Mississippi State,Texas,Spread,Home,DraftKings,-110,8.5,0.9626,0.5238,0.8377,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
-2025,9,Kansas,Kansas State,Spread,Home,DraftKings,-110,2.5,0.9461,0.5238,0.8062,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
-2025,9,South Carolina,Alabama,Spread,Home,DraftKings,-110,10.0,0.9336,0.5238,0.7823,0.1,50.0,2025-10-25T19:30:00Z,2025-10-25,—
-2025,9,Michigan State,Michigan,Spread,Home,DraftKings,-110,12.5,0.8993,0.5238,0.7168,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
-2025,9,Memphis,South Florida,ML,Home,FanDuel,-152,,0.942,0.6032,0.5617,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
-2025,9,Memphis,South Florida,Total,Under,FanDuel,-110,69.5,0.7835,0.5238,0.4958,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
-2025,9,Indiana,UCLA,Total,Under,Coolbet,-110,55.0,0.6562,0.5238,0.2527,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
-2025,9,Utah,Colorado,ML,Home,ESPN Bet,-300,,0.7698,0.75,0.0264,0.0792,39.6,2025-10-26T02:15:00Z,2025-10-26,—
+2025,9,Louisville,Boston College,Spread,Home,FanDuel,-110,-23.5,1.0,0.5238,0.909,0.1,50.0,2025-10-25T23:30:00Z,2025-10-25,—
+2025,9,Nebraska,Northwestern,Spread,Home,FanDuel,-110,-7.5,0.9998,0.5238,0.9088,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Utah,Colorado,Spread,Home,FanDuel,-110,-14.5,0.9998,0.5238,0.9087,0.1,50.0,2025-10-26T02:15:00Z,2025-10-26,—
+2025,9,Georgia Tech,Syracuse,Spread,Home,FanDuel,-110,-17.5,0.9996,0.5238,0.9084,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
+2025,9,Old Dominion,App State,Spread,Home,FanDuel,-110,-13.5,0.9995,0.5238,0.9082,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
+2025,9,Washington,Illinois,Spread,Home,FanDuel,-110,-4.5,0.9993,0.5238,0.9078,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Delaware,Middle Tennessee,Spread,Home,1xBet,-110,-10.5,0.9993,0.5238,0.9077,0.1,50.0,2025-10-22T23:30:00Z,2025-10-22,—
+2025,9,Pittsburgh,NC State,Spread,Home,MyBookie.ag,-110,-7.0,0.9987,0.5238,0.9067,0.1,50.0,2025-10-25T19:30:00Z,2025-10-25,—
+2025,9,Memphis,South Florida,Spread,Home,Betsson,-110,2.5,0.9983,0.5238,0.9059,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
+2025,9,Cincinnati,Baylor,Spread,Home,DraftKings,-110,-5.5,0.9978,0.5238,0.905,0.1,50.0,2025-10-25T20:00:00Z,2025-10-25,—
+2025,9,Iowa,Minnesota,Spread,Home,1xBet,-110,-10.5,0.9966,0.5238,0.9027,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Oklahoma,Ole Miss,Spread,Home,Fliff,-110,-3.5,0.9961,0.5238,0.9016,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
+2025,9,Arizona State,Houston,Spread,Home,FanDuel,-110,-7.5,0.9953,0.5238,0.9001,0.1,50.0,2025-10-26T00:00:00Z,2025-10-26,—
+2025,9,Arkansas,Auburn,Spread,Home,DraftKings,-110,-1.5,0.9945,0.5238,0.8985,0.1,50.0,2025-10-25T16:45:00Z,2025-10-25,—
+2025,9,LSU,Texas A&M,Spread,Home,Fliff,-110,1.5,0.9928,0.5238,0.8953,0.1,50.0,2025-10-25T23:30:00Z,2025-10-25,—
+2025,9,Arkansas State,Georgia Southern,Spread,Home,FanDuel,-110,-2.5,0.992,0.5238,0.8939,0.1,50.0,2025-10-25T23:00:00Z,2025-10-25,—
+2025,9,Florida International,Kennesaw State,Spread,Home,FanDuel,-110,1.5,0.9916,0.5238,0.8931,0.1,50.0,2025-10-21T23:00:00Z,2025-10-21,—
+2025,9,Troy,Louisiana,Spread,Home,FanDuel,-110,-8.5,0.9875,0.5238,0.8853,0.1,50.0,2025-10-25T23:00:00Z,2025-10-25,—
+2025,9,Vanderbilt,Missouri,Spread,Home,Nordic Bet,-110,-3.5,0.9862,0.5238,0.8827,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Kentucky,Tennessee,Spread,Home,FanDuel,-110,8.5,0.9837,0.5238,0.8781,0.1,50.0,2025-10-25T23:45:00Z,2025-10-25,—
+2025,9,Iowa State,BYU,Spread,Home,Fliff,-110,-1.5,0.9837,0.5238,0.878,0.1,50.0,2025-10-25T19:30:00Z,2025-10-25,—
+2025,9,Louisiana Tech,Western Kentucky,Spread,Home,1xBet,-110,-3.5,0.9813,0.5238,0.8735,0.1,50.0,2025-10-21T23:30:00Z,2025-10-21,—
+2025,9,North Carolina,Virginia,Spread,Home,1xBet,-110,9.5,0.9802,0.5238,0.8713,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
+2025,9,Mississippi State,Texas,Spread,Home,DraftKings,-110,6.5,0.9801,0.5238,0.871,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Georgia State,South Alabama,Spread,Home,Fliff,-110,5.5,0.9777,0.5238,0.8664,0.1,50.0,2025-10-23T23:30:00Z,2025-10-23,—
+2025,9,Wake Forest,SMU,Spread,Home,FanDuel,-110,3.5,0.972,0.5238,0.8557,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
+2025,9,Virginia Tech,California,Spread,Home,FanDuel,-110,-3.5,0.9486,0.5238,0.811,0.1,50.0,2025-10-24T23:30:00Z,2025-10-24,—
+2025,9,Mississippi State,Texas,Total,Over,1xBet,-110,44.5,0.9446,0.5238,0.8034,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Nebraska,Northwestern,Total,Over,Betsson,-110,42.0,0.9435,0.5238,0.8012,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,New Mexico State,Missouri State,Spread,Home,DraftKings,-110,1.5,0.9425,0.5238,0.7993,0.1,50.0,2025-10-23T01:00:00Z,2025-10-23,—
+2025,9,Wake Forest,SMU,ML,Home,Fliff,150,,0.7178,0.4,0.7945,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
+2025,9,Michigan State,Michigan,Spread,Home,Coolbet,-110,12.0,0.9024,0.5238,0.7227,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,South Carolina,Alabama,Spread,Home,Hard Rock Bet,-110,12.5,0.8872,0.5238,0.6937,0.1,50.0,2025-10-25T19:30:00Z,2025-10-25,—
+2025,9,Southern Miss,UL Monroe,Total,Over,Fanatics,-110,47.0,0.8752,0.5238,0.6707,0.1,50.0,2025-10-25T19:30:00Z,2025-10-25,—
+2025,9,Troy,Louisiana,ML,Away,Fanatics,265,,0.4556,0.274,0.6628,0.1,50.0,2025-10-25T23:00:00Z,2025-10-25,—
+2025,9,Kansas,Kansas State,Spread,Home,DraftKings,-110,2.5,0.8659,0.5238,0.6531,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
+2025,9,Virginia Tech,California,Total,Under,Fliff,-110,49.5,0.8455,0.5238,0.6141,0.1,50.0,2025-10-24T23:30:00Z,2025-10-24,—
+2025,9,Arkansas,Auburn,ML,Home,Fanatics,100,,0.8061,0.5,0.6122,0.1,50.0,2025-10-25T16:45:00Z,2025-10-25,—
+2025,9,Oregon,Wisconsin,Total,Over,FanDuel,-110,44.5,0.8337,0.5238,0.5916,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Florida International,Kennesaw State,ML,Home,Fanatics,105,,0.7652,0.4878,0.5686,0.1,50.0,2025-10-21T23:00:00Z,2025-10-21,—
+2025,9,Iowa State,BYU,ML,Home,Fliff,-115,,0.8346,0.5349,0.5604,0.1,50.0,2025-10-25T19:30:00Z,2025-10-25,—
+2025,9,Florida International,Kennesaw State,Total,Over,Coolbet,-110,48.0,0.8021,0.5238,0.5313,0.1,50.0,2025-10-21T23:00:00Z,2025-10-21,—
+2025,9,Washington,Illinois,ML,Home,Paddy Power,-167,,0.9524,0.6255,0.5227,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Texas Tech,Oklahoma State,Total,Under,Nordic Bet,-110,56.5,0.7849,0.5238,0.4985,0.1,50.0,2025-10-25T20:00:00Z,2025-10-25,—
+2025,9,Iowa State,BYU,Total,Under,Nordic Bet,-110,50.0,0.766,0.5238,0.4623,0.1,50.0,2025-10-25T19:30:00Z,2025-10-25,—
+2025,9,Iowa,Minnesota,Total,Over,1xBet,-110,38.5,0.7614,0.5238,0.4536,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Kansas,Kansas State,Total,Under,FanDuel,-110,54.5,0.7583,0.5238,0.4477,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
+2025,9,West Virginia,TCU,Total,Under,FanDuel,-110,55.5,0.7569,0.5238,0.4449,0.1,50.0,2025-10-25T22:00:00Z,2025-10-25,—
+2025,9,Memphis,South Florida,Total,Under,FanDuel,-110,68.5,0.7508,0.5238,0.4334,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
+2025,9,Arizona State,Houston,ML,Away,Hard Rock Bet,225,,0.4338,0.3077,0.4098,0.1,50.0,2025-10-26T00:00:00Z,2025-10-26,—
+2025,9,Cincinnati,Baylor,Total,Under,FanDuel,-110,66.5,0.7358,0.5238,0.4047,0.1,50.0,2025-10-25T20:00:00Z,2025-10-25,—
+2025,9,Troy,Louisiana,Total,Under,FanDuel,-110,50.5,0.7289,0.5238,0.3916,0.1,50.0,2025-10-25T23:00:00Z,2025-10-25,—
+2025,9,West Virginia,TCU,Spread,Home,FanDuel,-110,14.5,0.7262,0.5238,0.3863,0.1,50.0,2025-10-25T22:00:00Z,2025-10-25,—
+2025,9,Wake Forest,SMU,Total,Under,Coolbet,-110,56.5,0.7103,0.5238,0.356,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
+2025,9,New Mexico State,Missouri State,Total,Under,FanDuel,-110,53.5,0.7032,0.5238,0.3424,0.1,50.0,2025-10-23T01:00:00Z,2025-10-23,—
+2025,9,Arizona State,Houston,Total,Over,Coolbet,-110,49.0,0.7023,0.5238,0.3408,0.1,50.0,2025-10-26T00:00:00Z,2025-10-26,—
+2025,9,Vanderbilt,Missouri,Total,Over,FanDuel,-110,51.5,0.6925,0.5238,0.3221,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,North Carolina,Virginia,Total,Over,FanDuel,-110,51.5,0.6822,0.5238,0.3023,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
+2025,9,Southern Miss,UL Monroe,ML,Home,Marathon Bet,-303,,0.966,0.7519,0.2848,0.1,50.0,2025-10-25T19:30:00Z,2025-10-25,—
+2025,9,Pittsburgh,NC State,ML,Home,Nordic Bet,-244,,0.8955,0.7093,0.2624,0.1,50.0,2025-10-25T19:30:00Z,2025-10-25,—
+2025,9,Arkansas State,Georgia Southern,Total,Under,FanDuel,-110,60.5,0.6599,0.5238,0.2598,0.1,50.0,2025-10-25T23:00:00Z,2025-10-25,—
+2025,9,Michigan State,Michigan,Total,Over,FanDuel,-110,48.5,0.6565,0.5238,0.2534,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Oklahoma,Ole Miss,ML,Home,Fliff,-185,,0.8106,0.6491,0.2487,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
+2025,9,Iowa,Minnesota,ML,Away,Hard Rock Bet,300,,0.3116,0.25,0.2462,0.0821,41.04,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Nebraska,Northwestern,ML,Home,FanDuel,-320,,0.9473,0.7619,0.2433,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,Utah,Colorado,Total,Over,FanDuel,-110,49.5,0.6512,0.5238,0.2431,0.1,50.0,2025-10-26T02:15:00Z,2025-10-26,—
+2025,9,Kentucky,Tennessee,Total,Over,FanDuel,-110,54.5,0.6464,0.5238,0.234,0.1,50.0,2025-10-25T23:45:00Z,2025-10-25,—
+2025,9,LSU,Texas A&M,Total,Over,Hard Rock Bet,-110,48.5,0.6449,0.5238,0.2312,0.1,50.0,2025-10-25T23:30:00Z,2025-10-25,—
+2025,9,Old Dominion,App State,Total,Under,FanDuel,-110,58.5,0.6426,0.5238,0.2269,0.1,50.0,2025-10-25T16:00:00Z,2025-10-25,—
+2025,9,Vanderbilt,Missouri,ML,Away,Hard Rock Bet,120,,0.5536,0.4545,0.2179,0.1,50.0,2025-10-25T04:00:00Z,2025-10-25,—
+2025,9,South Carolina,Alabama,Total,Over,Nordic Bet,-110,46.0,0.637,0.5238,0.2161,0.1,50.0,2025-10-25T19:30:00Z,2025-10-25,—
+2025,9,Pittsburgh,NC State,Total,Under,FanDuel,-110,54.5,0.6212,0.5238,0.1858,0.1,50.0,2025-10-25T19:30:00Z,2025-10-25,—
+2025,9,Virginia Tech,California,ML,Away,FanDuel,134,,0.4924,0.4274,0.1522,0.1,50.0,2025-10-24T23:30:00Z,2025-10-24,—
+2025,9,Arkansas State,Georgia Southern,ML,Home,Hard Rock Bet,-130,,0.6449,0.5652,0.141,0.1,50.0,2025-10-25T23:00:00Z,2025-10-25,—
+2025,9,Nevada,Boise State,Spread,Home,DraftKings,-110,21.5,0.5772,0.5238,0.102,0.1,50.0,2025-10-25T02:00:00Z,2025-10-25,—
+2025,9,Cincinnati,Baylor,ML,Home,FanDuel,-182,,0.7022,0.6454,0.0881,0.1,50.0,2025-10-25T20:00:00Z,2025-10-25,—
+2025,9,Delaware,Middle Tennessee,ML,Home,FanDuel,-330,,0.7896,0.7674,0.0289,0.0952,47.62,2025-10-22T23:30:00Z,2025-10-22,—
+2025,9,New Mexico State,Missouri State,ML,Home,Paddy Power,110,,0.4879,0.4762,0.0246,0.0223,11.17,2025-10-23T01:00:00Z,2025-10-23,—
