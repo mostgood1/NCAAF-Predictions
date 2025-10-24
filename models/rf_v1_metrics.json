@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2025-10-24T15:13:07.868982Z",
+  "generated_at_utc": "2025-10-24T21:21:35.180251Z",
   "counts": {
     "train": 456,
     "val": 115
@@ -33,7 +33,7 @@
   "away_pts_model": {
     "path": "rf_v1_away_pts.joblib",
     "train": {
-      "mae": 4.656977398251522,
+      "mae": 4.656977398251521,
       "rmse": 6.013651620422099,
       "count": 456
     },
