@@ -1,11 +1,11 @@
 season,week,home_team,away_team,has_odds,provider_count,providers
 2025,10,Kennesaw State,UTEP,False,0,
-2025,10,Texas State,James Madison,True,5,"Betsson,Coolbet,FanDuel,Nordic Bet,Paddy Power"
+2025,10,Texas State,James Madison,True,6,"Betsson,Coolbet,FanDuel,Fliff,Nordic Bet,Paddy Power"
 2025,10,Middle Tennessee,Jacksonville State,False,0,
 2025,10,Missouri State,Florida International,False,0,
 2025,10,Delaware State,Norfolk State,False,0,
 2025,10,Coastal Carolina,Marshall,False,0,
-2025,10,UTSA,Tulane,True,7,"Betsson,Coolbet,DraftKings,FanDuel,Fliff,Nordic Bet,Paddy Power"
+2025,10,UTSA,Tulane,True,9,"Betsson,Coolbet,DraftKings,FanDuel,Fliff,MyBookie.ag,Nordic Bet,Paddy Power,Unibet (UK)"
 2025,10,Pennsylvania,Brown,False,0,
 2025,10,Rice,Memphis,False,0,
 2025,10,Syracuse,North Carolina,False,0,
@@ -69,7 +69,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,10,Western Michigan,Central Michigan,False,0,
 2025,10,Westminster (PA),Allegheny,False,0,
 2025,10,Wofford,Samford,False,0,
-2025,10,Air Force,Army,True,1,DraftKings
+2025,10,Air Force,Army,True,2,"DraftKings,Fliff"
 2025,10,Assumption,Southern Connecticut State,False,0,
 2025,10,Brevard College,Huntingdon College (AL),False,0,
 2025,10,Brockport,Alfred University,False,0,
@@ -99,7 +99,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,10,Salve Regina,Coast Guard,False,0,
 2025,10,Seton Hill,Edinboro University,False,0,
 2025,10,Shepherd,Shippensburg,False,0,
-2025,10,Texas,Vanderbilt,True,6,"Betsson,Coolbet,DraftKings,FanDuel,Nordic Bet,Paddy Power"
+2025,10,Texas,Vanderbilt,True,8,"Betsson,Coolbet,DraftKings,FanDuel,Fliff,Nordic Bet,Paddy Power,Unibet (UK)"
 2025,10,Thomas More College,Hillsdale,False,0,
 2025,10,UConn,UAB,False,0,
 2025,10,University of Rochester (NY),Hobart College,False,0,
@@ -261,7 +261,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,10,Western Colorado,CSU Pueblo,False,0,
 2025,10,Wingate,Lenoir-Rhyne,False,0,
 2025,10,Dickinson (PA),Carnegie Mellon,False,0,
-2025,10,Florida,Georgia,True,6,"Betsson,DraftKings,FanDuel,Nordic Bet,Paddy Power,Unibet (UK)"
+2025,10,Florida,Georgia,True,7,"Betsson,DraftKings,FanDuel,Fliff,Nordic Bet,Paddy Power,Unibet (UK)"
 2025,10,Liberty,Delaware,False,0,
 2025,10,North Dakota State,Youngstown State,False,0,
 2025,10,Western Kentucky,New Mexico State,False,0,
