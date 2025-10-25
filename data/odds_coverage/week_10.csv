@@ -1,11 +1,11 @@
 season,week,home_team,away_team,has_odds,provider_count,providers
-2025,10,Kennesaw State,UTEP,False,0,
-2025,10,Texas State,James Madison,True,6,"Betsson,Coolbet,FanDuel,Fliff,Nordic Bet,Paddy Power"
-2025,10,Middle Tennessee,Jacksonville State,False,0,
-2025,10,Missouri State,Florida International,False,0,
+2025,10,Kennesaw State,UTEP,True,6,"Coolbet,FanDuel,Fliff,MyBookie.ag,Paddy Power,Unibet (UK)"
+2025,10,Texas State,James Madison,True,7,"Betway,Coolbet,FanDuel,Fliff,MyBookie.ag,Paddy Power,Unibet (UK)"
+2025,10,Middle Tennessee,Jacksonville State,True,6,"Betway,Coolbet,FanDuel,MyBookie.ag,Paddy Power,Unibet (UK)"
+2025,10,Missouri State,Florida International,True,6,"Betway,BoyleSports,Coolbet,FanDuel,MyBookie.ag,Unibet (UK)"
 2025,10,Delaware State,Norfolk State,False,0,
 2025,10,Coastal Carolina,Marshall,False,0,
-2025,10,UTSA,Tulane,True,9,"Betsson,Coolbet,DraftKings,FanDuel,Fliff,MyBookie.ag,Nordic Bet,Paddy Power,Unibet (UK)"
+2025,10,UTSA,Tulane,True,7,"Coolbet,DraftKings,FanDuel,Fliff,MyBookie.ag,Paddy Power,Unibet (UK)"
 2025,10,Pennsylvania,Brown,False,0,
 2025,10,Rice,Memphis,False,0,
 2025,10,Syracuse,North Carolina,False,0,
@@ -44,11 +44,11 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,10,Nebraska,USC,True,1,DraftKings
 2025,10,North Texas,Navy,True,1,DraftKings
 2025,10,Northern Colorado,Montana State,False,0,
-2025,10,Ohio State,Penn State,True,7,"Betsson,BoyleSports,DraftKings,FanDuel,Nordic Bet,Paddy Power,Unibet (UK)"
+2025,10,Ohio State,Penn State,True,5,"BoyleSports,DraftKings,FanDuel,Paddy Power,Unibet (UK)"
 2025,10,Ole Miss,South Carolina,False,0,
 2025,10,Prairie View A&M,Alabama State,False,0,
 2025,10,Quincy,Indianapolis,False,0,
-2025,10,SMU,Miami,True,6,"Betsson,Coolbet,DraftKings,FanDuel,Nordic Bet,Paddy Power"
+2025,10,SMU,Miami,True,5,"Coolbet,DraftKings,FanDuel,Paddy Power,Unibet (UK)"
 2025,10,South Alabama,Louisiana,False,0,
 2025,10,South Dakota Mines,Chadron St,False,0,
 2025,10,South Dakota State,Indiana State,False,0,
@@ -58,7 +58,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,10,Stanford,Pittsburgh,False,0,
 2025,10,Stephen F. Austin,UT Rio Grande Valley,False,0,
 2025,10,Temple,East Carolina,False,0,
-2025,10,Tennessee,Oklahoma,True,7,"Betsson,Coolbet,DraftKings,FanDuel,Nordic Bet,Paddy Power,Unibet (UK)"
+2025,10,Tennessee,Oklahoma,True,5,"Coolbet,DraftKings,FanDuel,Paddy Power,Unibet (UK)"
 2025,10,Troy,Arkansas State,False,0,
 2025,10,UC Davis,Idaho State,False,0,
 2025,10,UL Monroe,Old Dominion,False,0,
@@ -99,7 +99,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,10,Salve Regina,Coast Guard,False,0,
 2025,10,Seton Hill,Edinboro University,False,0,
 2025,10,Shepherd,Shippensburg,False,0,
-2025,10,Texas,Vanderbilt,True,8,"Betsson,Coolbet,DraftKings,FanDuel,Fliff,Nordic Bet,Paddy Power,Unibet (UK)"
+2025,10,Texas,Vanderbilt,True,6,"Coolbet,DraftKings,FanDuel,Fliff,Paddy Power,Unibet (UK)"
 2025,10,Thomas More College,Hillsdale,False,0,
 2025,10,UConn,UAB,False,0,
 2025,10,University of Rochester (NY),Hobart College,False,0,
@@ -261,7 +261,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,10,Western Colorado,CSU Pueblo,False,0,
 2025,10,Wingate,Lenoir-Rhyne,False,0,
 2025,10,Dickinson (PA),Carnegie Mellon,False,0,
-2025,10,Florida,Georgia,True,6,"Betsson,DraftKings,FanDuel,Nordic Bet,Paddy Power,Unibet (UK)"
+2025,10,Florida,Georgia,True,5,"DraftKings,FanDuel,Fliff,Paddy Power,Unibet (UK)"
 2025,10,Liberty,Delaware,False,0,
 2025,10,North Dakota State,Youngstown State,False,0,
 2025,10,Western Kentucky,New Mexico State,False,0,
