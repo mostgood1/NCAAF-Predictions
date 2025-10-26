@@ -28,17 +28,17 @@
     "week"
   ],
   "sizes": {
-    "ats": 466,
-    "totals": 467,
+    "ats": 508,
+    "totals": 510,
     "total_rows": 3657
   },
   "coverage": {
     "rows": 3657,
-    "with_spread_any": 553,
-    "with_total_any": 545,
-    "completed": 574,
-    "completed_with_spread": 470,
-    "completed_with_total": 470
+    "with_spread_any": 580,
+    "with_total_any": 578,
+    "completed": 619,
+    "completed_with_spread": 514,
+    "completed_with_total": 514
   },
   "notes": "Probabilities: ATS -> P(Home covers), Totals -> P(Over). Pushes dropped.",
   "ats_model": "saved",
