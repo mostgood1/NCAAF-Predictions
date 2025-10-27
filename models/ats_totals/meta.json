@@ -34,8 +34,8 @@
   },
   "coverage": {
     "rows": 3657,
-    "with_spread_any": 580,
-    "with_total_any": 578,
+    "with_spread_any": 587,
+    "with_total_any": 585,
     "completed": 619,
     "completed_with_spread": 514,
     "completed_with_total": 514

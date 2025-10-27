@@ -1,5 +1,5 @@
 {
-  "generated_utc": "2025-10-26T15:49:52.663729+00:00",
+  "generated_utc": "2025-10-27T20:13:31.382114+00:00",
   "samples": {
     "ats": 508,
     "totals": 510,
@@ -8,15 +8,15 @@
   },
   "accuracy": {
     "ats": {
-      "clf": 0.6791,
+      "clf": 0.7441,
       "gaussian": 0.5256,
-      "clf_correct": 345,
+      "clf_correct": 378,
       "gaussian_correct": 267
     },
     "totals": {
-      "clf": 0.7824,
+      "clf": 0.7412,
       "gaussian": 0.7588,
-      "clf_correct": 399,
+      "clf_correct": 378,
       "gaussian_correct": 387
     }
   },
