@@ -775,19 +775,56 @@ try:
 except Exception:
     pass
 
+def _norm_team_for_conf(name: str) -> str:
+    """Robust normalizer for aligning team names to conference map.
+    - lowercase, strip, unify ampersand, apostrophes, and hyphens
+    - strip diacritics
+    - collapse whitespace and remove extraneous punctuation
+    """
+    try:
+        s = str(name or '').strip().lower()
+        s = s.replace('&', 'and')
+        s = s.replace("ʻ", "'").replace("’", "'")
+        # common cases
+        s = s.replace("hawai'i", "hawaii")
+        import unicodedata, re as _re
+        s = unicodedata.normalize('NFKD', s)
+        s = ''.join(ch for ch in s if not unicodedata.combining(ch))
+        s = _re.sub(r"[^a-z0-9 '\-\(\)]", " ", s)
+        s = _re.sub(r"\s+", " ", s).strip()
+        return s
+    except Exception:
+        return str(name or '').strip().lower()
+
+def _fbs_conference_names() -> set[str]:
+    """Normalized set of conference names considered FBS, including common aliases."""
+    return {
+        'acc', 'sec', 'big ten', 'big 12', 'big twelve',
+        'pac 12', 'pac-12',
+        'american', 'american athletic', 'aac',
+        'mountain west',
+        'sun belt',
+        'mac', 'mid-american', 'mid american',
+        'conference usa',
+        'independent', 'independents', 'fbs independents', 'independent (fbs)'
+    }
+
 try:
     team_conf_df = pd.read_csv(os.path.join(DATA_DIR, "team_conferences.csv"))
-    team_conf_df['school_norm'] = team_conf_df['school'].str.strip().str.lower().str.replace('&', 'and').str.replace('  ', ' ')
+    team_conf_df['school_norm'] = team_conf_df['school'].apply(_norm_team_for_conf)
+    team_conf_df['conference_norm'] = team_conf_df['conference'].astype(str).str.strip().str.lower()
 except Exception:
     # Safe fallback: empty mapping so conferences default to Unknown
-    team_conf_df = pd.DataFrame(columns=['school', 'conference', 'school_norm'])
+    team_conf_df = pd.DataFrame(columns=['school', 'conference', 'school_norm', 'conference_norm'])
 
-# Add conference info to predictions
+# Add conference info to predictions using robust normalization
 def norm(name):
-    return str(name).strip().lower().replace('&', 'and').replace('  ', ' ')
+    """Backward-compatible alias used elsewhere in the app for team normalization in maps."""
+    return _norm_team_for_conf(name)
+
 conf_map = dict(zip(team_conf_df['school_norm'], team_conf_df['conference']))
-pred_df['home_conference'] = pred_df['home_team'].apply(lambda x: conf_map.get(norm(x), 'Unknown'))
-pred_df['away_conference'] = pred_df['away_team'].apply(lambda x: conf_map.get(norm(x), 'Unknown'))
+pred_df['home_conference'] = pred_df['home_team'].apply(lambda x: conf_map.get(_norm_team_for_conf(x), 'Unknown'))
+pred_df['away_conference'] = pred_df['away_team'].apply(lambda x: conf_map.get(_norm_team_for_conf(x), 'Unknown'))
 
 # Cached YTD summary for FBS-involved games (recomputed periodically)
 YTD_SUMMARY_CACHE = {'ts': 0.0, 'data': None}
@@ -809,9 +846,7 @@ def _compute_ytd_summary_fbs(cache_ttl_sec: int = 180) -> dict:
         finals_mask = df['actual_home_points'].notna() & df['actual_away_points'].notna()
         df = df[finals_mask]
         # at least one FBS team
-        fbs_confs = {
-            'acc','sec','big ten','big 12','pac 12','american','mountain west','sun belt','mac','conference usa','independent','independents','fbs independents','independent (fbs)'
-        }
+        fbs_confs = _fbs_conference_names()
         fbs_indies = {'notre dame','army','navy','umass','uconn','new mexico state'}
         def is_fbs(team, conf):
             try:
@@ -879,9 +914,7 @@ def _compute_ytd_summary_fbsvfbs(cache_ttl_sec: int = 180) -> dict:
         df = pred_df.copy()
         finals_mask = df['actual_home_points'].notna() & df['actual_away_points'].notna()
         df = df[finals_mask]
-        fbs_confs = {
-            'acc','sec','big ten','big 12','pac 12','american','mountain west','sun belt','mac','conference usa','independent','independents','fbs independents','independent (fbs)'
-        }
+        fbs_confs = _fbs_conference_names()
         fbs_indies = {'notre dame','army','navy','umass','uconn','new mexico state'}
         def is_fbs(team, conf):
             try:
@@ -1441,9 +1474,7 @@ def _build_game_card(game_row: pd.Series) -> dict:
     a_fg = _ideal_text_color_for_bg(a_bg)
     # Matchup classification (FBS vs FBS or FBS vs Non-FBS)
     try:
-        _fbs_conf_set = {
-            'acc','sec','big ten','big 12','pac 12','american','mountain west','sun belt','mac','conference usa','independent','independents','fbs independents','independent (fbs)'
-        }
+        _fbs_conf_set = _fbs_conference_names()
         _fbs_independents = {'notre dame','army','navy','umass','uconn','new mexico state'}
         def _is_fbs(team, conf):
             try:
@@ -2605,6 +2636,18 @@ def _update_scores_with_cfbd(week: int | None = None, overwrite: bool = False) -
                 today = _dt.now(_tz.utc).date()
                 yday = today - _td(days=1)
                 unique_dates.update({today.isoformat(), yday.isoformat()})
+                # Optional: include a backfill window of recent days when environment variable set (helps Tue/Wed slates)
+                try:
+                    _backfill_days = int(os.environ.get('ESPN_BACKFILL_DAYS', os.environ.get('CFBD_ESPN_BACKFILL_DAYS', '0')))
+                except Exception:
+                    _backfill_days = 0
+                if _backfill_days and _backfill_days > 1:
+                    for k in range(2, _backfill_days + 1):
+                        try:
+                            d = today - _td(days=k)
+                            unique_dates.add(d.isoformat())
+                        except Exception:
+                            continue
             except Exception:
                 pass
             # Always ensure broad Week 0/1 window (union), covers Labor Day Monday
@@ -3672,9 +3715,7 @@ def index():
         # Optional matchup filter (currently only supports FBSvFBS like API endpoint)
         matchup_filter = request.args.get('matchup','').strip().lower()
         if matchup_filter == 'fbsvfbs' and {'home_conference','away_conference'}.issubset(filtered_games.columns):
-            fbs_confs = {
-                'acc','sec','big ten','big 12','pac 12','american','mountain west','sun belt','mac','conference usa','independent','independents','fbs independents','independent (fbs)'
-            }
+            fbs_confs = _fbs_conference_names()
             fbs_indies = {'notre dame','army','navy','umass','uconn','new mexico state'}
             def _both_fbs(row):
                 try:
@@ -3691,9 +3732,7 @@ def index():
         elif not include_non_fbs and {'home_conference','away_conference'}.issubset(filtered_games.columns):
             # If we're hiding Non-FBS but not explicitly FBSvFBS, show FBS-involved (at least one FBS team)
             try:
-                fbs_confs = {
-                    'acc','sec','big ten','big 12','pac 12','american','mountain west','sun belt','mac','conference usa','independent','independents','fbs independents','independent (fbs)'
-                }
+                fbs_confs = _fbs_conference_names()
                 fbs_indies = {'notre dame','army','navy','umass','uconn','new mexico state'}
                 def _is_fbs(team, conf):
                     try:
@@ -3703,6 +3742,15 @@ def index():
                     except Exception:
                         return False
                 filtered_games = filtered_games[filtered_games.apply(lambda r: (_is_fbs(r.get('home_team'), r.get('home_conference')) or _is_fbs(r.get('away_team'), r.get('away_conference'))), axis=1)]
+            except Exception:
+                pass
+        # After applying the FBS filter above, only then optionally drop Unknown-vs-Unknown
+        if hide_both_unknown:
+            try:
+                _pre = len(filtered_games)
+                _tmp = filtered_games[~((filtered_games['home_conference']=='Unknown') & (filtered_games['away_conference']=='Unknown'))]
+                if len(_tmp) > 0:
+                    filtered_games = _tmp
             except Exception:
                 pass
         try:
@@ -3765,9 +3813,7 @@ def index():
         if hide_both_unknown:
             try:
                 # Prefer an explicit FBS filter: when hiding Non-FBS, show FBS-involved by default
-                fbs_confs = {
-                    'acc','sec','big ten','big 12','pac 12','american','mountain west','sun belt','mac','conference usa','independent','independents','fbs independents','independent (fbs)'
-                }
+                fbs_confs = _fbs_conference_names()
                 fbs_indies = {'notre dame','army','navy','umass','uconn','new mexico state'}
                 def _is_fbs(team, conf):
                     try:

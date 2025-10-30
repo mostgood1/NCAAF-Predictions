@@ -95,16 +95,37 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--print-json', action='store_true')
     ap.add_argument('--scan-today-yesterday', action='store_true', help='Also update weeks containing games starting today or yesterday (by date)')
+    ap.add_argument('--scan-last-days', type=int, default=0, help='Also update weeks that contain games in the last N days (UTC)')
+    ap.add_argument('--weeks', type=str, default='', help='Comma-separated explicit week numbers to also update (e.g., 9,10)')
     args = ap.parse_args()
 
     prior, upcoming, _ = detect_weeks()
-    extra = None
+    extra = set()
+    # If scanning last days, hint app's ESPN fetcher to include those dates when start_date might be missing
+    if args.scan_last_days and args.scan_last_days > 0:
+        try:
+            import os
+            if not os.environ.get('ESPN_BACKFILL_DAYS'):
+                os.environ['ESPN_BACKFILL_DAYS'] = str(int(args.scan_last_days))
+        except Exception:
+            pass
     if args.scan_today_yesterday:
         from datetime import datetime, timedelta
         today = datetime.utcnow().date()
         yesterday = today - timedelta(days=1)
-        extra = _weeks_for_dates({today, yesterday})
-    res = run_updates(prior, upcoming, extra_weeks=extra)
+        extra.update(_weeks_for_dates({today, yesterday}))
+    if args.scan_last_days and args.scan_last_days > 0:
+        from datetime import datetime, timedelta
+        today = datetime.utcnow().date()
+        days = { today - timedelta(days=k) for k in range(0, int(args.scan_last_days)+1) }
+        extra.update(_weeks_for_dates(days))
+    if args.weeks:
+        for w in str(args.weeks).split(','):
+            try:
+                extra.add(int(w.strip()))
+            except Exception:
+                continue
+    res = run_updates(prior, upcoming, extra_weeks=(sorted(extra) if extra else None))
     res['detected'] = {'prior': prior, 'upcoming': upcoming, 'extra_weeks': sorted(extra) if extra else []}
 
     if args.print_json:

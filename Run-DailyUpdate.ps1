@@ -174,8 +174,8 @@ try {
     # Lightweight daily scores finalization pass (prior + current week) unless skipped
     if(-not $SkipScoreCheck){
         try {
-            Write-Host "Running daily_scores_check.py (scan today & yesterday)" -ForegroundColor Cyan
-            & $py (Join-Path $root 'daily_scores_check.py') --scan-today-yesterday *>&1 | Tee-Object -FilePath $log -Append
+            Write-Host "Running daily_scores_check.py (scan today & yesterday + last 7 days)" -ForegroundColor Cyan
+            & $py (Join-Path $root 'daily_scores_check.py') --scan-today-yesterday --scan-last-days 7 *>&1 | Tee-Object -FilePath $log -Append
         } catch {
             Write-Host "daily_scores_check.py failed: $($_.Exception.Message)" -ForegroundColor Yellow
         }
