@@ -9,7 +9,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,11,Columbia,Harvard,False,0,
 2025,11,Memphis,Tulane,False,0,
 2025,11,USC,Northwestern,False,0,
-2025,11,Alabama,LSU,True,2,"DraftKings,ESPN Bet"
+2025,11,Alabama,LSU,True,4,"DraftKings,FanDuel,Paddy Power,Unibet (UK)"
 2025,11,American International,Pace,False,0,
 2025,11,Angelo State,Western Oregon,False,0,
 2025,11,Arizona,Kansas,False,0,
@@ -18,7 +18,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,11,CENTENARY,Austin,False,0,
 2025,11,Case Western Reserve,Grove City College,False,0,
 2025,11,Central Connecticut,Stonehill,False,0,
-2025,11,Clemson,Florida State,True,2,"DraftKings,ESPN Bet"
+2025,11,Clemson,Florida State,True,1,DraftKings
 2025,11,Coastal Carolina,Georgia State,False,0,
 2025,11,Colorado State,UNLV,False,0,
 2025,11,Concord University,Fairmont State,False,0,
@@ -29,10 +29,10 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,11,Florida Atlantic,Tulsa,False,0,
 2025,11,Glenville State,Wheeling,False,0,
 2025,11,Grambling,Bethune-Cookman,False,0,
-2025,11,Hawai'i,San Diego State,False,0,
+2025,11,Hawai'i,San Diego State,True,1,DraftKings
 2025,11,Idaho,UC Davis,False,0,
 2025,11,Idaho State,Cal Poly,False,0,
-2025,11,Iowa,Oregon,False,0,
+2025,11,Iowa,Oregon,True,5,"Coolbet,DraftKings,FanDuel,Paddy Power,Unibet (UK)"
 2025,11,Kentucky,Florida,False,0,
 2025,11,Liberty,Missouri State,False,0,
 2025,11,Long Island University,Duquesne,False,0,
@@ -43,7 +43,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,11,McMurry,Hendrix College,False,0,
 2025,11,Miami,Syracuse,False,0,
 2025,11,Middle Tennessee,Florida International,False,0,
-2025,11,Missouri,Texas A&M,False,0,
+2025,11,Missouri,Texas A&M,True,5,"Coolbet,DraftKings,FanDuel,Paddy Power,Unibet (UK)"
 2025,11,Montana State,Weber State,False,0,
 2025,11,Morgan State,Delaware State,False,0,
 2025,11,Nichols College,Husson,False,0,
@@ -51,7 +51,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,11,North Carolina,Stanford,False,0,
 2025,11,North Carolina Central,Norfolk State,False,0,
 2025,11,Northern Arizona,Northern Colorado,False,0,
-2025,11,Penn State,Indiana,True,1,ESPN Bet
+2025,11,Penn State,Indiana,True,5,"Coolbet,DraftKings,FanDuel,Paddy Power,Unibet (UK)"
 2025,11,Pennsylvania,Cornell,False,0,
 2025,11,Portland State,Sacramento State,False,0,
 2025,11,Purdue,Ohio State,False,0,
@@ -62,13 +62,13 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,11,San José State,Air Force,False,0,
 2025,11,South Dakota,South Dakota State,False,0,
 2025,11,St. Francis (PA),Mercyhurst,False,0,
-2025,11,TCU,Iowa State,False,0,
-2025,11,Texas Tech,BYU,False,0,
-2025,11,UCLA,Nebraska,False,0,
+2025,11,TCU,Iowa State,True,1,DraftKings
+2025,11,Texas Tech,BYU,True,4,"Coolbet,DraftKings,FanDuel,Paddy Power"
+2025,11,UCLA,Nebraska,True,1,DraftKings
 2025,11,UT Martin,Tennessee State,False,0,
 2025,11,UT Rio Grande Valley,Nicholls,False,0,
 2025,11,VMI,Wofford,False,0,
-2025,11,Vanderbilt,Auburn,False,0,
+2025,11,Vanderbilt,Auburn,True,1,DraftKings
 2025,11,Virginia,Wake Forest,False,0,
 2025,11,West Virginia,Colorado,False,0,
 2025,11,Wisconsin,Washington,False,0,
@@ -95,7 +95,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,11,Maine Maritime,Western New England,False,0,
 2025,11,Mass Maritime,Worcester St,False,0,
 2025,11,Merchant Marine Academy,Worcester Polytechnic Institute,False,0,
-2025,11,Mississippi State,Georgia,False,0,
+2025,11,Mississippi State,Georgia,True,1,DraftKings
 2025,11,Monmouth,New Hampshire,False,0,
 2025,11,New England College,Endicott College,False,0,
 2025,11,North Carolina Wesleyan,Greensboro College,False,0,
@@ -300,7 +300,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,11,Wilson,ERSKINE,False,0,
 2025,11,East Stroudsburg University,Millersville,False,0,
 2025,11,Shorter,North Greenville,False,0,
-2025,11,Notre Dame,Navy,False,0,
+2025,11,Notre Dame,Navy,True,1,DraftKings
 2025,11,Utah State,Nevada,False,0,
 2025,11,Texas A&M-Kingsville,Western New Mexico,False,0,
 2025,11,UT Permian Basin,Eastern New Mexico,False,0,
