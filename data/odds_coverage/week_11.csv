@@ -1,60 +1,60 @@
 season,week,home_team,away_team,has_odds,provider_count,providers
-2025,11,Akron,Massachusetts,False,0,
+2025,11,Akron,Massachusetts,True,28,"1xBet,Bally Bet,BetRivers,Betfair Sportsbook,Betsson,Betway,BoyleSports,Casumo,DraftKings,ESPN BET,FanDuel,Fliff,GTbets,Grosvenor,Hard Rock Bet,LeoVegas,LeoVegas (SE),LiveScore Bet,Marathon Bet,Nordic Bet,Paddy Power,ReBet,Unibet (IT),Unibet (NL),Unibet (SE),Unibet (UK),Virgin Bet,betPARX"
 2025,11,Ohio,Miami (OH),False,0,
-2025,11,Ball State,Kent State,False,0,
-2025,11,Toledo,Northern Illinois,False,0,
-2025,11,App State,Georgia Southern,False,0,
-2025,11,South Florida,UTSA,False,0,
-2025,11,UCF,Houston,False,0,
+2025,11,Ball State,Kent State,True,28,"1xBet,Bally Bet,BetRivers,Betfair Sportsbook,Betsson,Betway,BoyleSports,Casumo,DraftKings,ESPN BET,FanDuel,Fliff,GTbets,Grosvenor,Hard Rock Bet,LeoVegas,LeoVegas (SE),LiveScore Bet,Marathon Bet,Nordic Bet,Paddy Power,ReBet,Unibet (IT),Unibet (NL),Unibet (SE),Unibet (UK),Virgin Bet,betPARX"
+2025,11,Toledo,Northern Illinois,True,27,"1xBet,Bally Bet,BetRivers,Betfair Sportsbook,Betsson,Betway,BoyleSports,Casumo,DraftKings,ESPN BET,FanDuel,Fliff,Grosvenor,Hard Rock Bet,LeoVegas,LeoVegas (SE),LiveScore Bet,Marathon Bet,Nordic Bet,Paddy Power,ReBet,Unibet (IT),Unibet (NL),Unibet (SE),Unibet (UK),Virgin Bet,betPARX"
+2025,11,App State,Georgia Southern,True,27,"1xBet,Bally Bet,BetRivers,Betfair Sportsbook,Betsson,Betway,BoyleSports,Casumo,DraftKings,ESPN BET,FanDuel,GTbets,Grosvenor,Hard Rock Bet,LeoVegas,LeoVegas (SE),LiveScore Bet,Marathon Bet,Nordic Bet,Paddy Power,ReBet,Unibet (IT),Unibet (NL),Unibet (SE),Unibet (UK),Virgin Bet,betPARX"
+2025,11,South Florida,UTSA,True,11,"Betfair Sportsbook,Betsson,BoyleSports,DraftKings,FanDuel,Fliff,Hard Rock Bet,Nordic Bet,Paddy Power,ReBet,Unibet (UK)"
+2025,11,UCF,Houston,True,26,"1xBet,Bally Bet,BetRivers,Betfair Sportsbook,Betsson,Betway,Casumo,DraftKings,ESPN BET,FanDuel,Fliff,GTbets,Grosvenor,Hard Rock Bet,LeoVegas,LeoVegas (SE),LiveScore Bet,Marathon Bet,Nordic Bet,Paddy Power,Unibet (IT),Unibet (NL),Unibet (SE),Unibet (UK),Virgin Bet,betPARX"
 2025,11,Columbia,Harvard,False,0,
-2025,11,Memphis,Tulane,False,0,
-2025,11,USC,Northwestern,False,0,
-2025,11,Alabama,LSU,True,4,"DraftKings,FanDuel,Paddy Power,Unibet (UK)"
+2025,11,Memphis,Tulane,True,26,"1xBet,Bally Bet,BetRivers,Betfair Sportsbook,Betsson,Casumo,Coolbet,DraftKings,ESPN BET,FanDuel,Fliff,GTbets,Grosvenor,Hard Rock Bet,LeoVegas,LeoVegas (SE),LiveScore Bet,Marathon Bet,Nordic Bet,Paddy Power,Unibet (IT),Unibet (NL),Unibet (SE),Unibet (UK),Virgin Bet,betPARX"
+2025,11,USC,Northwestern,True,26,"1xBet,Bally Bet,BetRivers,Betfair Sportsbook,Betsson,Betway,Casumo,DraftKings,ESPN BET,FanDuel,Fliff,GTbets,Grosvenor,Hard Rock Bet,LeoVegas,LeoVegas (SE),LiveScore Bet,Marathon Bet,Nordic Bet,Paddy Power,Unibet (IT),Unibet (NL),Unibet (SE),Unibet (UK),Virgin Bet,betPARX"
+2025,11,Alabama,LSU,True,23,"1xBet,Bally Bet,BetRivers,Betsson,Casumo,DraftKings,ESPN BET,FanDuel,Fliff,GTbets,Grosvenor,Hard Rock Bet,LeoVegas,LeoVegas (SE),LiveScore Bet,Nordic Bet,Paddy Power,Unibet (IT),Unibet (NL),Unibet (SE),Unibet (UK),Virgin Bet,betPARX"
 2025,11,American International,Pace,False,0,
 2025,11,Angelo State,Western Oregon,False,0,
-2025,11,Arizona,Kansas,False,0,
+2025,11,Arizona,Kansas,True,9,"1xBet,Betsson,Coolbet,FanDuel,Fliff,Hard Rock Bet,Nordic Bet,Paddy Power,Unibet (UK)"
 2025,11,Arkansas State,Southern Miss,False,0,
-2025,11,Boston College,SMU,False,0,
+2025,11,Boston College,SMU,True,10,"1xBet,Betsson,Coolbet,ESPN BET,FanDuel,Fliff,MyBookie.ag,Nordic Bet,Paddy Power,Unibet (UK)"
 2025,11,CENTENARY,Austin,False,0,
 2025,11,Case Western Reserve,Grove City College,False,0,
 2025,11,Central Connecticut,Stonehill,False,0,
-2025,11,Clemson,Florida State,True,1,DraftKings
+2025,11,Clemson,Florida State,True,10,"1xBet,Betsson,DraftKings,FanDuel,Fliff,GTbets,Hard Rock Bet,Nordic Bet,Paddy Power,Unibet (UK)"
 2025,11,Coastal Carolina,Georgia State,False,0,
 2025,11,Colorado State,UNLV,False,0,
 2025,11,Concord University,Fairmont State,False,0,
 2025,11,Dartmouth,Princeton,False,0,
-2025,11,East Carolina,Charlotte,False,0,
+2025,11,East Carolina,Charlotte,True,10,"1xBet,Betsson,Coolbet,ESPN BET,FanDuel,Fliff,Hard Rock Bet,Nordic Bet,Paddy Power,Unibet (UK)"
 2025,11,East Texas A&M,McNeese,False,0,
 2025,11,Eastern Michigan,Bowling Green,False,0,
-2025,11,Florida Atlantic,Tulsa,False,0,
+2025,11,Florida Atlantic,Tulsa,True,22,"1xBet,Bally Bet,BetRivers,Betsson,Casumo,Coolbet,ESPN BET,FanDuel,Fliff,Grosvenor,Hard Rock Bet,LeoVegas,LeoVegas (SE),LiveScore Bet,Nordic Bet,Paddy Power,Unibet (IT),Unibet (NL),Unibet (SE),Unibet (UK),Virgin Bet,betPARX"
 2025,11,Glenville State,Wheeling,False,0,
 2025,11,Grambling,Bethune-Cookman,False,0,
-2025,11,Hawai'i,San Diego State,True,1,DraftKings
+2025,11,Hawai'i,San Diego State,True,2,"DraftKings,Fliff"
 2025,11,Idaho,UC Davis,False,0,
 2025,11,Idaho State,Cal Poly,False,0,
-2025,11,Iowa,Oregon,True,5,"Coolbet,DraftKings,FanDuel,Paddy Power,Unibet (UK)"
-2025,11,Kentucky,Florida,False,0,
+2025,11,Iowa,Oregon,True,10,"1xBet,Betsson,DraftKings,FanDuel,Fliff,Hard Rock Bet,Marathon Bet,Nordic Bet,Paddy Power,Unibet (UK)"
+2025,11,Kentucky,Florida,True,10,"1xBet,Betsson,DraftKings,ESPN BET,FanDuel,Fliff,Hard Rock Bet,Nordic Bet,Paddy Power,Unibet (UK)"
 2025,11,Liberty,Missouri State,False,0,
 2025,11,Long Island University,Duquesne,False,0,
 2025,11,Louisiana,Texas State,False,0,
-2025,11,Louisville,California,False,0,
+2025,11,Louisville,California,True,9,"1xBet,Betsson,Coolbet,FanDuel,Fliff,Hard Rock Bet,Nordic Bet,Paddy Power,Unibet (UK)"
 2025,11,Marist,Stetson,False,0,
 2025,11,Marshall,James Madison,False,0,
 2025,11,McMurry,Hendrix College,False,0,
-2025,11,Miami,Syracuse,False,0,
+2025,11,Miami,Syracuse,True,20,"1xBet,Bally Bet,BetRivers,Betsson,Casumo,Coolbet,ESPN BET,FanDuel,Fliff,Grosvenor,Hard Rock Bet,LeoVegas,LeoVegas (SE),Nordic Bet,Paddy Power,Unibet (IT),Unibet (NL),Unibet (SE),Unibet (UK),betPARX"
 2025,11,Middle Tennessee,Florida International,False,0,
-2025,11,Missouri,Texas A&M,True,5,"Coolbet,DraftKings,FanDuel,Paddy Power,Unibet (UK)"
+2025,11,Missouri,Texas A&M,True,24,"1xBet,Bally Bet,BetRivers,Betsson,Casumo,DraftKings,ESPN BET,FanDuel,Fliff,GTbets,Grosvenor,Hard Rock Bet,LeoVegas,LeoVegas (SE),LiveScore Bet,Marathon Bet,Nordic Bet,Paddy Power,Unibet (IT),Unibet (NL),Unibet (SE),Unibet (UK),Virgin Bet,betPARX"
 2025,11,Montana State,Weber State,False,0,
 2025,11,Morgan State,Delaware State,False,0,
 2025,11,Nichols College,Husson,False,0,
 2025,11,North Alabama,West Georgia,False,0,
-2025,11,North Carolina,Stanford,False,0,
+2025,11,North Carolina,Stanford,True,21,"1xBet,Bally Bet,BetRivers,Betsson,Casumo,Coolbet,FanDuel,Fliff,Grosvenor,LeoVegas,LeoVegas (SE),LiveScore Bet,MyBookie.ag,Nordic Bet,Paddy Power,Unibet (IT),Unibet (NL),Unibet (SE),Unibet (UK),Virgin Bet,betPARX"
 2025,11,North Carolina Central,Norfolk State,False,0,
 2025,11,Northern Arizona,Northern Colorado,False,0,
-2025,11,Penn State,Indiana,True,5,"Coolbet,DraftKings,FanDuel,Paddy Power,Unibet (UK)"
+2025,11,Penn State,Indiana,True,10,"1xBet,Betsson,DraftKings,FanDuel,Fliff,GTbets,Hard Rock Bet,Nordic Bet,Paddy Power,Unibet (UK)"
 2025,11,Pennsylvania,Cornell,False,0,
 2025,11,Portland State,Sacramento State,False,0,
-2025,11,Purdue,Ohio State,False,0,
+2025,11,Purdue,Ohio State,True,23,"1xBet,Bally Bet,BetRivers,Betsson,Casumo,DraftKings,ESPN BET,FanDuel,Fliff,GTbets,Grosvenor,Hard Rock Bet,LeoVegas,LeoVegas (SE),LiveScore Bet,Nordic Bet,Paddy Power,Unibet (IT),Unibet (NL),Unibet (SE),Unibet (UK),Virgin Bet,betPARX"
 2025,11,Redlands,Claremont-Mudd-Scripps College,False,0,
 2025,11,Rice,UAB,False,0,
 2025,11,Robert Morris,Wagner,False,0,
@@ -62,19 +62,19 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,11,San José State,Air Force,False,0,
 2025,11,South Dakota,South Dakota State,False,0,
 2025,11,St. Francis (PA),Mercyhurst,False,0,
-2025,11,TCU,Iowa State,True,1,DraftKings
-2025,11,Texas Tech,BYU,True,4,"Coolbet,DraftKings,FanDuel,Paddy Power"
-2025,11,UCLA,Nebraska,True,1,DraftKings
+2025,11,TCU,Iowa State,True,11,"1xBet,Betsson,Coolbet,DraftKings,FanDuel,Fliff,GTbets,Hard Rock Bet,Nordic Bet,Paddy Power,Unibet (UK)"
+2025,11,Texas Tech,BYU,True,22,"1xBet,Bally Bet,BetRivers,Betsson,Casumo,DraftKings,ESPN BET,FanDuel,Fliff,GTbets,Grosvenor,Hard Rock Bet,LeoVegas,LeoVegas (SE),Marathon Bet,Nordic Bet,Paddy Power,Unibet (IT),Unibet (NL),Unibet (SE),Unibet (UK),betPARX"
+2025,11,UCLA,Nebraska,True,7,"1xBet,Betsson,FanDuel,Hard Rock Bet,Nordic Bet,Paddy Power,Unibet (UK)"
 2025,11,UT Martin,Tennessee State,False,0,
 2025,11,UT Rio Grande Valley,Nicholls,False,0,
 2025,11,VMI,Wofford,False,0,
-2025,11,Vanderbilt,Auburn,True,1,DraftKings
-2025,11,Virginia,Wake Forest,False,0,
-2025,11,West Virginia,Colorado,False,0,
-2025,11,Wisconsin,Washington,False,0,
+2025,11,Vanderbilt,Auburn,True,11,"1xBet,Betsson,Coolbet,DraftKings,FanDuel,Fliff,GTbets,Hard Rock Bet,Nordic Bet,Paddy Power,Unibet (UK)"
+2025,11,Virginia,Wake Forest,True,9,"1xBet,Betsson,Coolbet,FanDuel,Fliff,Hard Rock Bet,Nordic Bet,Paddy Power,Unibet (UK)"
+2025,11,West Virginia,Colorado,True,21,"1xBet,Bally Bet,BetRivers,Betsson,Casumo,ESPN BET,FanDuel,Fliff,Grosvenor,Hard Rock Bet,LeoVegas,LeoVegas (SE),LiveScore Bet,Nordic Bet,Paddy Power,Unibet (IT),Unibet (NL),Unibet (SE),Unibet (UK),Virgin Bet,betPARX"
+2025,11,Wisconsin,Washington,True,7,"1xBet,Betsson,FanDuel,Hard Rock Bet,Nordic Bet,Paddy Power,Unibet (UK)"
 2025,11,Albright,Stevenson,False,0,
 2025,11,Amherst,Williams,False,0,
-2025,11,Army,Temple,False,0,
+2025,11,Army,Temple,True,22,"1xBet,Bally Bet,BetRivers,Betsson,Casumo,Coolbet,ESPN BET,FanDuel,Fliff,Grosvenor,Hard Rock Bet,LeoVegas,LeoVegas (SE),LiveScore Bet,Nordic Bet,Paddy Power,Unibet (IT),Unibet (NL),Unibet (SE),Unibet (UK),Virgin Bet,betPARX"
 2025,11,Bates,Hamilton,False,0,
 2025,11,Bentley,Assumption,False,0,
 2025,11,Brown,Yale,False,0,
@@ -95,7 +95,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,11,Maine Maritime,Western New England,False,0,
 2025,11,Mass Maritime,Worcester St,False,0,
 2025,11,Merchant Marine Academy,Worcester Polytechnic Institute,False,0,
-2025,11,Mississippi State,Georgia,True,1,DraftKings
+2025,11,Mississippi State,Georgia,True,24,"1xBet,Bally Bet,BetRivers,Betsson,Casumo,DraftKings,ESPN BET,FanDuel,Fliff,GTbets,Grosvenor,Hard Rock Bet,LeoVegas,LeoVegas (SE),LiveScore Bet,Marathon Bet,Nordic Bet,Paddy Power,Unibet (IT),Unibet (NL),Unibet (SE),Unibet (UK),Virgin Bet,betPARX"
 2025,11,Monmouth,New Hampshire,False,0,
 2025,11,New England College,Endicott College,False,0,
 2025,11,North Carolina Wesleyan,Greensboro College,False,0,
@@ -277,7 +277,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,11,Wisconsin-Platteville,Wisconsin-Stout,False,0,
 2025,11,New Haven,Merrimack,False,0,
 2025,11,Samford,East Tennessee State,False,0,
-2025,11,UConn,Duke,False,0,
+2025,11,UConn,Duke,True,8,"1xBet,Betsson,Coolbet,FanDuel,Hard Rock Bet,Nordic Bet,Paddy Power,Unibet (UK)"
 2025,11,Alcorn State,Southern,False,0,
 2025,11,Austin Peay,Central Arkansas,False,0,
 2025,11,Bridgewater State,Anna Maria College,False,0,
@@ -300,8 +300,8 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,11,Wilson,ERSKINE,False,0,
 2025,11,East Stroudsburg University,Millersville,False,0,
 2025,11,Shorter,North Greenville,False,0,
-2025,11,Notre Dame,Navy,True,1,DraftKings
-2025,11,Utah State,Nevada,False,0,
+2025,11,Notre Dame,Navy,True,23,"1xBet,Bally Bet,BetRivers,Betsson,Casumo,Coolbet,DraftKings,FanDuel,Fliff,GTbets,Grosvenor,Hard Rock Bet,LeoVegas,LeoVegas (SE),LiveScore Bet,Nordic Bet,Paddy Power,Unibet (IT),Unibet (NL),Unibet (SE),Unibet (UK),Virgin Bet,betPARX"
+2025,11,Utah State,Nevada,True,8,"1xBet,Betsson,FanDuel,Fliff,Hard Rock Bet,Nordic Bet,Paddy Power,Unibet (UK)"
 2025,11,Texas A&M-Kingsville,Western New Mexico,False,0,
 2025,11,UT Permian Basin,Eastern New Mexico,False,0,
 2025,11,Sul Ross State,Central Washington,False,0,
