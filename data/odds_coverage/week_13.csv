@@ -1,13 +1,13 @@
 season,week,home_team,away_team,has_odds,provider_count,providers
 2025,13,Bowling Green,Akron,False,0,
-2025,13,Northern Illinois,Western Michigan,False,0,
-2025,13,Ohio,Massachusetts,False,0,
+2025,13,Northern Illinois,Western Michigan,True,9,"Betsson,Betway,BoyleSports,FanDuel,Fanatics,Fliff,Nordic Bet,Paddy Power,Unibet (UK)"
+2025,13,Ohio,Massachusetts,True,7,"Betsson,BoyleSports,FanDuel,Fanatics,Nordic Bet,Paddy Power,Unibet (UK)"
 2025,13,Buffalo,Miami (OH),False,0,
-2025,13,Kent State,Central Michigan,False,0,
+2025,13,Kent State,Central Michigan,True,7,"Betsson,Betway,FanDuel,Fanatics,Nordic Bet,Paddy Power,Unibet (UK)"
 2025,13,SE Louisiana,Nicholls,False,0,
 2025,13,Arkansas State,Louisiana,False,0,
 2025,13,Northwestern State,Stephen F. Austin,False,0,
-2025,13,NC State,Florida State,True,1,DraftKings
+2025,13,NC State,Florida State,True,2,"DraftKings,Fliff"
 2025,13,UNLV,Hawai'i,True,1,DraftKings
 2025,13,App State,Marshall,False,0,
 2025,13,Arizona,Baylor,False,0,
