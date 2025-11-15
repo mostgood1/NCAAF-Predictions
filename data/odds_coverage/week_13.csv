@@ -1,9 +1,9 @@
 season,week,home_team,away_team,has_odds,provider_count,providers
 2025,13,Bowling Green,Akron,False,0,
-2025,13,Northern Illinois,Western Michigan,True,9,"Betsson,Betway,BoyleSports,FanDuel,Fanatics,Fliff,Nordic Bet,Paddy Power,Unibet (UK)"
-2025,13,Ohio,Massachusetts,True,7,"Betsson,BoyleSports,FanDuel,Fanatics,Nordic Bet,Paddy Power,Unibet (UK)"
+2025,13,Northern Illinois,Western Michigan,True,7,"Betway,BoyleSports,FanDuel,Fanatics,Fliff,Paddy Power,Unibet (UK)"
+2025,13,Ohio,Massachusetts,True,5,"BoyleSports,FanDuel,Fanatics,Paddy Power,Unibet (UK)"
 2025,13,Buffalo,Miami (OH),False,0,
-2025,13,Kent State,Central Michigan,True,7,"Betsson,Betway,FanDuel,Fanatics,Nordic Bet,Paddy Power,Unibet (UK)"
+2025,13,Kent State,Central Michigan,True,6,"Betway,BoyleSports,FanDuel,Fanatics,Paddy Power,Unibet (UK)"
 2025,13,SE Louisiana,Nicholls,False,0,
 2025,13,Arkansas State,Louisiana,False,0,
 2025,13,Northwestern State,Stephen F. Austin,False,0,
@@ -22,7 +22,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,13,Florida,Tennessee,True,1,DraftKings
 2025,13,Florida Atlantic,UConn,False,0,
 2025,13,Georgia Southern,Old Dominion,False,0,
-2025,13,Georgia Tech,Pittsburgh,True,6,"Betsson,DraftKings,FanDuel,Nordic Bet,Paddy Power,Unibet (UK)"
+2025,13,Georgia Tech,Pittsburgh,True,4,"DraftKings,FanDuel,Paddy Power,Unibet (UK)"
 2025,13,Houston,TCU,True,1,DraftKings
 2025,13,Howard,Norfolk State,False,0,
 2025,13,Idaho,Idaho State,False,0,
@@ -42,7 +42,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,13,Northern Colorado,Portland State,False,0,
 2025,13,Northwestern,Minnesota,False,0,
 2025,13,Ohio State,Rutgers,False,0,
-2025,13,Oregon,USC,True,5,"Betsson,DraftKings,FanDuel,Nordic Bet,Paddy Power"
+2025,13,Oregon,USC,True,2,"FanDuel,Paddy Power"
 2025,13,Penn State,Nebraska,True,1,DraftKings
 2025,13,Pennsylvania,Princeton,False,0,
 2025,13,Prairie View A&M,Mississippi Valley State,False,0,
@@ -116,7 +116,7 @@ season,week,home_team,away_team,has_odds,provider_count,providers
 2025,13,Florida A&M,Bethune-Cookman,False,0,
 2025,13,Florida International,Jacksonville State,False,0,
 2025,13,North Dakota State,St. Thomas (MN),False,0,
-2025,13,Notre Dame,Syracuse,True,1,DraftKings
+2025,13,Notre Dame,Syracuse,True,2,"DraftKings,Fliff"
 2025,13,Lamar,McNeese,False,0,
 2025,13,Utah Tech,Eastern Kentucky,False,0,
 2025,13,Cal Poly,Eastern Washington,False,0,
