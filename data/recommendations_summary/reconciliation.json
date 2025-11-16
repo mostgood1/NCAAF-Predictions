@@ -1,5 +1,5 @@
 {
-  "generated_at": "2025-11-15T15:49:07.224564Z",
+  "generated_at": "2025-11-16T15:47:32.677334Z",
   "weeks": [
     {
       "count": 50,
@@ -102,13 +102,13 @@
     },
     {
       "count": 4,
-      "wins": 0,
+      "wins": 4,
       "losses": 0,
       "pushes": 0,
-      "acc": 0.0,
+      "acc": 1.0,
       "stake": 50.0,
-      "pnl": 0.0,
-      "roi": 0.0,
+      "pnl": 165.0,
+      "roi": 3.3,
       "week": 12
     },
     {
