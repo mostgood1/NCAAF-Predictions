@@ -71,7 +71,7 @@ timestamp,season,week,home_team,away_team,market,side,price_american,line,provid
 2025-09-01T15:18:17.280502,2025,5,Arkansas,Notre Dame,Spread,Away,-110,10.5,DraftKings,0.9761,0.5238,0.8635,0.1,1000.0,50.0,closed,win,45.45
 2025-09-01T15:18:17.280502,2025,11,Clemson,Florida State,Spread,Home,-110,-16.5,DraftKings,0.9759,0.5238,0.8632,0.1,1000.0,50.0,closed,win,45.45
 2025-09-01T15:18:17.280502,2025,8,Alabama,Tennessee,Spread,Home,-110,-12.5,DraftKings,0.9692,0.5238,0.8502,0.1,1000.0,50.0,closed,win,45.45
-2025-09-01T15:18:17.280502,2025,14,Auburn,Alabama,Spread,Away,-110,5.5,ESPN Bet,0.968,0.5238,0.8479,0.1,1000.0,50.0,open,pending,0.0
+2025-09-01T15:18:17.280502,2025,14,Auburn,Alabama,Spread,Away,-110,5.5,ESPN Bet,0.968,0.5238,0.8479,0.1,1000.0,50.0,closed,win,45.45
 2025-09-01T15:18:17.280502,2025,8,Alabama,Tennessee,Spread,Home,-110,-11.5,ESPN Bet,0.9639,0.5238,0.8401,0.1,1000.0,50.0,closed,win,45.45
 2025-09-01T15:18:17.280502,2025,6,North Carolina,Clemson,Spread,Away,-110,13.5,DraftKings,0.9625,0.5238,0.8376,0.1,1000.0,50.0,closed,win,45.45
 2025-09-02T13:47:06.979965,2025,7,Texas,Oklahoma,ML,Away,230,,ESPN Bet,0.852,0.303,1.8115,0.1,1000.0,50.0,closed,loss,-50.0
@@ -96,7 +96,7 @@ timestamp,season,week,home_team,away_team,market,side,price_american,line,provid
 2025-09-02T13:47:06.979965,2025,5,Arkansas,Notre Dame,Spread,Away,-110,10.5,DraftKings,0.9761,0.5238,0.8635,0.1,1000.0,50.0,closed,win,45.45
 2025-09-02T13:47:06.979965,2025,11,Clemson,Florida State,Spread,Home,-110,-16.5,DraftKings,0.9759,0.5238,0.8632,0.1,1000.0,50.0,closed,win,45.45
 2025-09-02T13:47:06.979965,2025,8,Alabama,Tennessee,Spread,Home,-110,-12.5,DraftKings,0.9692,0.5238,0.8502,0.1,1000.0,50.0,closed,win,45.45
-2025-09-02T13:47:06.979965,2025,14,Auburn,Alabama,Spread,Away,-110,5.5,ESPN Bet,0.968,0.5238,0.8479,0.1,1000.0,50.0,open,pending,0.0
+2025-09-02T13:47:06.979965,2025,14,Auburn,Alabama,Spread,Away,-110,5.5,ESPN Bet,0.968,0.5238,0.8479,0.1,1000.0,50.0,closed,win,45.45
 2025-09-02T13:47:06.979965,2025,8,Alabama,Tennessee,Spread,Home,-110,-11.5,ESPN Bet,0.9639,0.5238,0.8401,0.1,1000.0,50.0,closed,win,45.45
 2025-09-02T13:47:06.979965,2025,6,North Carolina,Clemson,Spread,Away,-110,13.5,DraftKings,0.9625,0.5238,0.8376,0.1,1000.0,50.0,closed,win,45.45
 2025-09-25T15:01:00.096382+00:00,2025,5,Oklahoma State,Baylor,ML,Home,1042,,MyBookie.ag,0.995,0.0876,10.3629,0.025,1000.0,12.5,closed,loss,-12.5
