@@ -140,6 +140,33 @@ if(-not $env:ODDS_API_KEY){
     Write-Host "[info] ODDS_API_KEY present (len=$($env:ODDS_API_KEY.Length))" -ForegroundColor Cyan
 }
 
+# --- Ensure CFBD API key present for CFBD-backed scripts ---
+if(-not $env:CFBD_API_KEY){
+    # Try .env files
+    $candidateEnvCFBD = @()
+    if($EnvFile){ $candidateEnvCFBD += $EnvFile }
+    $candidateEnvCFBD += (Join-Path $root '.env')
+    foreach($ef in $candidateEnvCFBD){
+        Set-EnvFromFileIfPresent -FilePath $ef -Keys @('CFBD_API_KEY','CFBD_TOKEN','CFBD')
+        if($env:CFBD_API_KEY -or $env:CFBD_TOKEN -or $env:CFBD){ break }
+    }
+    # Secrets fallback
+    if(-not ($env:CFBD_API_KEY -or $env:CFBD_TOKEN -or $env:CFBD)){
+        foreach($f in @('secrets\cfbd_api_key.txt','secrets\cfbd_token.txt','secrets\cfbd.txt')){
+            $p = Join-Path $root $f
+            if(Test-Path $p){
+                try {
+                    $val = (Get-Content $p -Raw).Trim()
+                    if($val){ $env:CFBD_API_KEY = $val }
+                } catch {}
+                break
+            }
+        }
+    }
+}
+if($env:CFBD_API_KEY){ Write-Host "[info] CFBD_API_KEY present" -ForegroundColor Cyan }
+else { Write-Host "[warn] CFBD_API_KEY not set; postseason appends may be skipped." -ForegroundColor Yellow }
+
 # Ensure logs directory exists
 $logDir = Join-Path $root 'logs'
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
@@ -170,6 +197,14 @@ try {
 
     Write-Host "Running: $py $($argsList -join ' ')" -ForegroundColor Cyan
     & $py @argsList *>&1 | Tee-Object -FilePath $log
+
+    # Ensure postseason games (conf championships + bowls) are present in enhanced schedule
+    try {
+        Write-Host "Appending postseason games to enhanced schedule (weeks 15-20)" -ForegroundColor Cyan
+        & $py (Join-Path $root 'scripts' 'add_postseason_games_2025.py') --from-week 15 --to-week 20 *>&1 | Tee-Object -FilePath $log -Append
+    } catch {
+        Write-Host "add_postseason_games_2025.py failed: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
 
     # Lightweight daily scores finalization pass (prior + current week) unless skipped
     if(-not $SkipScoreCheck){
