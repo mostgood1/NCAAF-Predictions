@@ -16,6 +16,7 @@ param(
     [string]$EnvFile,
     [string]$OddsApiKey,
     [string]$OddsApiKeyFile,
+    [string]$CfbdApiKey,
     [switch]$DisableGitPush,
     [string]$GitCommitMessage
 )
@@ -141,6 +142,7 @@ if(-not $env:ODDS_API_KEY){
 }
 
 # --- Ensure CFBD API key present for CFBD-backed scripts ---
+if($CfbdApiKey){ $env:CFBD_API_KEY = $CfbdApiKey }
 if(-not $env:CFBD_API_KEY){
     # Try .env files
     $candidateEnvCFBD = @()
@@ -195,16 +197,16 @@ try {
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
     $log = Join-Path $logDir "daily_update.$stamp.log"
 
-    Write-Host "Running: $py $($argsList -join ' ')" -ForegroundColor Cyan
-    & $py @argsList *>&1 | Tee-Object -FilePath $log
-
-    # Ensure postseason games (conf championships + bowls) are present in enhanced schedule
+    # Ensure postseason games (conf championships + bowls) are present in enhanced schedule BEFORE weekly_update
     try {
         Write-Host "Appending postseason games to enhanced schedule (weeks 15-20)" -ForegroundColor Cyan
         & $py (Join-Path $root 'scripts' 'add_postseason_games_2025.py') --from-week 15 --to-week 20 *>&1 | Tee-Object -FilePath $log -Append
     } catch {
         Write-Host "add_postseason_games_2025.py failed: $($_.Exception.Message)" -ForegroundColor Yellow
     }
+
+    Write-Host "Running: $py $($argsList -join ' ')" -ForegroundColor Cyan
+    & $py @argsList *>&1 | Tee-Object -FilePath $log
 
     # Lightweight daily scores finalization pass (prior + current week) unless skipped
     if(-not $SkipScoreCheck){

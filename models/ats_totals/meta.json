@@ -1,10 +1,5 @@
 {
   "features": [
-    "model_margin",
-    "model_total_points",
-    "model_home_points",
-    "model_away_points",
-    "model_confidence_score",
     "predicted_home_points",
     "predicted_away_points",
     "predicted_total_points",
@@ -12,11 +7,8 @@
     "weather_wind",
     "weather_adjustment",
     "delta_total_pred",
-    "delta_total_model",
     "abs_delta_total_pred",
-    "abs_delta_total_model",
     "tempo_proxy_pred",
-    "tempo_proxy_model",
     "spread_abs",
     "temp_center",
     "temp2",
