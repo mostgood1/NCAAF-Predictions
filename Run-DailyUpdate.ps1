@@ -199,8 +199,13 @@ try {
 
     # Ensure postseason games (conf championships + bowls) are present in enhanced schedule BEFORE weekly_update
     try {
-        Write-Host "Appending postseason games to enhanced schedule (weeks 15-20)" -ForegroundColor Cyan
-        & $py (Join-Path $root 'scripts' 'add_postseason_games_2025.py') --from-week 15 --to-week 20 *>&1 | Tee-Object -FilePath $log -Append
+        Write-Host "Appending postseason games to enhanced schedule (wk15 + bowls)" -ForegroundColor Cyan
+        $postArgs = @(
+            (Join-Path $root 'scripts' 'add_postseason_games_2025.py'),
+            '--from-week','15','--to-week','15',
+            '--postseason-weeks','1','2','3','4','5','6'
+        )
+        & $py @postArgs *>&1 | Tee-Object -FilePath $log -Append
     } catch {
         Write-Host "add_postseason_games_2025.py failed: $($_.Exception.Message)" -ForegroundColor Yellow
     }
