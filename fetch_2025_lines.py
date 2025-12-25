@@ -258,47 +258,46 @@ def _extract_markets(bookmaker: Dict[str, Any], home_team: str, away_team: str) 
 
 def build_lines_rows(week: int, odds_events: List[Dict[str, Any]], debug: bool = False) -> List[Dict[str, Any]]:
     pred_df = _select_predictions_frame(week)
-    # Map normalized pair -> schedule row
+    # Map normalized pair -> schedule row and per-game date
     schedule_index: dict[tuple[str,str], tuple[str,str]] = {}
     schedule_team_norms: set[str] = set()
-    # Build schedule index for normalization lookups
+    schedule_dates: dict[tuple[str,str], pd.Timestamp] = {}
+    # Build schedule index for normalization lookups + per-game date
 
     for _, r in pred_df.iterrows():
         ht = str(r['home_team']); at = str(r['away_team'])
         n_ht = norm_team(ht); n_at = norm_team(at)
         schedule_index[(n_ht, n_at)] = (ht, at)
         schedule_team_norms.add(n_ht); schedule_team_norms.add(n_at)
-    # Determine approximate temporal bounds for the week (if start_date present)
+        # Per-game start_date (UTC)
+        try:
+            if 'start_date' in pred_df.columns:
+                sd = pd.to_datetime(r.get('start_date'), utc=True, errors='coerce')
+                if pd.notna(sd):
+                    schedule_dates[(n_ht, n_at)] = sd
+                    schedule_dates[(n_at, n_ht)] = sd  # allow reverse key lookup
+        except Exception:
+            pass
+    # Determine approximate temporal bounds for the week (fallback only)
+    # We widen to ±3 days to accommodate bowls spread across days.
     week_start = None; week_end = None
     if 'start_date' in pred_df.columns:
         try:
-            sd = pd.to_datetime(pred_df['start_date'], errors='coerce')
-            if not sd.isna().all():
-                week_start = sd.min() - pd.Timedelta(hours=6)
-                week_end = sd.max() + pd.Timedelta(hours=6)
+            sdcol = pd.to_datetime(pred_df['start_date'], errors='coerce')
+            if not sdcol.isna().all():
+                week_start = sdcol.min() - pd.Timedelta(days=3)
+                week_end = sdcol.max() + pd.Timedelta(days=3)
         except Exception:
             pass
     rows: List[Dict[str, Any]] = []
     unmatched: List[Dict[str, Any]] = []
     skipped_time = 0
     skipped_samples: List[Dict[str, Any]] = []
-    # First pass: enforce time window if available
+    # First pass: enforce per-game ±3 day window when available; else fall back to week bounds
     for ev in odds_events:
         raw_home = ev.get('home_team'); raw_away = ev.get('away_team')
         if not raw_home or not raw_away:
             continue
-        if week_start is not None and week_end is not None:
-            ct = ev.get('commence_time') or ev.get('commenceTime')
-            if ct:
-                try:
-                    ctd = pd.to_datetime(ct, utc=True)
-                    if ctd < week_start or ctd > week_end:
-                        skipped_time += 1
-                        if debug and len(skipped_samples) < 10:
-                            skipped_samples.append({'home': raw_home, 'away': raw_away, 'commence_time': str(ctd)})
-                        continue
-                except Exception:
-                    pass
         # Best-match normalization (account for mascots / suffixes)
         n_home = best_schedule_norm(raw_home, schedule_team_norms)
         n_away = best_schedule_norm(raw_away, schedule_team_norms)
@@ -310,6 +309,29 @@ def build_lines_rows(week: int, odds_events: List[Dict[str, Any]], debug: bool =
             else:
                 unmatched.append({'home': raw_home, 'away': raw_away, 'norm_home': n_home, 'norm_away': n_away})
                 continue
+        # Time filter based on per-game date if present; else fall back to week-wide bounds.
+        ct = ev.get('commence_time') or ev.get('commenceTime')
+        if ct:
+            try:
+                ctd = pd.to_datetime(ct, utc=True)
+                gdate = schedule_dates.get(key)
+                if pd.notna(gdate) if gdate is not None else False:
+                    # per-game ±3 day window
+                    g_start = gdate - pd.Timedelta(days=3)
+                    g_end = gdate + pd.Timedelta(days=3)
+                    if ctd < g_start or ctd > g_end:
+                        skipped_time += 1
+                        if debug and len(skipped_samples) < 10:
+                            skipped_samples.append({'home': raw_home, 'away': raw_away, 'commence_time': str(ctd)})
+                        continue
+                elif week_start is not None and week_end is not None:
+                    if ctd < week_start or ctd > week_end:
+                        skipped_time += 1
+                        if debug and len(skipped_samples) < 10:
+                            skipped_samples.append({'home': raw_home, 'away': raw_away, 'commence_time': str(ctd)})
+                        continue
+            except Exception:
+                pass
         (sched_home, sched_away) = schedule_index[key]
         provs = []
         for bookmaker in ev.get('bookmakers', []):
@@ -326,46 +348,58 @@ def build_lines_rows(week: int, odds_events: List[Dict[str, Any]], debug: bool =
             'awayTeam': sched_away,
             'lines': json.dumps(provs, separators=(',',':')),
         })
-    # Second pass: relaxed matching that ignores the inferred week time window
-    # This helps capture legit week games whose commence_time falls just outside our inferred bounds.
+    # Second pass: relaxed matching using per-game date ±3 day window (if available),
+    # ignoring the broader week bounds. Helps capture legit games near edges.
     relaxed_added = 0
-    if week_start is not None and week_end is not None:
-        # Build index of already-added keys to avoid duplicates
-        existing_keys = set((r['homeTeam'], r['awayTeam']) for r in rows)
-        for ev in odds_events:
-            raw_home = ev.get('home_team'); raw_away = ev.get('away_team')
-            if not raw_home or not raw_away:
+    # Build index of already-added keys to avoid duplicates
+    existing_keys = set((r['homeTeam'], r['awayTeam']) for r in rows)
+    for ev in odds_events:
+        raw_home = ev.get('home_team'); raw_away = ev.get('away_team')
+        if not raw_home or not raw_away:
+            continue
+        # Best-match normalization (account for mascots / suffixes)
+        n_home = best_schedule_norm(raw_home, schedule_team_norms)
+        n_away = best_schedule_norm(raw_away, schedule_team_norms)
+        key = (n_home, n_away)
+        if key not in schedule_index:
+            key_rev = (n_away, n_home)
+            if key_rev in schedule_index:
+                key = key_rev
+            else:
                 continue
-            # Best-match normalization (account for mascots / suffixes)
-            n_home = best_schedule_norm(raw_home, schedule_team_norms)
-            n_away = best_schedule_norm(raw_away, schedule_team_norms)
-            key = (n_home, n_away)
-            if key not in schedule_index:
-                key_rev = (n_away, n_home)
-                if key_rev in schedule_index:
-                    key = key_rev
-                else:
-                    continue
-            (sched_home, sched_away) = schedule_index[key]
-            if (sched_home, sched_away) in existing_keys:
+        (sched_home, sched_away) = schedule_index[key]
+        if (sched_home, sched_away) in existing_keys:
+            continue
+        # Apply per-game date window if available
+        ct = ev.get('commence_time') or ev.get('commenceTime')
+        if ct:
+            try:
+                ctd = pd.to_datetime(ct, utc=True)
+                gdate = schedule_dates.get(key)
+                if pd.notna(gdate) if gdate is not None else False:
+                    g_start = gdate - pd.Timedelta(days=3)
+                    g_end = gdate + pd.Timedelta(days=3)
+                    if ctd < g_start or ctd > g_end:
+                        continue
+            except Exception:
+                pass
+        provs = []
+        for bookmaker in ev.get('bookmakers', []):
+            try:
+                provs.append(_extract_markets(bookmaker, sched_home, sched_away))
+            except Exception:
                 continue
-            provs = []
-            for bookmaker in ev.get('bookmakers', []):
-                try:
-                    provs.append(_extract_markets(bookmaker, sched_home, sched_away))
-                except Exception:
-                    continue
-            if not provs:
-                continue
-            rows.append({
-                'year': YEAR,
-                'week': week,
-                'homeTeam': sched_home,
-                'awayTeam': sched_away,
-                'lines': json.dumps(provs, separators=(',',':')),
-            })
-            existing_keys.add((sched_home, sched_away))
-            relaxed_added += 1
+        if not provs:
+            continue
+        rows.append({
+            'year': YEAR,
+            'week': week,
+            'homeTeam': sched_home,
+            'awayTeam': sched_away,
+            'lines': json.dumps(provs, separators=(',',':')),
+        })
+        existing_keys.add((sched_home, sched_away))
+        relaxed_added += 1
     if unmatched:
         print(f"[warn] Unmatched odds events: {len(unmatched)}", file=sys.stderr)
     if skipped_time and debug:

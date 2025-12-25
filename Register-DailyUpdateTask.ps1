@@ -30,7 +30,17 @@ $quotedScript = '"' + $scriptPath + '"'
 $tr = '"' + ($psExe + ' -NoProfile -ExecutionPolicy Bypass -File ' + $quotedScript) + '"'
 
 # Build schtasks.exe args
-$args = @('/Create','/SC','DAILY','/TN',$taskName,'/TR',$tr,'/ST',$At,'/RL','HIGHEST','/F')
+# Detect elevation; request highest only if running elevated
+function Test-IsElevated {
+    try {
+        $wi = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $wp = New-Object Security.Principal.WindowsPrincipal($wi)
+        return $wp.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    } catch { return $false }
+}
+
+$args = @('/Create','/SC','DAILY','/TN',$taskName,'/TR',$tr,'/ST',$At,'/F')
+if(Test-IsElevated){ $args += @('/RL','HIGHEST') } else { Write-Host '[info] Not elevated; registering without /RL HIGHEST' -ForegroundColor Yellow }
 if($User){ $args += @('/RU',$User) }
 if($Password){ $args += @('/RP',$Password) }
 

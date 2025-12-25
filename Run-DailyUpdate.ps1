@@ -200,18 +200,18 @@ try {
     # Ensure postseason games (conf championships + bowls) are present in enhanced schedule BEFORE weekly_update
     try {
         Write-Host "Appending postseason games to enhanced schedule (wk15 + bowls)" -ForegroundColor Cyan
-        $postArgs = @(
-            (Join-Path $root 'scripts' 'add_postseason_games_2025.py'),
-            '--from-week','15','--to-week','15',
-            '--postseason-weeks','1','2','3','4','5','6'
-        )
-        & $py @postArgs *>&1 | Tee-Object -FilePath $log -Append
+        $postPath = (Join-Path $root 'scripts' 'add_postseason_games_2025.py')
+        $postCmd = '"' + $py + '" ' + '"' + $postPath + '" --from-week 15 --to-week 15 --postseason-weeks 1 2 3 4 5 6 2>&1'
+        $postOut = & cmd /c $postCmd
+        if($postOut){ $postOut | Tee-Object -FilePath $log -Append }
     } catch {
         Write-Host "add_postseason_games_2025.py failed: $($_.Exception.Message)" -ForegroundColor Yellow
     }
 
     Write-Host "Running: $py $($argsList -join ' ')" -ForegroundColor Cyan
-    & $py @argsList *>&1 | Tee-Object -FilePath $log
+    $wkCmd = if($PrintJson){ '"' + $py + '" ' + '"' + $script + '" --print-json 2>&1' } else { '"' + $py + '" ' + '"' + $script + '" 2>&1' }
+    $wkOut = & cmd /c $wkCmd
+    if($wkOut){ $wkOut | Tee-Object -FilePath $log }
 
     # Lightweight daily scores finalization pass (prior + current week) unless skipped
     if(-not $SkipScoreCheck){
@@ -227,6 +227,13 @@ try {
             & $py (Join-Path $root 'scripts' 'restore_pregame_predictions.py') --write *>&1 | Tee-Object -FilePath $log -Append
         } catch {
             Write-Host "restore_pregame_predictions.py failed: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+        # Generate postseason recommendations snapshots (weeks 1-6)
+        try {
+            Write-Host "Generating postseason recommendations snapshots (weeks 1-6)" -ForegroundColor Cyan
+            & $py (Join-Path $root 'scripts' 'postseason_recs_all.py') *>&1 | Tee-Object -FilePath $log -Append
+        } catch {
+            Write-Host "postseason_recs_all.py failed: $($_.Exception.Message)" -ForegroundColor Yellow
         }
         # Best-effort: ask local web app (if running) to reload predictions so cards settle now
         try {
