@@ -225,16 +225,22 @@ try {
         # Always re-freeze pregame predictions for finals using nearest pre-kickoff snapshot
         try {
             Write-Host "Restoring pregame predictions for finalized games" -ForegroundColor Cyan
-            & $py (Join-Path $root 'scripts' 'restore_pregame_predictions.py') --write *>&1 | Tee-Object -FilePath $log -Append
+            $rstPath = (Join-Path $root 'scripts' 'restore_pregame_predictions.py')
+            $rstCmd = '"' + $py + '" ' + '"' + $rstPath + '" --write 2>&1'
+            $rstOut = & cmd /c $rstCmd
+            if($rstOut){ $rstOut | Tee-Object -FilePath $log -Append }
         } catch {
-            Write-Host "restore_pregame_predictions.py failed: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host "[warn] restore_pregame_predictions.py encountered an issue: $($_.Exception.Message)" -ForegroundColor Yellow
         }
         # Generate postseason recommendations snapshots (weeks 1-6)
         try {
             Write-Host "Generating postseason recommendations snapshots (weeks 1-6)" -ForegroundColor Cyan
-            & $py (Join-Path $root 'scripts' 'postseason_recs_all.py') *>&1 | Tee-Object -FilePath $log -Append
+            $recsPath = (Join-Path $root 'scripts' 'postseason_recs_all.py')
+            $recsCmd = '"' + $py + '" ' + '"' + $recsPath + '" 2>&1'
+            $recsOut = & cmd /c $recsCmd
+            if($recsOut){ $recsOut | Tee-Object -FilePath $log -Append }
         } catch {
-            Write-Host "postseason_recs_all.py failed: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host "[warn] postseason_recs_all.py encountered an issue: $($_.Exception.Message)" -ForegroundColor Yellow
         }
         # Best-effort: ask local web app (if running) to reload predictions so cards settle now
         try {
