@@ -201,11 +201,12 @@ try {
     try {
         Write-Host "Appending postseason games to enhanced schedule (wk15 + bowls)" -ForegroundColor Cyan
         $postPath = (Join-Path $root 'scripts' 'add_postseason_games_2025.py')
-        $postCmd = '"' + $py + '" ' + '"' + $postPath + '" --from-week 15 --to-week 15 --postseason-weeks 1 2 3 4 5 6 2>&1'
-        $postOut = & cmd /c $postCmd
-        if($postOut){ $postOut | Tee-Object -FilePath $log -Append }
+        $prevEA = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        & $py $postPath --from-week 15 --to-week 15 --postseason-weeks 1 2 3 4 5 6 *>&1 | Tee-Object -FilePath $log -Append
+        $ErrorActionPreference = $prevEA
     } catch {
-        Write-Host "add_postseason_games_2025.py failed: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "[warn] postseason append step encountered an issue: $($_.Exception.Message)" -ForegroundColor Yellow
     }
 
     Write-Host "Running: $py $($argsList -join ' ')" -ForegroundColor Cyan
