@@ -3640,6 +3640,19 @@ def index():
                     recent = sorted([w for w, d in week_max_dates.items() if d >= (today - dt.timedelta(days=lookback_days))])
                     if recent:
                         selected_week = recent[-1]
+                # New fallback: if kickoff dates are missing (e.g., bowl weeks without API times),
+                # pick the earliest week that still has upcoming games (no actuals recorded).
+                if selected_week is None and weeks:
+                    try:
+                        upcoming_weeks = []
+                        for w in weeks:
+                            sub = pred_df[pred_df['week'] == w]
+                            if ((sub['actual_home_points'].isna()) & (sub['actual_away_points'].isna())).any():
+                                upcoming_weeks.append(w)
+                        if upcoming_weeks:
+                            selected_week = min(upcoming_weeks)
+                    except Exception:
+                        pass
                 # Final fallback if still None: choose max available week
                 if selected_week is None and weeks:
                     selected_week = max(weeks)
